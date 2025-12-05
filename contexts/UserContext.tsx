@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserProfile, AuthStatus, LeaderboardEntry } from '../types';
-import { AUTH_URL } from '../constants';
+import { getAuthUrl } from '../constants';
 import { ouraService } from '../services/ouraService';
 import { firebaseService } from '../services/firebaseService';
 
@@ -48,7 +48,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const login = () => {
         setAuthStatus(AuthStatus.LOADING);
-        window.location.href = AUTH_URL;
+        window.location.href = getAuthUrl();
     };
 
     const addProfile = async (token: string) => {

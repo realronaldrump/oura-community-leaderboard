@@ -16,7 +16,7 @@ import {
 } from 'recharts';
 
 const Dashboard: React.FC = () => {
-    const { activeProfile, profiles, setActiveProfileId, login } = useUser();
+    const { activeProfile, profiles, setActiveProfileId, login, removeProfile } = useUser();
     const [loading, setLoading] = useState(false);
     const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
 
@@ -119,7 +119,7 @@ const Dashboard: React.FC = () => {
                     Davis Watches You Sleep
                 </h1>
                 <p className="text-text-secondary mb-8 max-w-md">
-                    View comprehensive health metrics from your Oura Ring.
+                    Gimma yo Oura data fam
                 </p>
 
                 {profiles.length > 0 && (
@@ -127,13 +127,29 @@ const Dashboard: React.FC = () => {
                         <p className="text-text-muted text-sm mb-3">Select a profile:</p>
                         <div className="space-y-2">
                             {profiles.map(p => (
-                                <button
-                                    key={p.id}
-                                    onClick={() => setActiveProfileId(p.id)}
-                                    className="w-full card p-4 text-left hover:bg-dashboard-cardHover transition-colors"
-                                >
-                                    <span className="text-text-primary">{p.email || 'User'}</span>
-                                </button>
+                                <div key={p.id} className="flex gap-2">
+                                    <button
+                                        onClick={() => setActiveProfileId(p.id)}
+                                        className="flex-1 card p-4 text-left hover:bg-dashboard-cardHover transition-colors flex items-center justify-between group"
+                                    >
+                                        <span className="text-text-primary">{p.email || 'User'}</span>
+                                        <span className="text-xs text-text-muted group-hover:text-text-secondary transition-colors">
+                                            {new Date(p.lastUpdated || '').toLocaleDateString()}
+                                        </span>
+                                    </button>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (confirm('Are you sure you want to delete this profile?')) {
+                                                removeProfile(p.id);
+                                            }
+                                        }}
+                                        className="px-4 bg-red-900/20 text-red-400 rounded-xl hover:bg-red-900/40 transition-colors border border-red-900/50"
+                                        title="Remove Profile"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
                             ))}
                         </div>
                     </div>

@@ -2,10 +2,10 @@
 export const CLIENT_ID = '92e4c379-b278-4c42-a7c0-db088b67680f';
 
 // Dynamically determine the redirect URI based on the current environment.
-// This ensures the app works on localhost or any deployed URL without hardcoding.
-export const REDIRECT_URI = 'https://oura-community-leaderboard.vercel.app';
-
-export const AUTH_URL = `https://cloud.ouraring.com/oauth/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=email+personal+daily+heartrate+tag+workout+session+spo2+ring_configuration+stress+heart_health`;
+export const getAuthUrl = () => {
+  const redirectUri = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
+  return `https://cloud.ouraring.com/oauth/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=email+personal+daily+heartrate+tag+workout+session+spo2+ring_configuration+stress+heart_health`;
+};
 
 export const API_BASE_URL = '/api';
 
