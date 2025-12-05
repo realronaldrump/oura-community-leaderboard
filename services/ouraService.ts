@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../constants';
-import { DailyActivity, DailyReadiness, DailySleep, SleepSession, UserProfile } from '../types';
+import { DailyActivity, DailyReadiness, DailySleep, SleepSession, UserProfile, HeartRate, DailySpO2, Workout } from '../types';
 
 class OuraService {
   private getHeaders(token: string) {
@@ -9,12 +9,12 @@ class OuraService {
     };
   }
 
-  private getTodayAndYesterdayDateStr() {
+  private getTodayAndYesterdayDateStr(daysInfo = 30) {
     const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 30); // Fetch last 30 days
+    const pastDate = new Date(today);
+    pastDate.setDate(pastDate.getDate() - daysInfo);
     return {
-      start_date: yesterday.toISOString().split('T')[0],
+      start_date: pastDate.toISOString().split('T')[0],
       end_date: today.toISOString().split('T')[0],
     };
   }
@@ -67,6 +67,41 @@ class OuraService {
       { headers: this.getHeaders(token) }
     );
     if (!response.ok) throw new Error('Failed to fetch activity data');
+    const data = await response.json();
+    return data.data;
+  }
+
+  async getHeartRate(token: string): Promise<HeartRate[]> {
+    // Heart rate endpoint returns huge data, fetch only last 24h or 48h for graph
+    const { start_date, end_date } = this.getTodayAndYesterdayDateStr(2);
+    const response = await fetch(
+      `${API_BASE_URL}/heartrate?start_datetime=${start_date}T00:00:00&end_datetime=${end_date}T23:59:59`,
+      { headers: this.getHeaders(token) }
+    );
+    // Note: Heartrate endpoint uses start_datetime / end_datetime
+    if (!response.ok) throw new Error('Failed to fetch heart rate data');
+    const data = await response.json();
+    return data.data;
+  }
+
+  async getDailySpO2(token: string): Promise<DailySpO2[]> {
+    const { start_date, end_date } = this.getTodayAndYesterdayDateStr();
+    const response = await fetch(
+      `${API_BASE_URL}/daily_spo2?start_date=${start_date}&end_date=${end_date}`,
+      { headers: this.getHeaders(token) }
+    );
+    if (!response.ok) throw new Error('Failed to fetch SpO2 data');
+    const data = await response.json();
+    return data.data;
+  }
+
+  async getWorkouts(token: string): Promise<Workout[]> {
+    const { start_date, end_date } = this.getTodayAndYesterdayDateStr();
+    const response = await fetch(
+      `${API_BASE_URL}/workout?start_date=${start_date}&end_date=${end_date}`,
+      { headers: this.getHeaders(token) }
+    );
+    if (!response.ok) throw new Error('Failed to fetch workout data');
     const data = await response.json();
     return data.data;
   }

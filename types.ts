@@ -1,4 +1,3 @@
-
 export interface UserProfile {
   id: string;
   age?: number | null;
@@ -6,6 +5,8 @@ export interface UserProfile {
   height?: number | null;
   biological_sex?: string | null;
   email?: string | null;
+  token: string; // Access Token
+  lastUpdated?: string;
 }
 
 export interface SleepContributors {
@@ -120,6 +121,33 @@ export interface LeaderboardEntry {
   average: number;
   isCurrentUser: boolean;
   avatar?: string;
+}
+
+export interface HeartRate {
+  bpm: number;
+  source: string;
+  timestamp: string;
+}
+
+export interface Spo2Percentage {
+  average?: number;
+}
+
+export interface DailySpO2 {
+  id: string;
+  day: string;
+  spo2_percentage?: Spo2Percentage;
+}
+
+export interface Workout {
+  id: string;
+  activity: string;
+  calories: number;
+  day: string;
+  distance: number;
+  end_datetime: string;
+  start_datetime: string;
+  label?: string;
 }
 
 export enum AuthStatus {

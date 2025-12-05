@@ -3,15 +3,7 @@ export const CLIENT_ID = '92e4c379-b278-4c42-a7c0-db088b67680f';
 
 // Dynamically determine the redirect URI based on the current environment.
 // This ensures the app works on localhost or any deployed URL without hardcoding.
-const getCurrentUrl = () => {
-  if (typeof window === 'undefined') return '';
-  // Remove hash and query params to get the base URL
-  const url = window.location.href.split('#')[0].split('?')[0];
-  // Ensure strict matching with Oura Console (usually expects no trailing slash unless registered with one)
-  return url.endsWith('/') ? url.slice(0, -1) : url;
-};
-
-export const REDIRECT_URI = getCurrentUrl();
+export const REDIRECT_URI = 'https://2kc3uwk9jxitt6bammrycm6ebsp88ulnfjti1mmnuxt726mvev-h839267052.scf.usercontent.goog/b56084fa-3a7a-44a0-bf5c-bb8c5fe5ca1d';
 
 export const AUTH_URL = `https://cloud.ouraring.com/oauth/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=email+personal+daily+heartrate+tag+workout+session+spo2+ring_configuration+stress+heart_health`;
 
