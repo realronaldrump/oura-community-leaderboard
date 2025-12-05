@@ -116,7 +116,7 @@ const Dashboard: React.FC = () => {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-dashboard-bg text-center">
                 <h1 className="text-4xl font-bold text-text-primary mb-4">
-                    Oura Dashboard
+                    Davis Watches You Sleep
                 </h1>
                 <p className="text-text-secondary mb-8 max-w-md">
                     View comprehensive health metrics from your Oura Ring.
@@ -233,8 +233,8 @@ const Dashboard: React.FC = () => {
                                 >
                                     <div className="col-span-2 flex items-center gap-2">
                                         <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium ${idx === 0 ? 'bg-yellow-500 text-black' :
-                                                idx === 1 ? 'bg-gray-400 text-black' :
-                                                    idx === 2 ? 'bg-orange-500 text-black' : 'bg-dashboard-border text-text-secondary'
+                                            idx === 1 ? 'bg-gray-400 text-black' :
+                                                idx === 2 ? 'bg-orange-500 text-black' : 'bg-dashboard-border text-text-secondary'
                                             }`}>
                                             {idx + 1}
                                         </span>
