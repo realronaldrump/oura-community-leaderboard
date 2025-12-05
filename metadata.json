@@ -1,0 +1,5 @@
+{
+  "name": "Oura Community Leaderboard",
+  "description": "A sleek, private leaderboard application for Oura Ring users to track and compare their sleep, readiness, and activity scores against friends.",
+  "requestFramePermissions": []
+}
