@@ -1,75 +1,133 @@
-import React from 'react';
-import { DailyActivity, DailyReadiness, DailySleep, LeaderboardEntry, UserProfile } from '../types';
 
-interface LeaderboardProps {
-    user: UserProfile | null;
-    sleep: DailySleep[];
-    readiness: DailyReadiness[];
-    activity: DailyActivity[];
-}
+import React, { useEffect, useState } from 'react';
+import { useUser } from '../contexts/UserContext';
+import { ouraService } from '../services/ouraService';
+import { LeaderboardEntry } from '../types';
 
-const Leaderboard: React.FC<LeaderboardProps> = ({ user, sleep, readiness, activity }) => {
-    // Placeholder logic for now, as checking other users isn't implemented in this scope
-    // But we need the component to exist.
+const Leaderboard: React.FC = () => {
+    const { profiles } = useUser();
+    const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+    const [loading, setLoading] = useState(false);
 
-    // Create a mock entry for the current user based on latest data
-    const latestSleep = sleep[sleep.length - 1];
-    const latestReadiness = readiness[readiness.length - 1];
-    const latestActivity = activity[activity.length - 1];
+    useEffect(() => {
+        const fetchData = async () => {
+            if (profiles.length === 0) return;
+            setLoading(true);
+            const newEntries: LeaderboardEntry[] = [];
 
-    const currentUserEntry: LeaderboardEntry | null = latestSleep && latestReadiness && latestActivity ? {
-        id: user?.id || 'current',
-        name: user?.email?.split('@')[0] || 'You',
-        readiness: latestReadiness.score || 0,
-        sleep: latestSleep.score || 0,
-        activity: latestActivity.score || 0,
-        average: Math.round(((latestReadiness.score || 0) + (latestSleep.score || 0) + (latestActivity.score || 0)) / 3),
-        isCurrentUser: true,
-    } : null;
+            await Promise.all(profiles.map(async (profile) => {
+                try {
+                    const sleep = await ouraService.getDailySleep(profile.token);
+                    const readiness = await ouraService.getDailyReadiness(profile.token);
+                    const activity = await ouraService.getDailyActivity(profile.token);
+
+                    // Get latest data (assuming array is sorted or we sort it, service returns range)
+                    // Service returns last 30 days. Let's pick the absolute latest date available across the board?
+                    // For simplicity, let's just pick the last item in the list which should be "today" or "yesterday"
+
+                    const latestSleep = sleep[sleep.length - 1];
+                    const latestReadiness = readiness[readiness.length - 1];
+                    const latestActivity = activity[activity.length - 1];
+
+                    if (latestSleep && latestReadiness && latestActivity) {
+                        const rScore = latestReadiness.score || 0;
+                        const sScore = latestSleep.score || 0;
+                        const aScore = latestActivity.score || 0;
+                        const avg = Math.round((rScore + sScore + aScore) / 3);
+
+                        newEntries.push({
+                            id: profile.id,
+                            name: profile.name,
+                            readiness: rScore,
+                            sleep: sScore,
+                            activity: aScore,
+                            average: avg,
+                            steps: latestActivity.steps,
+                            isCurrentUser: false // user context doesn't distinguish "me" from others really, everyone is a profile
+                        });
+                    }
+                } catch (e) {
+                    console.error(`Failed to fetch data for ${profile.name}`, e);
+                }
+            }));
+
+            // Sort by Average Score Descending
+            newEntries.sort((a, b) => b.average - a.average);
+            setEntries(newEntries);
+            setLoading(false);
+        };
+
+        fetchData();
+    }, [profiles]);
+
+    if (loading) {
+        return <div className="text-center text-gray-500 mt-20 animate-pulse">Loading community data...</div>;
+    }
+
+    if (profiles.length === 0) {
+        return <div className="text-center text-gray-500 mt-20">No profiles found. Go to Settings to add users.</div>;
+    }
 
     return (
-        <div className="animate-fade-in space-y-6">
-            <h2 className="text-3xl font-bold text-white mb-6">Community Leaderboard</h2>
+        <div className="space-y-6">
+            <div className="flex justify-between items-end">
+                <div>
+                    <h2 className="text-3xl font-bold text-white">Community Leaderboard</h2>
+                    <p className="text-gray-400">Comparing today's stats.</p>
+                </div>
+            </div>
 
-            <div className="bg-oura-card rounded-3xl p-6 border border-gray-800 shadow-lg">
+            <div className="bg-oura-card rounded-3xl border border-gray-800 overflow-hidden shadow-lg">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full">
                         <thead>
-                            <tr className="text-gray-400 border-b border-gray-800">
-                                <th className="p-4 font-medium">Rank</th>
-                                <th className="p-4 font-medium">Member</th>
-                                <th className="p-4 font-medium text-center">Avg Score</th>
-                                <th className="p-4 font-medium text-center hidden md:table-cell">Readiness</th>
-                                <th className="p-4 font-medium text-center hidden md:table-cell">Sleep</th>
-                                <th className="p-4 font-medium text-center hidden md:table-cell">Activity</th>
+                            <tr className="bg-gray-900/50 border-b border-gray-800">
+                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Rank</th>
+                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Name</th>
+                                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">Oura Score</th>
+                                <th className="px-6 py-4 text-center text-xs font-semibold text-oura-teal uppercase tracking-wider">Readiness</th>
+                                <th className="px-6 py-4 text-center text-xs font-semibold text-oura-purple uppercase tracking-wider">Sleep</th>
+                                <th className="px-6 py-4 text-center text-xs font-semibold text-oura-blue uppercase tracking-wider">Activity</th>
+                                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">Steps</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            {currentUserEntry ? (
-                                <tr className="border-b border-gray-800/50 hover:bg-white/5 transition-colors">
-                                    <td className="p-4 text-white font-bold">1</td>
-                                    <td className="p-4 flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-oura-purple flex items-center justify-center text-xs font-bold text-black">
-                                            {currentUserEntry.name.charAt(0).toUpperCase()}
+                        <tbody className="divide-y divide-gray-800">
+                            {entries.map((entry, index) => (
+                                <tr key={entry.id} className="hover:bg-white/5 transition-colors">
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className={`flex items-center justify-center w-8 h-8 rounded-full font-bold ${index === 0 ? 'bg-yellow-500/20 text-yellow-500' :
+                                                index === 1 ? 'bg-gray-400/20 text-gray-400' :
+                                                    index === 2 ? 'bg-orange-700/20 text-orange-700' :
+                                                        'text-gray-500'
+                                            }`}>
+                                            {index + 1}
                                         </div>
-                                        <span className="text-white font-medium">{currentUserEntry.name} (You)</span>
                                     </td>
-                                    <td className="p-4 text-center">
-                                        <span className="inline-block px-3 py-1 rounded-full bg-oura-success/20 text-oura-success font-bold text-sm">
-                                            {currentUserEntry.average}
-                                        </span>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex items-center">
+                                            <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-oura-purple to-oura-blue flex items-center justify-center text-xs font-bold text-white mr-3">
+                                                {entry.name[0]}
+                                            </div>
+                                            <div className="text-sm font-medium text-white">{entry.name}</div>
+                                        </div>
                                     </td>
-                                    <td className="p-4 text-center text-gray-300 hidden md:table-cell">{currentUserEntry.readiness}</td>
-                                    <td className="p-4 text-center text-gray-300 hidden md:table-cell">{currentUserEntry.sleep}</td>
-                                    <td className="p-4 text-center text-gray-300 hidden md:table-cell">{currentUserEntry.activity}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                                        <div className="text-xl font-bold text-white">{entry.average}</div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-center text-gray-300">
+                                        {entry.readiness}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-center text-gray-300">
+                                        {entry.sleep}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-center text-gray-300">
+                                        {entry.activity}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-center text-gray-300">
+                                        {entry.steps.toLocaleString()}
+                                    </td>
                                 </tr>
-                            ) : (
-                                <tr>
-                                    <td colSpan={6} className="p-8 text-center text-gray-500">
-                                        No data available for leaderboard.
-                                    </td>
-                                </tr>
-                            )}
+                            ))}
                         </tbody>
                     </table>
                 </div>

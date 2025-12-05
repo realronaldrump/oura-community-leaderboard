@@ -70,6 +70,54 @@ class OuraService {
     const data = await response.json();
     return data.data;
   }
+
+  async getHeartRate(token: string): Promise<any[]> {
+    const { start_date, end_date } = this.getTodayAndYesterdayDateStr();
+    const response = await fetch(
+      `${API_BASE_URL}/heartrate?start_datetime=${start_date}&end_datetime=${end_date}`,
+      { headers: this.getHeaders(token) }
+    );
+    if (!response.ok) throw new Error('Failed to fetch heart rate data');
+    const data = await response.json();
+    return data.data;
+  }
+
+  async getDailySpO2(token: string): Promise<any[]> {
+    const { start_date, end_date } = this.getTodayAndYesterdayDateStr();
+    const response = await fetch(
+      `${API_BASE_URL}/daily_spo2?start_date=${start_date}&end_date=${end_date}`,
+      { headers: this.getHeaders(token) }
+    );
+    if (!response.ok) throw new Error('Failed to fetch SpO2 data');
+    const data = await response.json();
+    return data.data;
+  }
+
+  async getWorkouts(token: string): Promise<any[]> {
+    const { start_date, end_date } = this.getTodayAndYesterdayDateStr();
+    const response = await fetch(
+      `${API_BASE_URL}/workout?start_date=${start_date}&end_date=${end_date}`,
+      { headers: this.getHeaders(token) }
+    );
+    // Workouts endpoint might return 404 or empty if no data, handle gracefully
+    if (!response.ok) {
+      console.warn('Failed to fetch workouts or no workouts found');
+      return [];
+    }
+    const data = await response.json();
+    return data.data;
+  }
+
+  async getTags(token: string): Promise<any[]> {
+    const { start_date, end_date } = this.getTodayAndYesterdayDateStr();
+    const response = await fetch(
+      `${API_BASE_URL}/tag?start_date=${start_date}&end_date=${end_date}`,
+      { headers: this.getHeaders(token) }
+    );
+    if (!response.ok) throw new Error('Failed to fetch tags');
+    const data = await response.json();
+    return data.data;
+  }
 }
 
 export const ouraService = new OuraService();
