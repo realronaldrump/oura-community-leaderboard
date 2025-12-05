@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserProfile, AuthStatus, LeaderboardEntry } from '../types';
 import { AUTH_URL } from '../constants';
 import { ouraService } from '../services/ouraService';
+import { firebaseService } from '../services/firebaseService';
 
 interface UserContextType {
     profiles: UserProfile[];
@@ -17,14 +18,7 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [profiles, setProfiles] = useState<UserProfile[]>(() => {
-        if (typeof window !== 'undefined') {
-            const saved = localStorage.getItem('oura_profiles');
-            return saved ? JSON.parse(saved) : [];
-        }
-        return [];
-    });
-
+    const [profiles, setProfiles] = useState<UserProfile[]>([]);
     const [activeProfileId, setActiveProfileId] = useState<string | null>(() => {
         if (typeof window !== 'undefined') {
             return localStorage.getItem('active_profile_id');
@@ -34,9 +28,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const [authStatus, setAuthStatus] = useState<AuthStatus>(AuthStatus.UNAUTHENTICATED);
 
+    // Subscribe to Firebase profiles
     useEffect(() => {
-        localStorage.setItem('oura_profiles', JSON.stringify(profiles));
-    }, [profiles]);
+        const unsubscribe = firebaseService.subscribeToProfiles((updatedProfiles) => {
+            setProfiles(updatedProfiles);
+        });
+        return () => unsubscribe();
+    }, []);
 
     useEffect(() => {
         if (activeProfileId) {
@@ -59,26 +57,18 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Fetch user details to identify them
             const personalInfo = await ouraService.getPersonalInfo(token);
 
+            // Check if profile already exists to get its ID, or create new one
+            const existingProfile = profiles.find(p => p.email === personalInfo.email);
+            const profileId = existingProfile ? existingProfile.id : crypto.randomUUID();
+
             const newProfile: UserProfile = {
                 ...personalInfo,
-                token, // Store token with profile (NOTE: In prod, encrypt this or use HTTP-only cookies)
+                id: profileId,
+                token,
                 lastUpdated: new Date().toISOString(),
             };
 
-            setProfiles(prev => {
-                const exists = prev.find(p => p.email === newProfile.email);
-                if (exists) {
-                    // Update existing
-                    return prev.map(p => p.email === newProfile.email ? { ...newProfile, id: p.id } : p);
-                }
-                return [...prev, { ...newProfile, id: crypto.randomUUID() }];
-            });
-
-            // Auto-select the new profile
-            // We need to find the ID we just assigned or the existing one
-            // Ideally personalInfo has an ID, but Oura 'personal_info' endpoint usage needs verification.
-            // Assuming email is unique key for now.
-
+            await firebaseService.saveProfile(newProfile);
             setAuthStatus(AuthStatus.AUTHENTICATED);
         } catch (error) {
             console.error("Failed to add profile", error);
@@ -87,8 +77,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
-    const removeProfile = (id: string) => {
-        setProfiles(prev => prev.filter(p => p.id !== id));
+    const removeProfile = async (id: string) => {
+        await firebaseService.deleteProfile(id);
         if (activeProfileId === id) {
             setActiveProfileId(null);
         }
