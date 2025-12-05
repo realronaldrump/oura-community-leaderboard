@@ -111,45 +111,6 @@ export interface DailyReadiness {
   timestamp?: string;
 }
 
-export interface HeartRate {
-  bpm: number;
-  source: 'awake' | 'rest' | 'sleep' | 'session' | 'live' | 'workout';
-  timestamp: string;
-}
-
-export interface DailySpO2 {
-  id: string;
-  day: string;
-  spo2_percentage?: {
-    average?: number;
-  };
-}
-
-export interface Workout {
-  id: string;
-  activity: string;
-  calories: number;
-  day: string;
-  distance: number;
-  end_datetime: string;
-  start_datetime: string;
-  label?: string;
-}
-
-export interface Tag {
-  id: string;
-  day: string;
-  text?: string;
-  timestamp: string;
-  tags?: string[];
-}
-
-export interface LocalUserProfile extends UserProfile {
-  token: string;
-  name: string; // User defined friendly name
-  avatar?: string; // Optional URL or base64
-}
-
 export interface LeaderboardEntry {
   id: string;
   name: string;
@@ -157,7 +118,6 @@ export interface LeaderboardEntry {
   sleep: number;
   activity: number;
   average: number;
-  steps: number;
   isCurrentUser: boolean;
   avatar?: string;
 }
