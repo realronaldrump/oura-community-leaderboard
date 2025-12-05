@@ -8,20 +8,37 @@ export default {
     theme: {
         extend: {
             colors: {
-                oura: {
-                    dark: '#121212',
-                    card: '#1E1E1E',
-                    accent: '#EAEAEA',
-                    purple: '#9F7AEA',
-                    blue: '#4299E1',
-                    teal: '#38B2AC',
-                    success: '#48BB78',
-                    warning: '#ECC94B',
-                    danger: '#F56565',
+                // Clean, professional palette
+                dashboard: {
+                    bg: '#0f0f0f',
+                    card: '#1a1a1a',
+                    cardHover: '#222222',
+                    border: '#2a2a2a',
+                    borderLight: '#3a3a3a',
+                },
+                // Subtle accent colors for metrics
+                metric: {
+                    readiness: '#10b981', // emerald
+                    sleep: '#3b82f6',     // blue
+                    activity: '#f59e0b',  // amber
+                    hr: '#ef4444',        // red
+                    hrv: '#8b5cf6',       // violet
+                    spo2: '#06b6d4',      // cyan
+                    temp: '#f97316',      // orange
+                    stress: '#ec4899',    // pink
+                },
+                text: {
+                    primary: '#f5f5f5',
+                    secondary: '#a3a3a3',
+                    muted: '#737373',
                 }
             },
             fontFamily: {
-                sans: ['Inter', 'sans-serif'],
+                sans: ['Inter', 'system-ui', 'sans-serif'],
+                mono: ['JetBrains Mono', 'Menlo', 'monospace'],
+            },
+            borderRadius: {
+                'card': '12px',
             }
         },
     },

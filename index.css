@@ -1,24 +1,154 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg-primary: #0f0f0f;
+  --bg-card: #1a1a1a;
+  --border-color: #2a2a2a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  font-family: 'Inter', sans-serif;
-  background-color: #121212;
-  color: #EAEAEA;
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--bg-primary);
+  color: #f5f5f5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
-/* Custom Scrollbar */
+
+/* Clean card styling */
+.card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  transition: border-color 0.2s ease;
+}
+
+.card:hover {
+  border-color: #3a3a3a;
+}
+
+/* Custom Scrollbar - minimal */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
+
 ::-webkit-scrollbar-track {
-  background: #1E1E1E; 
+  background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #4A5568; 
-  border-radius: 4px;
+  background: #3a3a3a;
+  border-radius: 3px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #718096; 
+  background: #4a4a4a;
+}
+
+/* Score ring animations */
+@keyframes score-fill {
+  from {
+    stroke-dashoffset: var(--circumference);
+  }
+
+  to {
+    stroke-dashoffset: var(--offset);
+  }
+}
+
+/* Metric value styling */
+.metric-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+/* Section headers */
+.section-header {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #737373;
+  margin-bottom: 1rem;
+}
+
+/* Data grid */
+.data-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.data-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.data-row:last-child {
+  border-bottom: none;
+}
+
+.data-label {
+  color: #a3a3a3;
+  font-size: 0.875rem;
+}
+
+.data-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+  color: #f5f5f5;
+}
+
+/* Progress bar base */
+.progress-bar {
+  height: 6px;
+  background-color: #2a2a2a;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease-out;
+}
+
+/* Mobile improvements */
+@media (max-width: 768px) {
+  .card {
+    border-radius: 8px;
+  }
+
+  .metric-value {
+    font-size: 1.5rem;
+  }
+}
+
+/* Focus states for accessibility */
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Utility for hiding on mobile */
+@media (max-width: 640px) {
+  .hide-mobile {
+    display: none;
+  }
 }

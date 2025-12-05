@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { UserProvider, useUser } from './contexts/UserContext';
 import Dashboard from './pages/Dashboard';
-import { ouraService } from './services/ouraService';
 
-// Simple Router
 const Router = () => {
-    const { addProfile, login, authStatus } = useUser();
+    const { addProfile } = useUser();
     const [path, setPath] = useState(window.location.pathname);
 
     useEffect(() => {
@@ -16,13 +14,11 @@ const Router = () => {
 
     // Handle OAuth Callback
     useEffect(() => {
-        // Check for hash parameters (Client-side flow)
         const hash = window.location.hash;
         if (hash && hash.includes('access_token')) {
-            const params = new URLSearchParams(hash.substring(1)); // remove #
+            const params = new URLSearchParams(hash.substring(1));
             const accessToken = params.get('access_token');
             if (accessToken) {
-                // Clear hash to clean URL
                 window.history.replaceState(null, '', window.location.pathname);
 
                 addProfile(accessToken)
@@ -37,11 +33,7 @@ const Router = () => {
         }
     }, [addProfile]);
 
-    return (
-        <div className="min-h-screen bg-black text-gray-100 font-sans selection:bg-oura-purple selection:text-white">
-            <Dashboard />
-        </div>
-    );
+    return <Dashboard />;
 };
 
 const App: React.FC = () => {

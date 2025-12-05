@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
-    DailyActivity, DailyReadiness, DailySleep, SleepSession, HeartRate, DailySpO2, Workout, LeaderboardEntry
+    DailyActivity, DailyReadiness, DailySleep, SleepSession, HeartRate,
+    DailySpO2, DailyStress, DailyResilience, LeaderboardEntry, formatDuration, formatTime
 } from '../types';
 import { ouraService } from '../services/ouraService';
 import { useUser } from '../contexts/UserContext';
@@ -8,12 +9,14 @@ import ScoreRing from '../components/ScoreRing';
 import MetricCard from '../components/MetricCard';
 import HistoryChart from '../components/HistoryChart';
 import SleepStagesChart from '../components/charts/SleepStagesChart';
+import HeartRateChart from '../components/charts/HeartRateChart';
+import ContributorsBreakdown from '../components/ContributorsBreakdown';
 import {
-    LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, BarChart, Bar, CartesianGrid, Legend
+    LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip
 } from 'recharts';
 
 const Dashboard: React.FC = () => {
-    const { activeProfile, profiles, setActiveProfileId, addProfile, login, authStatus } = useUser();
+    const { activeProfile, profiles, setActiveProfileId, login } = useUser();
     const [loading, setLoading] = useState(false);
     const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
 
@@ -24,9 +27,10 @@ const Dashboard: React.FC = () => {
     const [sessions, setSessions] = useState<SleepSession[]>([]);
     const [heartRate, setHeartRate] = useState<HeartRate[]>([]);
     const [spo2, setSpo2] = useState<DailySpO2[]>([]);
-    // const [workouts, setWorkouts] = useState<Workout[]>([]); // Optional if API empty
+    const [stress, setStress] = useState<DailyStress[]>([]);
+    const [resilience, setResilience] = useState<DailyResilience[]>([]);
 
-    const [dateIndex, setDateIndex] = useState(0); // 0 = latest
+    const [dateIndex, setDateIndex] = useState(0);
 
     // Fetch Leaderboard for ALL Profiles
     useEffect(() => {
@@ -36,15 +40,12 @@ const Dashboard: React.FC = () => {
 
             for (const p of profiles) {
                 try {
-                    // Fetch just the latest daily summary for leaderboard
                     const [s, r, a] = await Promise.all([
                         ouraService.getDailySleep(p.token),
                         ouraService.getDailyReadiness(p.token),
                         ouraService.getDailyActivity(p.token)
                     ]);
 
-                    // Get latest
-                    // Simple sort by day desc
                     const sortFn = (x: any, y: any) => new Date(y.day).getTime() - new Date(x.day).getTime();
                     const lastS = s.sort(sortFn)[0];
                     const lastR = r.sort(sortFn)[0];
@@ -56,7 +57,7 @@ const Dashboard: React.FC = () => {
                         const aScore = lastA.score || 0;
                         entries.push({
                             id: p.id,
-                            name: p.email || 'User', // Fallback name
+                            name: p.email || 'User',
                             readiness: rScore,
                             sleep: sScore,
                             activity: aScore,
@@ -71,7 +72,7 @@ const Dashboard: React.FC = () => {
             setLeaderboardData(entries.sort((a, b) => b.average - a.average));
         };
         fetchLeaderboard();
-    }, [profiles, activeProfile?.id]); // Re-run if profiles change
+    }, [profiles, activeProfile?.id]);
 
     // Fetch Deep Data for ACTIVE Profile
     useEffect(() => {
@@ -79,23 +80,28 @@ const Dashboard: React.FC = () => {
             if (!activeProfile) return;
             setLoading(true);
             try {
-                const [s, r, a, sess, hr, sp] = await Promise.all([
+                const [s, r, a, sess, hr, sp, str, res] = await Promise.all([
                     ouraService.getDailySleep(activeProfile.token),
                     ouraService.getDailyReadiness(activeProfile.token),
                     ouraService.getDailyActivity(activeProfile.token),
                     ouraService.getSleepSessions(activeProfile.token),
                     ouraService.getHeartRate(activeProfile.token),
                     ouraService.getDailySpO2(activeProfile.token),
+                    ouraService.getDailyStress(activeProfile.token),
+                    ouraService.getDailyResilience(activeProfile.token),
                 ]);
 
-                const sortFn = (a: any, b: any) => new Date(b.day || b.timestamp).getTime() - new Date(a.day || a.timestamp).getTime();
+                const sortFn = (a: any, b: any) =>
+                    new Date(b.day || b.timestamp).getTime() - new Date(a.day || a.timestamp).getTime();
 
                 setSleep(s.sort(sortFn));
                 setReadiness(r.sort(sortFn));
                 setActivity(a.sort(sortFn));
                 setSessions(sess.sort(sortFn));
-                setHeartRate(hr); // keep raw for graphing
+                setHeartRate(hr);
                 setSpo2(sp.sort(sortFn));
+                setStress(str.sort(sortFn));
+                setResilience(res.sort(sortFn));
             } catch (e) {
                 console.error("Failed to fetch dashboard data", e);
             } finally {
@@ -105,39 +111,37 @@ const Dashboard: React.FC = () => {
         fetchData();
     }, [activeProfile]);
 
-    // Render Helpers
+    // Login screen
     if (!activeProfile) {
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-black text-center relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-purple-900/20 via-black to-blue-900/20 pointer-events-none" />
-                <h1 className="text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-oura-purple to-pink-500 mb-6 z-10">
-                    Oura Leaderboard
+            <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-dashboard-bg text-center">
+                <h1 className="text-4xl font-bold text-text-primary mb-4">
+                    Oura Dashboard
                 </h1>
-                <p className="text-gray-400 mb-12 max-w-lg z-10 text-lg">
-                    Compare your stats with friends and dive deep into your own data. <br />
-                    Log in with Oura to get started.
+                <p className="text-text-secondary mb-8 max-w-md">
+                    View comprehensive health metrics from your Oura Ring.
                 </p>
 
-                {profiles.length > 0 ? (
-                    <div className="grid gap-4 w-full max-w-md z-10">
-                        <h3 className="text-white text-xl font-semibold mb-2">Select Profile</h3>
-                        {profiles.map(p => (
-                            <button
-                                key={p.id}
-                                onClick={() => setActiveProfileId(p.id)}
-                                className="bg-gray-900/80 backdrop-blur border border-gray-700 p-4 rounded-xl text-white hover:border-oura-purple transition-all flex justify-between items-center group"
-                            >
-                                <span>{p.email || 'User'}</span>
-                                <span className="text-oura-purple opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                            </button>
-                        ))}
-                        <div className="border-t border-gray-800 my-4" />
+                {profiles.length > 0 && (
+                    <div className="w-full max-w-sm mb-8">
+                        <p className="text-text-muted text-sm mb-3">Select a profile:</p>
+                        <div className="space-y-2">
+                            {profiles.map(p => (
+                                <button
+                                    key={p.id}
+                                    onClick={() => setActiveProfileId(p.id)}
+                                    className="w-full card p-4 text-left hover:bg-dashboard-cardHover transition-colors"
+                                >
+                                    <span className="text-text-primary">{p.email || 'User'}</span>
+                                </button>
+                            ))}
+                        </div>
                     </div>
-                ) : null}
+                )}
 
                 <button
                     onClick={login}
-                    className="bg-white text-black px-8 py-4 rounded-full font-bold text-lg hover:scale-105 transition-transform shadow-[0_0_20px_rgba(255,255,255,0.3)] z-10"
+                    className="px-8 py-3 bg-white text-black rounded-lg font-semibold hover:bg-gray-100 transition-colors"
                 >
                     Connect Oura Ring
                 </button>
@@ -145,208 +149,539 @@ const Dashboard: React.FC = () => {
         );
     }
 
-    if (loading && sleep.length === 0) return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-black text-white">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-oura-purple mb-4"></div>
-            <div className="animate-pulse">Syncing complete health data...</div>
-        </div>
-    );
+    // Loading state
+    if (loading && sleep.length === 0) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-dashboard-bg">
+                <div className="w-8 h-8 border-2 border-text-muted border-t-text-primary rounded-full animate-spin mb-4" />
+                <p className="text-text-secondary">Loading your data...</p>
+            </div>
+        );
+    }
 
     // Derived Data
-    const currentSleep = sleep[dateIndex] || sleep[0] || {};
-    const currentReadiness = readiness[dateIndex] || readiness[0] || {};
-    const currentActivity = activity[dateIndex] || activity[0] || {};
-    const currentSpo2 = spo2.find(s => s.day === currentSleep.day);
-    const currentHr = heartRate.slice(0, 100); // simplify for now
+    const currentSleep = sleep[dateIndex] || sleep[0];
+    const currentReadiness = readiness[dateIndex] || readiness[0];
+    const currentActivity = activity[dateIndex] || activity[0];
+    const currentSession = sessions.find(s => s.day === currentSleep?.day) || sessions[0];
+    const currentSpo2 = spo2.find(s => s.day === currentSleep?.day);
+    const currentStress = stress.find(s => s.day === currentSleep?.day);
+    const currentResilience = resilience.find(r => r.day === currentSleep?.day);
+
+    // Readiness contributors for breakdown
+    const readinessContributors = currentReadiness?.contributors ? [
+        { label: 'Previous Night', value: currentReadiness.contributors.previous_night, color: '#3b82f6' },
+        { label: 'Sleep Balance', value: currentReadiness.contributors.sleep_balance, color: '#3b82f6' },
+        { label: 'HRV Balance', value: currentReadiness.contributors.hrv_balance, color: '#8b5cf6' },
+        { label: 'Resting HR', value: currentReadiness.contributors.resting_heart_rate, color: '#ef4444' },
+        { label: 'Recovery Index', value: currentReadiness.contributors.recovery_index, color: '#10b981' },
+        { label: 'Body Temperature', value: currentReadiness.contributors.body_temperature, color: '#f97316' },
+        { label: 'Activity Balance', value: currentReadiness.contributors.activity_balance, color: '#f59e0b' },
+        { label: 'Previous Day Activity', value: currentReadiness.contributors.previous_day_activity, color: '#f59e0b' },
+    ] : [];
+
+    // Sleep contributors
+    const sleepContributors = currentSleep?.contributors ? [
+        { label: 'Total Sleep', value: currentSleep.contributors.total_sleep, color: '#3b82f6' },
+        { label: 'Efficiency', value: currentSleep.contributors.efficiency, color: '#3b82f6' },
+        { label: 'Restfulness', value: currentSleep.contributors.restfulness, color: '#8b5cf6' },
+        { label: 'REM Sleep', value: currentSleep.contributors.rem_sleep, color: '#8b5cf6' },
+        { label: 'Deep Sleep', value: currentSleep.contributors.deep_sleep, color: '#1e40af' },
+        { label: 'Latency', value: currentSleep.contributors.latency, color: '#10b981' },
+        { label: 'Timing', value: currentSleep.contributors.timing, color: '#10b981' },
+    ] : [];
 
     return (
-        <div className="min-h-screen bg-black text-gray-100 pb-20 overflow-x-hidden selection:bg-purple-500/30">
-
+        <div className="min-h-screen bg-dashboard-bg text-text-primary pb-20">
             {/* Top Nav */}
-            <nav className="sticky top-0 z-50 backdrop-blur-md bg-black/50 border-b border-white/10 px-6 py-4 flex justify-between items-center">
-                <div className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
-                    Oura Leaderboard
-                </div>
-                <div className="flex items-center gap-4">
-                    {/* Profile Dropdown logic could go here, for now just a Logout/Switch button */}
-                    <button onClick={() => setActiveProfileId('')} className="text-sm text-gray-400 hover:text-white transition-colors">
+            <nav className="sticky top-0 z-50 bg-dashboard-bg/95 backdrop-blur-sm border-b border-dashboard-border px-4 md:px-6 py-3 flex justify-between items-center">
+                <h1 className="text-lg font-semibold">Oura Dashboard</h1>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setActiveProfileId('')}
+                        className="text-sm text-text-secondary hover:text-text-primary transition-colors"
+                    >
                         Switch Profile
                     </button>
-                    <button onClick={login} className="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded-full transition-colors border border-gray-700">
-                        + Add Friend
+                    <button
+                        onClick={login}
+                        className="text-sm px-3 py-1.5 bg-dashboard-card border border-dashboard-border rounded-lg hover:bg-dashboard-cardHover transition-colors"
+                    >
+                        + Add User
                     </button>
                 </div>
             </nav>
 
-            <div className="container mx-auto px-4 md:px-6 py-8 space-y-12">
+            <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-8">
 
-                {/* LEADERBOARD SECTION */}
-                <section>
-                    <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
-                        <span className="bg-yellow-500/10 text-yellow-500 p-2 rounded-lg text-lg">🏆</span> Daily Standings
-                    </h2>
-                    <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-white/5 overflow-hidden">
-                        <div className="grid grid-cols-5 text-xs text-gray-400 uppercase tracking-wider p-4 border-b border-white/5 font-medium">
-                            <div className="col-span-2">Athlete</div>
-                            <div className="text-center">Readiness</div>
-                            <div className="text-center">Sleep</div>
-                            <div className="text-center text-white font-bold">Avg Score</div>
-                        </div>
-                        {leaderboardData.map((user, idx) => (
-                            <div key={user.id} className={`grid grid-cols-5 p-4 items-center hover:bg-white/5 transition-colors ${user.isCurrentUser ? 'bg-oura-purple/10 border-l-2 border-oura-purple' : ''}`}>
-                                <div className="col-span-2 flex items-center gap-3">
-                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-black ${idx === 0 ? 'bg-yellow-400' : idx === 1 ? 'bg-gray-300' : idx === 2 ? 'bg-orange-400' : 'bg-gray-700 text-white'}`}>
-                                        {idx + 1}
-                                    </div>
-                                    <span className={user.isCurrentUser ? 'font-bold text-white' : 'text-gray-300'}>
-                                        {user.name.split('@')[0]}
-                                    </span>
-                                </div>
-                                <div className="text-center font-mono text-teal-400">{user.readiness}</div>
-                                <div className="text-center font-mono text-purple-400">{user.sleep}</div>
-                                <div className="text-center font-mono text-xl font-bold text-white">{user.average}</div>
+                {/* Leaderboard */}
+                {leaderboardData.length > 1 && (
+                    <section>
+                        <h2 className="section-header">Daily Standings</h2>
+                        <div className="card overflow-hidden">
+                            <div className="grid grid-cols-5 text-xs text-text-muted uppercase tracking-wider p-3 border-b border-dashboard-border font-medium">
+                                <div className="col-span-2">User</div>
+                                <div className="text-center">Readiness</div>
+                                <div className="text-center">Sleep</div>
+                                <div className="text-center">Avg</div>
                             </div>
-                        ))}
-                        {leaderboardData.length === 0 && (
-                            <div className="p-8 text-center text-gray-500">No data available for leaderboard.</div>
+                            {leaderboardData.map((user, idx) => (
+                                <div
+                                    key={user.id}
+                                    className={`grid grid-cols-5 p-3 items-center hover:bg-dashboard-cardHover transition-colors ${user.isCurrentUser ? 'bg-metric-readiness/5 border-l-2 border-metric-readiness' : ''
+                                        }`}
+                                >
+                                    <div className="col-span-2 flex items-center gap-2">
+                                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium ${idx === 0 ? 'bg-yellow-500 text-black' :
+                                                idx === 1 ? 'bg-gray-400 text-black' :
+                                                    idx === 2 ? 'bg-orange-500 text-black' : 'bg-dashboard-border text-text-secondary'
+                                            }`}>
+                                            {idx + 1}
+                                        </span>
+                                        <span className={user.isCurrentUser ? 'font-medium' : 'text-text-secondary'}>
+                                            {user.name.split('@')[0]}
+                                        </span>
+                                    </div>
+                                    <div className="text-center font-mono text-metric-readiness">{user.readiness}</div>
+                                    <div className="text-center font-mono text-metric-sleep">{user.sleep}</div>
+                                    <div className="text-center font-mono font-semibold">{user.average}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+                )}
+
+                {/* Date Navigation */}
+                <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-semibold">Your Metrics</h2>
+                    <div className="flex items-center gap-2">
+                        <button
+                            disabled={dateIndex >= sleep.length - 1}
+                            onClick={() => setDateIndex(dateIndex + 1)}
+                            className="p-2 rounded-lg hover:bg-dashboard-card disabled:opacity-30 transition-colors"
+                        >
+                            ←
+                        </button>
+                        <span className="px-3 py-1.5 bg-dashboard-card rounded-lg font-mono text-sm border border-dashboard-border">
+                            {currentSleep?.day || 'Today'}
+                        </span>
+                        <button
+                            disabled={dateIndex === 0}
+                            onClick={() => setDateIndex(dateIndex - 1)}
+                            className="p-2 rounded-lg hover:bg-dashboard-card disabled:opacity-30 transition-colors"
+                        >
+                            →
+                        </button>
+                    </div>
+                </div>
+
+                {/* Main Scores */}
+                <div className="grid grid-cols-3 gap-4 md:gap-6">
+                    <div className="card p-4 md:p-6 flex flex-col items-center">
+                        <ScoreRing
+                            score={currentReadiness?.score}
+                            label="Readiness"
+                            color="#10b981"
+                            size={100}
+                        />
+                        <div className="w-full mt-4 opacity-70 hover:opacity-100 transition-opacity">
+                            <HistoryChart data={[...readiness].reverse()} dataKey="score" color="#10b981" height={48} />
+                        </div>
+                    </div>
+
+                    <div className="card p-4 md:p-6 flex flex-col items-center">
+                        <ScoreRing
+                            score={currentSleep?.score}
+                            label="Sleep"
+                            color="#3b82f6"
+                            size={100}
+                        />
+                        <div className="w-full mt-4 opacity-70 hover:opacity-100 transition-opacity">
+                            <HistoryChart data={[...sleep].reverse()} dataKey="score" color="#3b82f6" height={48} />
+                        </div>
+                    </div>
+
+                    <div className="card p-4 md:p-6 flex flex-col items-center">
+                        <ScoreRing
+                            score={currentActivity?.score}
+                            label="Activity"
+                            color="#f59e0b"
+                            size={100}
+                        />
+                        <div className="w-full mt-4 opacity-70 hover:opacity-100 transition-opacity">
+                            <HistoryChart data={[...activity].reverse()} dataKey="score" color="#f59e0b" height={48} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Sleep Details */}
+                <section>
+                    <h3 className="section-header">Sleep Details</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <MetricCard
+                            title="Total Sleep"
+                            value={formatDuration(currentSession?.total_sleep_duration)}
+                            color="#3b82f6"
+                        />
+                        <MetricCard
+                            title="Time in Bed"
+                            value={formatDuration(currentSession?.time_in_bed)}
+                            color="#3b82f6"
+                        />
+                        <MetricCard
+                            title="Bedtime"
+                            value={formatTime(currentSession?.bedtime_start)}
+                            subtext="Fell asleep"
+                        />
+                        <MetricCard
+                            title="Wake Time"
+                            value={formatTime(currentSession?.bedtime_end)}
+                            subtext="Woke up"
+                        />
+                        <MetricCard
+                            title="Deep Sleep"
+                            value={formatDuration(currentSession?.deep_sleep_duration)}
+                            color="#1e40af"
+                        />
+                        <MetricCard
+                            title="REM Sleep"
+                            value={formatDuration(currentSession?.rem_sleep_duration)}
+                            color="#8b5cf6"
+                        />
+                        <MetricCard
+                            title="Light Sleep"
+                            value={formatDuration(currentSession?.light_sleep_duration)}
+                            color="#60a5fa"
+                        />
+                        <MetricCard
+                            title="Awake Time"
+                            value={formatDuration(currentSession?.awake_time)}
+                            color="#6b7280"
+                        />
+                        <MetricCard
+                            title="Efficiency"
+                            value={currentSession?.efficiency}
+                            unit="%"
+                            subtext="Sleep efficiency"
+                        />
+                        <MetricCard
+                            title="Latency"
+                            value={formatDuration(currentSession?.latency)}
+                            subtext="Time to fall asleep"
+                        />
+                        <MetricCard
+                            title="Restless Periods"
+                            value={currentSession?.restless_periods}
+                            subtext="Movement events"
+                        />
+                        <MetricCard
+                            title="Avg Breath Rate"
+                            value={currentSession?.average_breath?.toFixed(1)}
+                            unit="br/min"
+                        />
+                    </div>
+                </section>
+
+                {/* Sleep Stages Chart */}
+                <section>
+                    <h3 className="section-header">Sleep Architecture (14 Days)</h3>
+                    <div className="card p-4" style={{ height: 280 }}>
+                        <SleepStagesChart data={sessions.slice(0, 14).reverse()} />
+                    </div>
+                </section>
+
+                {/* Heart Rate & HRV - CORRECTED DATA */}
+                <section>
+                    <h3 className="section-header">Heart Rate & HRV</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                        <MetricCard
+                            title="Lowest HR (Sleep)"
+                            value={currentSession?.lowest_heart_rate}
+                            unit="bpm"
+                            color="#ef4444"
+                            subtext="During sleep"
+                        />
+                        <MetricCard
+                            title="Avg HR (Sleep)"
+                            value={currentSession?.average_heart_rate?.toFixed(0)}
+                            unit="bpm"
+                            color="#ef4444"
+                            subtext="During sleep"
+                        />
+                        <MetricCard
+                            title="HRV (Sleep)"
+                            value={currentSession?.average_hrv}
+                            unit="ms"
+                            color="#8b5cf6"
+                            subtext="Heart rate variability"
+                        />
+                        <MetricCard
+                            title="SpO2 Average"
+                            value={currentSpo2?.spo2_percentage?.average?.toFixed(1)}
+                            unit="%"
+                            color="#06b6d4"
+                            subtext="Oxygen saturation"
+                        />
+                    </div>
+
+                    {heartRate.length > 0 && (
+                        <div className="card p-4" style={{ height: 200 }}>
+                            <HeartRateChart data={heartRate} showLabels />
+                        </div>
+                    )}
+                </section>
+
+                {/* HRV Trend */}
+                <section>
+                    <h3 className="section-header">HRV Trend (30 Days)</h3>
+                    <div className="card p-4" style={{ height: 180 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={sessions.slice(0, 30).reverse()}>
+                                <XAxis
+                                    dataKey="day"
+                                    tick={{ fill: '#737373', fontSize: 10 }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tickFormatter={(val) => val.slice(5)}
+                                />
+                                <YAxis
+                                    tick={{ fill: '#737373', fontSize: 10 }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                    unit=" ms"
+                                />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: '#1a1a1a',
+                                        border: '1px solid #2a2a2a',
+                                        borderRadius: '8px'
+                                    }}
+                                    formatter={(value: number) => [`${value} ms`, 'HRV']}
+                                />
+                                <Line
+                                    type="monotone"
+                                    dataKey="average_hrv"
+                                    stroke="#8b5cf6"
+                                    dot={false}
+                                    strokeWidth={2}
+                                />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                </section>
+
+                {/* Body & Recovery */}
+                <section>
+                    <h3 className="section-header">Body & Recovery</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <MetricCard
+                            title="Body Temp Deviation"
+                            value={currentReadiness?.temperature_deviation?.toFixed(2)}
+                            unit="°C"
+                            color={
+                                Math.abs(currentReadiness?.temperature_deviation || 0) > 0.5
+                                    ? '#ef4444'
+                                    : '#10b981'
+                            }
+                            subtext={
+                                Math.abs(currentReadiness?.temperature_deviation || 0) > 0.5
+                                    ? 'Elevated'
+                                    : 'Normal range'
+                            }
+                        />
+                        <MetricCard
+                            title="Temp Trend"
+                            value={currentReadiness?.temperature_trend_deviation?.toFixed(2)}
+                            unit="°C"
+                            subtext="Trend deviation"
+                        />
+                        {currentStress && (
+                            <>
+                                <MetricCard
+                                    title="High Stress Time"
+                                    value={formatDuration(currentStress.stress_high)}
+                                    color="#ec4899"
+                                    subtext="Time in high stress"
+                                />
+                                <MetricCard
+                                    title="Recovery Time"
+                                    value={formatDuration(currentStress.recovery_high)}
+                                    color="#10b981"
+                                    subtext="Time in recovery"
+                                />
+                            </>
+                        )}
+                        {currentResilience && (
+                            <MetricCard
+                                title="Resilience"
+                                value={currentResilience.level || '--'}
+                                subtext="Current level"
+                            />
+                        )}
+                        {currentSpo2?.breathing_disturbance_index != null && (
+                            <MetricCard
+                                title="Breathing Index"
+                                value={currentSpo2.breathing_disturbance_index}
+                                subtext="Disturbance index"
+                            />
                         )}
                     </div>
                 </section>
 
-                {/* PERSONAL DASHBOARD */}
-                <section className="animate-fade-in relative">
-                    <div className="flex justify-between items-end mb-8 border-b border-gray-800 pb-4">
-                        <div>
-                            <h2 className="text-4xl font-bold text-white mb-1">Your Metrics</h2>
-                            <p className="text-gray-400 text-sm">Deep dive into your biometrics</p>
-                        </div>
-                        <div className="flex gap-2">
-                            {/* Date Controls */}
-                            <button
-                                disabled={dateIndex >= sleep.length - 1}
-                                onClick={() => setDateIndex(dateIndex + 1)}
-                                className="p-2 hover:bg-gray-800 rounded-lg disabled:opacity-30 text-white"
-                            >←</button>
-                            <div className="bg-gray-800 px-4 py-2 rounded-lg text-white font-mono border border-gray-700">
-                                {currentSleep.day || 'Today'}
-                            </div>
-                            <button
-                                disabled={dateIndex === 0}
-                                onClick={() => setDateIndex(dateIndex - 1)}
-                                className="p-2 hover:bg-gray-800 rounded-lg disabled:opacity-30 text-white"
-                            >→</button>
-                        </div>
+                {/* Activity Details */}
+                <section>
+                    <h3 className="section-header">Activity Details</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <MetricCard
+                            title="Steps"
+                            value={currentActivity?.steps?.toLocaleString()}
+                            color="#f59e0b"
+                        />
+                        <MetricCard
+                            title="Active Calories"
+                            value={currentActivity?.active_calories?.toLocaleString()}
+                            unit="kcal"
+                            color="#f59e0b"
+                        />
+                        <MetricCard
+                            title="Total Calories"
+                            value={currentActivity?.total_calories?.toLocaleString()}
+                            unit="kcal"
+                            subtext="All calories burned"
+                        />
+                        <MetricCard
+                            title="Walking Distance"
+                            value={((currentActivity?.equivalent_walking_distance || 0) / 1000).toFixed(1)}
+                            unit="km"
+                            subtext="Equivalent"
+                        />
+                        <MetricCard
+                            title="High Activity"
+                            value={formatDuration(currentActivity?.high_activity_time)}
+                            color="#dc2626"
+                        />
+                        <MetricCard
+                            title="Medium Activity"
+                            value={formatDuration(currentActivity?.medium_activity_time)}
+                            color="#f59e0b"
+                        />
+                        <MetricCard
+                            title="Low Activity"
+                            value={formatDuration(currentActivity?.low_activity_time)}
+                            color="#22c55e"
+                        />
+                        <MetricCard
+                            title="Sedentary Time"
+                            value={formatDuration(currentActivity?.sedentary_time)}
+                            color="#6b7280"
+                        />
+                        <MetricCard
+                            title="Resting Time"
+                            value={formatDuration(currentActivity?.resting_time)}
+                        />
+                        <MetricCard
+                            title="Non-Wear Time"
+                            value={formatDuration(currentActivity?.non_wear_time)}
+                            subtext="Ring not worn"
+                        />
+                        <MetricCard
+                            title="Inactivity Alerts"
+                            value={currentActivity?.inactivity_alerts}
+                            subtext="Move reminders"
+                        />
+                        <MetricCard
+                            title="To Target"
+                            value={currentActivity?.meters_to_target}
+                            unit="m"
+                            subtext="Distance remaining"
+                        />
                     </div>
-
-                    {/* Big 3 Rings */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-                        <div className="bg-gradient-to-br from-gray-900 to-black p-1 rounded-3xl shadow-2xl relative group">
-                            <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-teal-500/50 to-transparent opacity-50" />
-                            <div className="bg-gray-900/90 rounded-[22px] p-6 h-full flex flex-col items-center">
-                                <h3 className="text-teal-400 font-medium mb-4 tracking-wide uppercase text-xs">Readiness</h3>
-                                <ScoreRing score={currentReadiness.score} label="Ready" color="#2DD4BF" size={140} />
-                                <div className="w-full mt-6 h-16 opacity-50 group-hover:opacity-100 transition-opacity">
-                                    <HistoryChart data={[...readiness].reverse()} dataKey="score" color="#2DD4BF" />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-gradient-to-br from-gray-900 to-black p-1 rounded-3xl shadow-2xl relative group">
-                            <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-purple-500/50 to-transparent opacity-50" />
-                            <div className="bg-gray-900/90 rounded-[22px] p-6 h-full flex flex-col items-center">
-                                <h3 className="text-purple-400 font-medium mb-4 tracking-wide uppercase text-xs">Sleep</h3>
-                                <ScoreRing score={currentSleep.score} label="Sleep" color="#A855F7" size={140} />
-                                <div className="w-full mt-6 h-16 opacity-50 group-hover:opacity-100 transition-opacity">
-                                    <HistoryChart data={[...sleep].reverse()} dataKey="score" color="#A855F7" />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-gradient-to-br from-gray-900 to-black p-1 rounded-3xl shadow-2xl relative group">
-                            <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent opacity-50" />
-                            <div className="bg-gray-900/90 rounded-[22px] p-6 h-full flex flex-col items-center">
-                                <h3 className="text-blue-400 font-medium mb-4 tracking-wide uppercase text-xs">Activity</h3>
-                                <ScoreRing score={currentActivity.score} label="Activity" color="#3B82F6" size={140} />
-                                <div className="w-full mt-6 h-16 opacity-50 group-hover:opacity-100 transition-opacity">
-                                    <HistoryChart data={[...activity].reverse()} dataKey="score" color="#3B82F6" />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Advanced Metrics Grid */}
-                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-
-                        {/* Main Graph Area */}
-                        <div className="lg:col-span-3 space-y-6">
-                            {/* Sleep Architecture */}
-                            <div className="bg-gray-900/60 backdrop-blur border border-gray-800 rounded-3xl p-6">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h3 className="text-white font-semibold">Sleep Architecture Trend</h3>
-                                    <span className="text-xs text-gray-500">Last 14 Days</span>
-                                </div>
-                                <div className="h-64">
-                                    <SleepStagesChart data={sessions.slice(0, 14).reverse()} />
-                                </div>
-                            </div>
-
-                            {/* Heart Rate & SpO2 */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="bg-gray-900/60 backdrop-blur border border-gray-800 rounded-3xl p-6">
-                                    <h3 className="text-white font-semibold mb-4">SpO2 Levels</h3>
-                                    <div className="flex items-end gap-2 mb-4">
-                                        <span className="text-4xl font-bold text-blue-400">{currentSpo2?.spo2_percentage?.average || '--'}%</span>
-                                        <span className="text-sm text-gray-500 mb-2">avg overnight</span>
-                                    </div>
-                                    <div className="h-32">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <LineChart data={[...spo2].reverse().slice(-14)}>
-                                                <Line type="monotone" dataKey="spo2_percentage.average" stroke="#60A5FA" dot={{ r: 2 }} strokeWidth={2} />
-                                                <XAxis dataKey="day" hide />
-                                                <YAxis domain={[90, 100]} hide />
-                                                <Tooltip contentStyle={{ backgroundColor: '#000', border: '1px solid #333' }} />
-                                            </LineChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </div>
-
-                                <div className="bg-gray-900/60 backdrop-blur border border-gray-800 rounded-3xl p-6">
-                                    <h3 className="text-white font-semibold mb-4">HRV Balance</h3>
-                                    <div className="flex items-end gap-2 mb-4">
-                                        <span className="text-4xl font-bold text-pink-400">{currentReadiness.contributors?.hrv_balance || '--'}</span>
-                                        <span className="text-sm text-gray-500 mb-2">ms</span>
-                                    </div>
-                                    <div className="h-32">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <LineChart data={[...readiness].reverse().slice(-30)}>
-                                                <Line type="monotone" dataKey="contributors.hrv_balance" stroke="#F472B6" dot={false} strokeWidth={2} />
-                                                <YAxis hide />
-                                                <Tooltip contentStyle={{ backgroundColor: '#000', border: '1px solid #333' }} />
-                                            </LineChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Right Column Stats */}
-                        <div className="space-y-4">
-                            <MetricCard title="Resting HR" value={currentReadiness.contributors?.resting_heart_rate} unit="bpm" subtext="Lowest" colorClass="text-red-400" />
-                            <MetricCard title="Steps" value={currentActivity.steps?.toLocaleString()} subtext="Daily Total" colorClass="text-green-400" />
-                            <MetricCard title="Calories" value={currentActivity.total_calories?.toLocaleString()} unit="kcal" subtext="Total Burn" colorClass="text-orange-400" />
-                            <MetricCard title="Body Temp" value={currentReadiness.temperature_deviation} unit="°C" subtext="Deviation" colorClass={currentReadiness.temperature_deviation > 0.5 ? 'text-red-400' : 'text-white'} />
-
-                            <div className="bg-gradient-to-b from-gray-800/50 to-black border border-gray-800 rounded-3xl p-6 mt-6">
-                                <h4 className="text-gray-400 text-xs uppercase mb-4 font-bold tracking-wider">Workout Context</h4>
-                                {/* Placeholder for workout list if we had it, or just generic advice */}
-                                <p className="text-sm text-gray-300 italic">
-                                    {currentReadiness.score && currentReadiness.score > 85 ? "You are well recovered. Push hard today!" : "Prioritize recovery today."}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
                 </section>
+
+                {/* MET Minutes Breakdown */}
+                <section>
+                    <h3 className="section-header">MET Minutes Breakdown</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <MetricCard
+                            title="Average MET"
+                            value={currentActivity?.average_met_minutes?.toFixed(1)}
+                            subtext="Daily average"
+                        />
+                        <MetricCard
+                            title="High Activity MET"
+                            value={currentActivity?.high_activity_met_minutes}
+                            color="#dc2626"
+                        />
+                        <MetricCard
+                            title="Medium Activity MET"
+                            value={currentActivity?.medium_activity_met_minutes}
+                            color="#f59e0b"
+                        />
+                        <MetricCard
+                            title="Low Activity MET"
+                            value={currentActivity?.low_activity_met_minutes}
+                            color="#22c55e"
+                        />
+                    </div>
+                </section>
+
+                {/* Score Contributors */}
+                <section>
+                    <h3 className="section-header">Score Contributors</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <ContributorsBreakdown
+                            title="Readiness Contributors"
+                            contributors={readinessContributors}
+                        />
+                        <ContributorsBreakdown
+                            title="Sleep Contributors"
+                            contributors={sleepContributors}
+                        />
+                    </div>
+                </section>
+
+                {/* SpO2 Trend */}
+                {spo2.length > 0 && (
+                    <section>
+                        <h3 className="section-header">SpO2 Trend (14 Days)</h3>
+                        <div className="card p-4" style={{ height: 160 }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={[...spo2].reverse().slice(-14)}>
+                                    <XAxis
+                                        dataKey="day"
+                                        tick={{ fill: '#737373', fontSize: 10 }}
+                                        axisLine={false}
+                                        tickLine={false}
+                                        tickFormatter={(val) => val.slice(5)}
+                                    />
+                                    <YAxis
+                                        domain={[90, 100]}
+                                        tick={{ fill: '#737373', fontSize: 10 }}
+                                        axisLine={false}
+                                        tickLine={false}
+                                        unit="%"
+                                    />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: '#1a1a1a',
+                                            border: '1px solid #2a2a2a',
+                                            borderRadius: '8px'
+                                        }}
+                                        formatter={(value: number) => [`${value?.toFixed(1)}%`, 'SpO2']}
+                                    />
+                                    <Line
+                                        type="monotone"
+                                        dataKey="spo2_percentage.average"
+                                        stroke="#06b6d4"
+                                        dot={{ r: 2, fill: '#06b6d4' }}
+                                        strokeWidth={2}
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </section>
+                )}
+
             </div>
         </div>
     );

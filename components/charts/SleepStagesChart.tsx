@@ -11,34 +11,63 @@ const SleepStagesChart: React.FC<Props> = ({ data }) => {
     const chartData = data.map(session => ({
         day: session.day,
         // Convert seconds to hours
-        Deep: (session.deep_sleep_duration || 0) / 3600,
-        REM: (session.rem_sleep_duration || 0) / 3600,
-        Light: (session.light_sleep_duration || 0) / 3600,
-        Awake: (session.awake_time || 0) / 3600,
+        Deep: Number(((session.deep_sleep_duration || 0) / 3600).toFixed(1)),
+        REM: Number(((session.rem_sleep_duration || 0) / 3600).toFixed(1)),
+        Light: Number(((session.light_sleep_duration || 0) / 3600).toFixed(1)),
+        Awake: Number(((session.awake_time || 0) / 3600).toFixed(1)),
     }));
+
+    if (chartData.length === 0) {
+        return (
+            <div className="h-full flex items-center justify-center text-text-muted text-sm">
+                No sleep data available
+            </div>
+        );
+    }
 
     return (
         <ResponsiveContainer width="100%" height="100%">
             <BarChart
                 data={chartData}
-                margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-                barSize={20}
+                margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                barSize={16}
             >
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                <XAxis dataKey="day" stroke="#666" fontSize={12} tickFormatter={(val) => val.slice(5)} />
-                <YAxis stroke="#666" fontSize={12} unit="h" />
-                <Tooltip
-                    contentStyle={{ backgroundColor: '#111', border: '1px solid #333', borderRadius: '8px' }}
-                    itemStyle={{ fontSize: '12px' }}
-                    formatter={(value: number) => [value.toFixed(1) + 'h', '']}
-                    labelStyle={{ color: '#999', marginBottom: '4px' }}
-                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
+                <XAxis
+                    dataKey="day"
+                    stroke="#737373"
+                    fontSize={11}
+                    tickFormatter={(val) => val.slice(5)}
+                    axisLine={false}
+                    tickLine={false}
                 />
-                <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', opacity: 0.8 }} />
-                <Bar dataKey="Deep" stackId="a" fill="#3182CE" name="Deep" radius={[0, 0, 4, 4]} />
-                <Bar dataKey="REM" stackId="a" fill="#805AD5" name="REM" />
-                <Bar dataKey="Light" stackId="a" fill="#38B2AC" name="Light" />
-                <Bar dataKey="Awake" stackId="a" fill="#E53E3E" name="Awake" radius={[4, 4, 0, 0]} />
+                <YAxis
+                    stroke="#737373"
+                    fontSize={11}
+                    unit="h"
+                    axisLine={false}
+                    tickLine={false}
+                />
+                <Tooltip
+                    contentStyle={{
+                        backgroundColor: '#1a1a1a',
+                        border: '1px solid #2a2a2a',
+                        borderRadius: '8px'
+                    }}
+                    formatter={(value: number) => [`${value}h`, '']}
+                    labelStyle={{ color: '#a3a3a3', marginBottom: '4px' }}
+                />
+                <Legend
+                    verticalAlign="top"
+                    height={32}
+                    iconType="circle"
+                    iconSize={8}
+                    wrapperStyle={{ fontSize: '11px' }}
+                />
+                <Bar dataKey="Deep" stackId="a" fill="#1e40af" name="Deep" radius={[0, 0, 4, 4]} />
+                <Bar dataKey="Light" stackId="a" fill="#3b82f6" name="Light" />
+                <Bar dataKey="REM" stackId="a" fill="#8b5cf6" name="REM" />
+                <Bar dataKey="Awake" stackId="a" fill="#6b7280" name="Awake" radius={[4, 4, 0, 0]} />
             </BarChart>
         </ResponsiveContainer>
     );

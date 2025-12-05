@@ -2,21 +2,41 @@ import React from 'react';
 
 interface MetricCardProps {
   title: string;
-  value: string | number;
+  value: string | number | null | undefined;
   unit?: string;
   subtext?: string;
-  colorClass?: string;
+  color?: string;
+  icon?: React.ReactNode;
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ title, value, unit, subtext, colorClass = "text-white" }) => {
+const MetricCard: React.FC<MetricCardProps> = ({
+  title,
+  value,
+  unit,
+  subtext,
+  color = '#f5f5f5',
+  icon
+}) => {
   return (
-    <div className="bg-oura-card rounded-2xl p-5 border border-gray-800 flex flex-col justify-between hover:border-gray-700 transition-colors">
-      <h3 className="text-gray-400 text-sm font-medium mb-2">{title}</h3>
-      <div className="flex items-end gap-1">
-        <span className={`text-2xl font-bold ${colorClass}`}>{value}</span>
-        {unit && <span className="text-gray-500 text-sm mb-1">{unit}</span>}
+    <div className="card p-4 flex flex-col justify-between min-h-[100px]">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-text-secondary text-sm font-medium">{title}</h3>
+        {icon && <span className="text-text-muted">{icon}</span>}
       </div>
-      {subtext && <p className="text-xs text-gray-500 mt-2">{subtext}</p>}
+      <div className="flex items-baseline gap-1.5">
+        <span
+          className="text-2xl font-mono font-semibold"
+          style={{ color }}
+        >
+          {value ?? '--'}
+        </span>
+        {unit && value != null && (
+          <span className="text-text-muted text-sm">{unit}</span>
+        )}
+      </div>
+      {subtext && (
+        <p className="text-xs text-text-muted mt-2">{subtext}</p>
+      )}
     </div>
   );
 };

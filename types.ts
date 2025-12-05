@@ -27,31 +27,39 @@ export interface DailySleep {
   contributors: SleepContributors;
 }
 
+export interface SampleModel {
+  interval: number;
+  items: number[];
+  timestamp: string;
+}
+
 export interface SleepSession {
   id: string;
   day: string;
   average_breath?: number | null;
   average_heart_rate?: number | null;
-  average_hrv?: number | null;
-  awake_time?: number | null;
+  average_hrv?: number | null; // Actual HRV in ms
+  awake_time?: number | null; // Duration in seconds
   bedtime_end?: string; // ISO 8601
   bedtime_start?: string; // ISO 8601
-  deep_sleep_duration?: number | null;
-  efficiency?: number | null;
-  latency?: number | null;
-  light_sleep_duration?: number | null;
+  deep_sleep_duration?: number | null; // Duration in seconds
+  efficiency?: number | null; // 1-100
+  latency?: number | null; // Sleep latency in seconds
+  light_sleep_duration?: number | null; // Duration in seconds
   low_battery_alert?: boolean;
-  lowest_heart_rate?: number | null;
+  lowest_heart_rate?: number | null; // Actual lowest HR in bpm
   movement_30_sec?: string | null;
   period?: number;
   readiness_score_delta?: number | null;
-  rem_sleep_duration?: number | null;
+  rem_sleep_duration?: number | null; // Duration in seconds
   restless_periods?: number | null;
   sleep_phase_5_min?: string | null;
   sleep_score_delta?: number | null;
-  time_in_bed?: number | null;
-  total_sleep_duration?: number | null;
+  time_in_bed?: number | null; // Duration in seconds
+  total_sleep_duration?: number | null; // Duration in seconds
   type?: 'deleted' | 'sleep' | 'long_sleep' | 'rest';
+  heart_rate?: SampleModel | null; // HR time series
+  hrv?: SampleModel | null; // HRV time series
 }
 
 export interface ActivityContributors {
@@ -70,19 +78,19 @@ export interface DailyActivity {
   active_calories: number;
   average_met_minutes?: number;
   contributors: ActivityContributors;
-  equivalent_walking_distance?: number;
+  equivalent_walking_distance?: number; // meters
   high_activity_met_minutes?: number;
-  high_activity_time?: number;
+  high_activity_time?: number; // seconds
   inactivity_alerts?: number;
   low_activity_met_minutes?: number;
-  low_activity_time?: number;
+  low_activity_time?: number; // seconds
   medium_activity_met_minutes?: number;
-  medium_activity_time?: number;
+  medium_activity_time?: number; // seconds
   meters_to_target?: number;
-  non_wear_time?: number;
-  resting_time?: number;
+  non_wear_time?: number; // seconds
+  resting_time?: number; // seconds
   sedentary_met_minutes?: number;
-  sedentary_time?: number;
+  sedentary_time?: number; // seconds
   steps: number;
   target_calories: number;
   target_meters?: number;
@@ -92,14 +100,14 @@ export interface DailyActivity {
 }
 
 export interface ReadinessContributors {
-  activity_balance?: number | null;
-  body_temperature?: number | null;
-  hrv_balance?: number | null;
-  previous_day_activity?: number | null;
-  previous_night?: number | null;
-  recovery_index?: number | null;
-  resting_heart_rate?: number | null;
-  sleep_balance?: number | null;
+  activity_balance?: number | null; // 1-100 contribution score
+  body_temperature?: number | null; // 1-100 contribution score
+  hrv_balance?: number | null; // 1-100 contribution score (NOT ms!)
+  previous_day_activity?: number | null; // 1-100 contribution score
+  previous_night?: number | null; // 1-100 contribution score
+  recovery_index?: number | null; // 1-100 contribution score
+  resting_heart_rate?: number | null; // 1-100 contribution score (NOT bpm!)
+  sleep_balance?: number | null; // 1-100 contribution score
 }
 
 export interface DailyReadiness {
@@ -107,8 +115,8 @@ export interface DailyReadiness {
   contributors: ReadinessContributors;
   day: string;
   score?: number | null;
-  temperature_deviation?: number | null;
-  temperature_trend_deviation?: number | null;
+  temperature_deviation?: number | null; // °C deviation
+  temperature_trend_deviation?: number | null; // °C
   timestamp?: string;
 }
 
@@ -125,7 +133,7 @@ export interface LeaderboardEntry {
 
 export interface HeartRate {
   bpm: number;
-  source: string;
+  source: 'awake' | 'rest' | 'sleep' | 'session' | 'live' | 'workout';
   timestamp: string;
 }
 
@@ -136,18 +144,42 @@ export interface Spo2Percentage {
 export interface DailySpO2 {
   id: string;
   day: string;
-  spo2_percentage?: Spo2Percentage;
+  spo2_percentage?: Spo2Percentage | null;
+  breathing_disturbance_index?: number | null;
+}
+
+export interface DailyStress {
+  id: string;
+  day: string;
+  stress_high?: number | null; // Time in seconds in high stress
+  recovery_high?: number | null; // Time in seconds in high recovery
+  day_summary?: 'restored' | 'normal' | 'stressful' | null;
+}
+
+export interface ResilienceContributors {
+  sleep_recovery?: number | null; // 0-100
+  daytime_recovery?: number | null; // 0-100
+  stress?: number | null; // 0-100
+}
+
+export interface DailyResilience {
+  id: string;
+  day: string;
+  level?: 'limited' | 'adequate' | 'solid' | 'strong' | 'exceptional' | null;
+  contributors?: ResilienceContributors;
 }
 
 export interface Workout {
   id: string;
   activity: string;
-  calories: number;
+  calories?: number | null;
   day: string;
-  distance: number;
+  distance?: number | null; // meters
   end_datetime: string;
   start_datetime: string;
-  label?: string;
+  intensity?: 'easy' | 'moderate' | 'hard' | null;
+  label?: string | null;
+  source?: string | null;
 }
 
 export enum AuthStatus {
@@ -155,3 +187,23 @@ export enum AuthStatus {
   AUTHENTICATED = 'AUTHENTICATED',
   UNAUTHENTICATED = 'UNAUTHENTICATED',
 }
+
+// Helper type for formatting durations
+export type DurationSeconds = number;
+
+// Utility functions
+export const formatDuration = (seconds: number | null | undefined): string => {
+  if (seconds == null) return '--';
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+};
+
+export const formatTime = (isoString: string | undefined): string => {
+  if (!isoString) return '--';
+  const date = new Date(isoString);
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+};
