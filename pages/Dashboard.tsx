@@ -229,7 +229,7 @@ const Dashboard: React.FC = () => {
                     </h1>
 
                     <p className="text-text-secondary text-lg mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-                        Connect your Oura Ring to compare health metrics with friends
+                        Me sees you when you sleeping.  Me sees when you's awake.  Me knows if you sleeps bad or good but mine will always be worse for goodness sake
                     </p>
 
                     {/* Existing profiles */}
@@ -331,7 +331,7 @@ const Dashboard: React.FC = () => {
             {/* Hero Section */}
             <HeroSection
                 title="Your Health Today"
-                subtitle={`Here's how you're doing, ${userName}. Track your readiness, sleep quality, and activity levels.`}
+                subtitle={`Here's how you're doing, ${userName}. Track your readiness, sleep quality, and activity levels.  Remember, Davis is always watching you.`}
                 userName={userName}
                 scores={{
                     readiness: currentReadiness?.score,
@@ -357,8 +357,8 @@ const Dashboard: React.FC = () => {
                             <button
                                 onClick={() => setIsVersusMode(!isVersusMode)}
                                 className={`px-6 py-3 rounded-xl font-semibold transition-all duration-300 ${isVersusMode
-                                        ? 'bg-gradient-to-r from-accent-cyan to-accent-purple text-white shadow-glow-cyan'
-                                        : 'btn-secondary'
+                                    ? 'bg-gradient-to-r from-accent-cyan to-accent-purple text-white shadow-glow-cyan'
+                                    : 'btn-secondary'
                                     }`}
                             >
                                 {isVersusMode ? 'Exit Versus Mode' : 'Enter Versus Mode'}
@@ -466,8 +466,8 @@ const Dashboard: React.FC = () => {
                                         >
                                             <div className="col-span-2 flex items-center gap-3">
                                                 <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${idx === 0 ? 'bg-yellow-500 text-black' :
-                                                        idx === 1 ? 'bg-gray-400 text-black' :
-                                                            idx === 2 ? 'bg-orange-600 text-black' : 'bg-dashboard-border text-text-muted'
+                                                    idx === 1 ? 'bg-gray-400 text-black' :
+                                                        idx === 2 ? 'bg-orange-600 text-black' : 'bg-dashboard-border text-text-muted'
                                                     }`}>
                                                     {idx + 1}
                                                 </span>
