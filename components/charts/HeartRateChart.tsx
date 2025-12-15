@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, ReferenceLine } from 'recharts';
 import { HeartRate } from '../../types';
 
@@ -8,17 +8,26 @@ interface Props {
 }
 
 const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
-    // Transform data for chart - take last 200 points for performance
-    const chartData = data.slice(-200).map((hr, idx) => ({
-        idx,
-        bpm: hr.bpm,
-        time: new Date(hr.timestamp).toLocaleTimeString('en-US', {
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-        }),
-        source: hr.source
-    }));
+    // Filter to last 24 hours and transform data for chart
+    const chartData = useMemo(() => {
+        const now = new Date();
+        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+        return data
+            .filter(hr => new Date(hr.timestamp) >= twentyFourHoursAgo)
+            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+            .map((hr) => ({
+                timestamp: new Date(hr.timestamp).getTime(),
+                bpm: hr.bpm,
+                time: new Date(hr.timestamp).toLocaleTimeString('en-US', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                }),
+                hour: new Date(hr.timestamp).getHours(),
+                source: hr.source
+            }));
+    }, [data]);
 
     // Calculate stats
     const bpmValues = chartData.map(d => d.bpm).filter(Boolean);
@@ -31,10 +40,19 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
     if (chartData.length === 0) {
         return (
             <div className="h-full flex items-center justify-center text-text-muted text-sm">
-                No heart rate data available
+                No heart rate data available for the last 24 hours
             </div>
         );
     }
+
+    // Format hour for X-axis ticks
+    const formatHour = (timestamp: number) => {
+        const date = new Date(timestamp);
+        const hours = date.getHours();
+        if (hours === 0) return '12am';
+        if (hours === 12) return '12pm';
+        return hours > 12 ? `${hours - 12}pm` : `${hours}am`;
+    };
 
     return (
         <div className="h-full">
@@ -43,16 +61,22 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                     <span>Min: <span className="text-metric-hr font-mono">{minBpm}</span></span>
                     <span>Avg: <span className="text-text-primary font-mono">{avgBpm}</span></span>
                     <span>Max: <span className="text-metric-hr font-mono">{maxBpm}</span></span>
+                    <span className="ml-auto text-text-muted">Last 24 hours</span>
                 </div>
             )}
             <ResponsiveContainer width="100%" height={showLabels ? "85%" : "100%"}>
                 <LineChart data={chartData}>
                     <XAxis
-                        dataKey="time"
+                        dataKey="timestamp"
+                        type="number"
+                        domain={['dataMin', 'dataMax']}
                         hide={!showLabels}
                         tick={{ fill: '#737373', fontSize: 10 }}
                         axisLine={false}
                         tickLine={false}
+                        tickFormatter={formatHour}
+                        interval="preserveStartEnd"
+                        minTickGap={40}
                     />
                     <YAxis
                         domain={['auto', 'auto']}
@@ -73,6 +97,11 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                             fontSize: '12px'
                         }}
                         labelStyle={{ color: '#737373' }}
+                        labelFormatter={(timestamp: number) => new Date(timestamp).toLocaleTimeString('en-US', {
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true
+                        })}
                         formatter={(value: number) => [`${value} bpm`, 'Heart Rate']}
                     />
                     <Line

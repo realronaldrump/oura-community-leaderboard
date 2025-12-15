@@ -8,38 +8,52 @@ export default {
     theme: {
         extend: {
             colors: {
-                // Clean, professional palette
-                dashboard: {
-                    bg: '#0f0f0f',
-                    card: '#1a1a1a',
-                    cardHover: '#222222',
-                    border: '#2a2a2a',
-                    borderLight: '#3a3a3a',
+                // Monochromatic background
+                base: '#0C0C0C',
+                raised: '#141414',
+                elevated: '#1C1C1C',
+                hover: '#242424',
+                
+                // Borders
+                border: {
+                    subtle: '#222222',
+                    DEFAULT: '#333333',
+                    strong: '#444444',
                 },
-                // Subtle accent colors for metrics
+                
+                // ONE accent color
+                accent: '#00C896',
+                'accent-dim': 'rgba(0, 200, 150, 0.15)',
+                
+                // Functional metric colors (muted)
                 metric: {
-                    readiness: '#10b981', // emerald
-                    sleep: '#3b82f6',     // blue
-                    activity: '#f59e0b',  // amber
-                    hr: '#ef4444',        // red
-                    hrv: '#8b5cf6',       // violet
-                    spo2: '#06b6d4',      // cyan
-                    temp: '#f97316',      // orange
-                    stress: '#ec4899',    // pink
+                    green: '#34D399',
+                    blue: '#60A5FA',
+                    amber: '#FBBF24',
+                    red: '#F87171',
                 },
+                
+                // Text
                 text: {
-                    primary: '#f5f5f5',
-                    secondary: '#a3a3a3',
-                    muted: '#737373',
-                }
+                    primary: '#FAFAFA',
+                    secondary: '#A0A0A0',
+                    muted: '#666666',
+                },
             },
             fontFamily: {
-                sans: ['Inter', 'system-ui', 'sans-serif'],
-                mono: ['JetBrains Mono', 'Menlo', 'monospace'],
+                sans: ['Space Grotesk', 'system-ui', 'sans-serif'],
+                mono: ['IBM Plex Mono', 'monospace'],
             },
             borderRadius: {
-                'card': '12px',
-            }
+                DEFAULT: '8px',
+                sm: '4px',
+                md: '6px',
+                lg: '8px',
+            },
+            // Minimal transitions
+            transitionDuration: {
+                DEFAULT: '150ms',
+            },
         },
     },
     plugins: [],

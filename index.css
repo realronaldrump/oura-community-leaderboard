@@ -1,13 +1,40 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ========================================
+   DESIGN SYSTEM - Clean, Editorial, Functional
+   No gradients. No purple. No glowing blobs.
+   ======================================== */
+
 :root {
-  --bg-primary: #0f0f0f;
-  --bg-card: #1a1a1a;
-  --border-color: #2a2a2a;
+  /* Monochromatic background system */
+  --bg-base: #0C0C0C;
+  --bg-raised: #141414;
+  --bg-elevated: #1C1C1C;
+  --bg-hover: #242424;
+  
+  /* Minimal borders */
+  --border-subtle: #222222;
+  --border-default: #333333;
+  --border-strong: #444444;
+  
+  /* Functional accent - ONE color, used sparingly */
+  --accent: #00C896;
+  --accent-dim: rgba(0, 200, 150, 0.15);
+  
+  /* Metric colors - muted, functional */
+  --metric-green: #34D399;
+  --metric-blue: #60A5FA;
+  --metric-amber: #FBBF24;
+  --metric-red: #F87171;
+  
+  /* Text - high contrast */
+  --text-primary: #FAFAFA;
+  --text-secondary: #A0A0A0;
+  --text-muted: #666666;
 }
 
 * {
@@ -19,29 +46,157 @@ html {
 }
 
 body {
-  font-family: 'Inter', system-ui, sans-serif;
-  background-color: var(--bg-primary);
-  color: #f5f5f5;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
 }
 
-/* Clean card styling */
+/* ========================================
+   TYPOGRAPHY - Bold, Editorial
+   ======================================== */
+   
+h1, h2, h3, h4 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.font-mono {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* ========================================
+   CARDS - Simple, Functional
+   ======================================== */
+
 .card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  transition: border-color 0.2s ease;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  transition: border-color 0.15s ease;
 }
 
 .card:hover {
-  border-color: #3a3a3a;
+  border-color: var(--border-default);
 }
 
-/* Custom Scrollbar - minimal */
+/* Interactive card */
+.card-interactive {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.card-interactive:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-default);
+  transform: translateY(-1px);
+}
+
+/* ========================================
+   BUTTONS - Clear hierarchy
+   ======================================== */
+
+.btn-primary {
+  background: var(--accent);
+  color: #000;
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text-primary);
+  font-weight: 500;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-default);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-secondary:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+}
+
+/* ========================================
+   DATA DISPLAY
+   ======================================== */
+
+.metric-value {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.section-header {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+
+/* Progress bar */
+.progress-bar {
+  height: 4px;
+  background: var(--bg-elevated);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+/* ========================================
+   SCROLL & ANIMATION - Subtle, Functional
+   ======================================== */
+
+/* Fade in on scroll - simple */
+.fade-in {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.fade-in.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Stagger children */
+.stagger > *:nth-child(1) { transition-delay: 0ms; }
+.stagger > *:nth-child(2) { transition-delay: 40ms; }
+.stagger > *:nth-child(3) { transition-delay: 80ms; }
+.stagger > *:nth-child(4) { transition-delay: 120ms; }
+.stagger > *:nth-child(5) { transition-delay: 160ms; }
+.stagger > *:nth-child(6) { transition-delay: 200ms; }
+.stagger > *:nth-child(7) { transition-delay: 240ms; }
+.stagger > *:nth-child(8) { transition-delay: 280ms; }
+
+/* ========================================
+   SCROLLBAR - Minimal
+   ======================================== */
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -49,104 +204,55 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3a3a3a;
-  border-radius: 3px;
+  background: var(--border-default);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4a4a4a;
+  background: var(--border-strong);
 }
 
-/* Score ring animations */
-@keyframes score-fill {
-  from {
-    stroke-dashoffset: var(--circumference);
-  }
+/* ========================================
+   FOCUS STATES - Accessible
+   ======================================== */
 
-  to {
-    stroke-dashoffset: var(--offset);
-  }
-}
-
-/* Metric value styling */
-.metric-value {
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-}
-
-/* Section headers */
-.section-header {
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #737373;
-  margin-bottom: 1rem;
-}
-
-/* Data grid */
-.data-grid {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.data-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid #2a2a2a;
-}
-
-.data-row:last-child {
-  border-bottom: none;
-}
-
-.data-label {
-  color: #a3a3a3;
-  font-size: 0.875rem;
-}
-
-.data-value {
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 500;
-  color: #f5f5f5;
-}
-
-/* Progress bar base */
-.progress-bar {
-  height: 6px;
-  background-color: #2a2a2a;
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.5s ease-out;
-}
-
-/* Mobile improvements */
-@media (max-width: 768px) {
-  .card {
-    border-radius: 8px;
-  }
-
-  .metric-value {
-    font-size: 1.5rem;
-  }
-}
-
-/* Focus states for accessibility */
 button:focus-visible,
 a:focus-visible {
-  outline: 2px solid #3b82f6;
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-/* Utility for hiding on mobile */
+/* ========================================
+   RESPONSIVE
+   ======================================== */
+
+@media (max-width: 768px) {
+  .card {
+    border-radius: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-in {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* ========================================
+   UTILITY CLASSES
+   ======================================== */
+
+.accent-text {
+  color: var(--accent);
+}
+
+.border-accent {
+  border-color: var(--accent) !important;
+}
+
+/* Hide on mobile */
 @media (max-width: 640px) {
   .hide-mobile {
     display: none;
