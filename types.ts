@@ -212,3 +212,13 @@ export const formatTime = (isoString: string | undefined): string => {
   const date = new Date(isoString);
   return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 };
+
+export interface DailyStats {
+  sleep: DailySleep[];
+  readiness: DailyReadiness[];
+  activity: DailyActivity[];
+  session: SleepSession[];
+  spo2: DailySpO2[];
+  stress: DailyStress[];
+  resilience: DailyResilience[];
+}

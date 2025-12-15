@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { UserProvider, useUser } from './contexts/UserContext';
 import Dashboard from './pages/Dashboard';
 
@@ -36,11 +37,15 @@ const Router = () => {
     return <Dashboard />;
 };
 
+const queryClient = new QueryClient();
+
 const App: React.FC = () => {
     return (
-        <UserProvider>
-            <Router />
-        </UserProvider>
+        <QueryClientProvider client={queryClient}>
+            <UserProvider>
+                <Router />
+            </UserProvider>
+        </QueryClientProvider>
     );
 };
 
