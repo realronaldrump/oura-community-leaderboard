@@ -1,7 +1,5 @@
 export interface UserProfile {
   id: string;
-  firstName?: string | null;
-  lastName?: string | null;
   age?: number | null;
   weight?: number | null;
   height?: number | null;
@@ -10,14 +8,6 @@ export interface UserProfile {
   token: string; // Access Token
   lastUpdated?: string;
 }
-
-// Helper to get a display name from a profile
-export const getDisplayName = (profile: UserProfile | null | undefined): string => {
-  if (!profile) return 'User';
-  if (profile.firstName) return profile.firstName;
-  if (profile.email) return profile.email.split('@')[0];
-  return 'User';
-};
 
 export interface SleepContributors {
   deep_sleep?: number | null;

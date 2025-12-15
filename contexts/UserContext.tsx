@@ -11,7 +11,6 @@ interface UserContextType {
     setActiveProfileId: (id: string) => void;
     addProfile: (token: string) => Promise<void>;
     removeProfile: (id: string) => void;
-    updateProfile: (id: string, updates: Partial<UserProfile>) => Promise<void>;
     authStatus: AuthStatus;
     login: () => void;
 }
@@ -67,9 +66,6 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 id: profileId,
                 token,
                 lastUpdated: new Date().toISOString(),
-                // Preserve existing name if updating
-                firstName: existingProfile?.firstName,
-                lastName: existingProfile?.lastName,
             };
 
             await firebaseService.saveProfile(newProfile);
@@ -79,19 +75,6 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setAuthStatus(AuthStatus.UNAUTHENTICATED);
             throw error;
         }
-    };
-
-    const updateProfile = async (id: string, updates: Partial<UserProfile>) => {
-        const profile = profiles.find(p => p.id === id);
-        if (!profile) {
-            throw new Error('Profile not found');
-        }
-        const updatedProfile: UserProfile = {
-            ...profile,
-            ...updates,
-            lastUpdated: new Date().toISOString(),
-        };
-        await firebaseService.saveProfile(updatedProfile);
     };
 
     const removeProfile = async (id: string) => {
@@ -109,7 +92,6 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setActiveProfileId,
             addProfile,
             removeProfile,
-            updateProfile,
             authStatus,
             login
         }}>
@@ -125,4 +107,3 @@ export const useUser = () => {
     }
     return context;
 };
-
