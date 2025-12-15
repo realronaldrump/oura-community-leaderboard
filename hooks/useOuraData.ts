@@ -2,15 +2,16 @@ import { useQuery } from '@tanstack/react-query';
 import { ouraService } from '../services/ouraService';
 import { DailyStats } from '../types';
 
-export const fetchDailyStats = async (token: string): Promise<DailyStats> => {
+export const fetchDailyStats = async (token: string, dateRange?: { start: string, end?: string }): Promise<DailyStats> => {
+    const { start, end } = dateRange || {};
     const [sleep, readiness, activity, sessions, spo2, stress, resilience] = await Promise.all([
-        ouraService.getDailySleep(token),
-        ouraService.getDailyReadiness(token),
-        ouraService.getDailyActivity(token),
-        ouraService.getSleepSessions(token),
-        ouraService.getDailySpO2(token),
-        ouraService.getDailyStress(token),
-        ouraService.getDailyResilience(token)
+        ouraService.getDailySleep(token, start, end),
+        ouraService.getDailyReadiness(token, start, end),
+        ouraService.getDailyActivity(token, start, end),
+        ouraService.getSleepSessions(token, start, end),
+        ouraService.getDailySpO2(token, start, end),
+        ouraService.getDailyStress(token, start, end),
+        ouraService.getDailyResilience(token, start, end)
     ]);
 
     // Sort descending by date
@@ -33,6 +34,17 @@ export const useDailyStats = (token: string, enabled: boolean = true) => {
         queryFn: () => fetchDailyStats(token),
         enabled: !!token && enabled,
         staleTime: 1000 * 60 * 30, // 30 minutes
+    });
+};
+
+export const useAllTimeStats = (token: string, enabled: boolean = true) => {
+    return useQuery({
+        queryKey: ['allTimeStats', token],
+        // Fetch from 2016 (Oura Gen 1 era) to now
+        queryFn: () => fetchDailyStats(token, { start: '2016-01-01' }),
+        enabled: !!token && enabled,
+        staleTime: 1000 * 60 * 60 * 24, // 24 hours
+        gcTime: 1000 * 60 * 60 * 24, // Keep in cache for 24 hours
     });
 };
 

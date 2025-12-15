@@ -19,7 +19,7 @@ import {
     LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip
 } from 'recharts';
 import { useQueries } from '@tanstack/react-query';
-import { fetchDailyStats, useHeartRate } from '../hooks/useOuraData';
+import { fetchDailyStats, useHeartRate, useAllTimeStats } from '../hooks/useOuraData';
 import ComparisonRow from '../components/ComparisonRow';
 import MetricComparisonGroup from '../components/MetricComparisonGroup';
 import ComparisonHeartRateChart from '../components/charts/ComparisonHeartRateChart';
@@ -36,12 +36,23 @@ const Dashboard: React.FC = () => {
     const [briefing, setBriefing] = useState<string | null>(null);
     const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false);
 
-    // Fetch basic stats for ALL profiles (Leaderboard & Versus)
+    // Fetch basic stats for ALL profiles (Leaderboard & Versus) - Default 30 days
     const userQueries = useQueries({
         queries: profiles.map(p => ({
             queryKey: ['dailyStats', p.token],
             queryFn: () => fetchDailyStats(p.token),
             staleTime: 1000 * 60 * 60, // 1 hour
+        }))
+    });
+
+    // Fetch FULL stats for ALL profiles (History View) - All Time
+    // Only enabled when in history mode to save bandwidth
+    const allTimeQueries = useQueries({
+        queries: profiles.map(p => ({
+            queryKey: ['allTimeStats', p.token],
+            queryFn: () => fetchDailyStats(p.token, { start: '2016-01-01' }),
+            staleTime: 1000 * 60 * 60 * 24, // 24 hours
+            enabled: viewMode === 'history',
         }))
     });
 
@@ -379,7 +390,7 @@ const Dashboard: React.FC = () => {
 
                         {/* History Mode UI */}
                         {viewMode === 'history' && (
-                            <AllTimeHistory profiles={profiles} userQueries={userQueries} />
+                            <AllTimeHistory profiles={profiles} userQueries={allTimeQueries} />
                         )}
 
                         {/* Versus Mode UI */}

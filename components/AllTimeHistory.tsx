@@ -28,19 +28,20 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
     const [sortField, setSortField] = useState<SortField>('average');
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
     const [chartMetric, setChartMetric] = useState<'sleep' | 'readiness' | 'activity'>('sleep');
+    const [filterUser, setFilterUser] = useState<string>('all');
 
     // 1. Flatten Data
     const allData = useMemo(() => {
         const entries: HistoryEntry[] = [];
 
         profiles.forEach((profile, idx) => {
+            // Apply User Filter
+            if (filterUser !== 'all' && profile.id !== filterUser) return;
+
             const data = userQueries[idx]?.data;
             if (!data) return;
 
             // Iterate through sleep data as the anchor (assuming days align mostly)
-            // Ideally we'd map by day, but simple iteration is okay for now if arrays are sorted or we find by day
-            // Let's iterate daily stats. 
-            // We use 'sleep' array as primary source for days.
             data.sleep.forEach((sleepDay) => {
                 const dayStr = sleepDay.day;
                 const readinessDay = data.readiness.find(d => d.day === dayStr);
@@ -128,21 +129,39 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
         <div className="space-y-8 animate-fade-in">
             {/* Controls & Chart */}
             <div className="glass-card p-6">
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex flex-col md:flex-row items-center justify-between mb-6 gap-4">
                     <h3 className="text-xl font-bold">History Visualization</h3>
-                    <div className="flex gap-2">
-                        {(['sleep', 'readiness', 'activity'] as const).map(m => (
-                            <button
-                                key={m}
-                                onClick={() => setChartMetric(m)}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors uppercase ${chartMetric === m
-                                    ? 'bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/50'
-                                    : 'hover:bg-white/5 text-text-muted'
-                                    }`}
-                            >
-                                {m}
-                            </button>
-                        ))}
+
+                    <div className="flex items-center gap-4">
+                        {/* User Filter */}
+                        <select
+                            value={filterUser}
+                            onChange={(e) => setFilterUser(e.target.value)}
+                            className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-cyan"
+                        >
+                            <option value="all">All Users</option>
+                            {profiles.map(p => (
+                                <option key={p.id} value={p.id}>
+                                    {(p.email || 'User').split('@')[0]}
+                                </option>
+                            ))}
+                        </select>
+
+                        {/* Metric Toggles */}
+                        <div className="flex gap-1 bg-white/5 p-1 rounded-lg">
+                            {(['sleep', 'readiness', 'activity'] as const).map(m => (
+                                <button
+                                    key={m}
+                                    onClick={() => setChartMetric(m)}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors uppercase ${chartMetric === m
+                                        ? 'bg-accent-cyan/20 text-accent-cyan shadow-sm'
+                                        : 'hover:text-white text-text-muted'
+                                        }`}
+                                >
+                                    {m}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
 
