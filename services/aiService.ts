@@ -1,11 +1,11 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Initialize Gemini API
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const API_KEY = import.meta.env.GEMINI_API_KEY;
 
 export const generateBriefing = async (statsA: any, statsB: any, nameA: string, nameB: string) => {
     if (!API_KEY) {
-        console.warn("Missing VITE_GEMINI_API_KEY");
+        console.warn("Missing GEMINI_API_KEY");
         return "AI Briefing unavailable: API Key missing.";
     }
 
