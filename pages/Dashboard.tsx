@@ -229,7 +229,7 @@ const Dashboard: React.FC = () => {
                     </h1>
 
                     <p className="text-text-secondary text-lg mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-                        Me sees you when you sleeping.  Me sees when you's awake.  Me knows if you sleeps bad or good but mine will always be worse for goodness sake
+                        Me sees you when you is sleeping.  Me sees when you's awake.  Me knows if you sleeps bad or good but mine will always be worse for goodness sake
                     </p>
 
                     {/* Existing profiles */}
