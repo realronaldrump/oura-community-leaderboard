@@ -66,7 +66,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
         });
 
         return entries;
-    }, [profiles, userQueries]);
+    }, [profiles, userQueries, filterUser]);
 
     // 2. Sort Data
     const sortedData = useMemo(() => {
@@ -134,18 +134,25 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
 
                     <div className="flex items-center gap-4">
                         {/* User Filter */}
-                        <select
-                            value={filterUser}
-                            onChange={(e) => setFilterUser(e.target.value)}
-                            className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-cyan"
-                        >
-                            <option value="all">All Users</option>
-                            {profiles.map(p => (
-                                <option key={p.id} value={p.id}>
-                                    {(p.email || 'User').split('@')[0]}
-                                </option>
-                            ))}
-                        </select>
+                        <div className="relative">
+                            <select
+                                value={filterUser}
+                                onChange={(e) => setFilterUser(e.target.value)}
+                                className="appearance-none bg-white/5 border border-white/10 rounded-lg pl-3 pr-8 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-cyan cursor-pointer hover:bg-white/10 transition-colors"
+                            >
+                                <option value="all" className="bg-void text-text-primary">All Users</option>
+                                {profiles.map(p => (
+                                    <option key={p.id} value={p.id} className="bg-void text-text-primary">
+                                        {(p.email || 'User').split('@')[0]}
+                                    </option>
+                                ))}
+                            </select>
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        </div>
 
                         {/* Metric Toggles */}
                         <div className="flex gap-1 bg-white/5 p-1 rounded-lg">
