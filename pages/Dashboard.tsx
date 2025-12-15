@@ -40,16 +40,18 @@ const Dashboard: React.FC = () => {
 
             for (const p of profiles) {
                 try {
-                    const [s, r, a] = await Promise.all([
+                    const [s, r, a, sess] = await Promise.all([
                         ouraService.getDailySleep(p.token),
                         ouraService.getDailyReadiness(p.token),
-                        ouraService.getDailyActivity(p.token)
+                        ouraService.getDailyActivity(p.token),
+                        ouraService.getSleepSessions(p.token)
                     ]);
 
                     const sortFn = (x: any, y: any) => new Date(y.day).getTime() - new Date(x.day).getTime();
                     const lastS = s.sort(sortFn)[0];
                     const lastR = r.sort(sortFn)[0];
                     const lastA = a.sort(sortFn)[0];
+                    const lastSession = sess.sort(sortFn)[0];
 
                     if (lastS && lastR && lastA) {
                         const sScore = lastS.score || 0;
@@ -61,6 +63,11 @@ const Dashboard: React.FC = () => {
                             readiness: rScore,
                             sleep: sScore,
                             activity: aScore,
+                            steps: lastA?.steps,
+                            activeCalories: lastA?.active_calories,
+                            sleepDuration: lastSession?.total_sleep_duration ?? lastSession?.time_in_bed ?? null,
+                            averageHrv: lastSession?.average_hrv ?? null,
+                            restingHeartRate: lastSession?.lowest_heart_rate ?? null,
                             average: Math.round((sScore + rScore + aScore) / 3),
                             isCurrentUser: p.id === activeProfile?.id
                         });
@@ -207,6 +214,17 @@ const Dashboard: React.FC = () => {
         { label: 'Timing', value: currentSleep.contributors.timing, color: '#10b981' },
     ] : [];
 
+    const comparisonMetrics = useMemo(() => [
+        { key: 'readiness', label: 'Readiness Score', formatter: (u: LeaderboardEntry) => u.readiness ?? '--', color: 'text-metric-readiness' },
+        { key: 'sleep', label: 'Sleep Score', formatter: (u: LeaderboardEntry) => u.sleep ?? '--', color: 'text-metric-sleep' },
+        { key: 'activity', label: 'Activity Score', formatter: (u: LeaderboardEntry) => u.activity ?? '--', color: 'text-metric-activity' },
+        { key: 'steps', label: 'Steps', formatter: (u: LeaderboardEntry) => u.steps?.toLocaleString() ?? '--', color: '' },
+        { key: 'activeCalories', label: 'Active Calories', formatter: (u: LeaderboardEntry) => u.activeCalories?.toLocaleString() ?? '--', color: '' },
+        { key: 'sleepDuration', label: 'Sleep Duration', formatter: (u: LeaderboardEntry) => formatDuration(u.sleepDuration), color: '' },
+        { key: 'restingHeartRate', label: 'Lowest HR (Sleep)', formatter: (u: LeaderboardEntry) => u.restingHeartRate ? `${u.restingHeartRate} bpm` : '--', color: '' },
+        { key: 'averageHrv', label: 'Avg HRV (Sleep)', formatter: (u: LeaderboardEntry) => u.averageHrv ? `${u.averageHrv} ms` : '--', color: '' },
+    ], [leaderboardData]);
+
     return (
         <div className="min-h-screen bg-dashboard-bg text-text-primary pb-20">
             {/* Top Nav */}
@@ -235,16 +253,17 @@ const Dashboard: React.FC = () => {
                     <section>
                         <h2 className="section-header">Daily Standings</h2>
                         <div className="card overflow-hidden">
-                            <div className="grid grid-cols-5 text-xs text-text-muted uppercase tracking-wider p-3 border-b border-dashboard-border font-medium">
+                            <div className="grid grid-cols-6 text-xs text-text-muted uppercase tracking-wider p-3 border-b border-dashboard-border font-medium">
                                 <div className="col-span-2">User</div>
                                 <div className="text-center">Readiness</div>
                                 <div className="text-center">Sleep</div>
+                                <div className="text-center">Activity</div>
                                 <div className="text-center">Avg</div>
                             </div>
                             {leaderboardData.map((user, idx) => (
                                 <div
                                     key={user.id}
-                                    className={`grid grid-cols-5 p-3 items-center hover:bg-dashboard-cardHover transition-colors ${user.isCurrentUser ? 'bg-metric-readiness/5 border-l-2 border-metric-readiness' : ''
+                                    className={`grid grid-cols-6 p-3 items-center hover:bg-dashboard-cardHover transition-colors ${user.isCurrentUser ? 'bg-metric-readiness/5 border-l-2 border-metric-readiness' : ''
                                         }`}
                                 >
                                     <div className="col-span-2 flex items-center gap-2">
@@ -260,9 +279,47 @@ const Dashboard: React.FC = () => {
                                     </div>
                                     <div className="text-center font-mono text-metric-readiness">{user.readiness}</div>
                                     <div className="text-center font-mono text-metric-sleep">{user.sleep}</div>
+                                    <div className="text-center font-mono text-metric-activity">{user.activity}</div>
                                     <div className="text-center font-mono font-semibold">{user.average}</div>
                                 </div>
                             ))}
+                        </div>
+                    </section>
+                )}
+
+                {leaderboardData.length > 1 && (
+                    <section className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xl font-semibold">Compare Every Metric</h2>
+                            <p className="text-sm text-text-secondary">Side-by-side snapshot of the latest data from each user.</p>
+                        </div>
+                        <div className="card overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                                <thead className="text-xs uppercase tracking-wider text-text-muted">
+                                    <tr>
+                                        <th className="px-3 py-2 text-left">Metric</th>
+                                        {leaderboardData.map(user => (
+                                            <th key={user.id} className="px-3 py-2 text-center font-medium">
+                                                <div className={`px-2 py-1 rounded-lg inline-flex ${user.isCurrentUser ? 'bg-metric-readiness/10 text-text-primary' : 'text-text-secondary'}`}>
+                                                    {user.name.split('@')[0]}
+                                                </div>
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {comparisonMetrics.map(metric => (
+                                        <tr key={metric.key} className="border-t border-dashboard-border">
+                                            <td className="px-3 py-2 text-text-secondary">{metric.label}</td>
+                                            {leaderboardData.map(user => (
+                                                <td key={`${metric.key}-${user.id}`} className={`px-3 py-2 text-center font-mono ${metric.color}`}>
+                                                    {metric.formatter(user)}
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     </section>
                 )}
