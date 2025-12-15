@@ -20,6 +20,7 @@ import ComparisonRow from '../components/ComparisonRow';
 import MetricComparisonGroup from '../components/MetricComparisonGroup';
 import ComparisonHeartRateChart from '../components/charts/ComparisonHeartRateChart';
 import { generateBriefing } from '../services/aiService';
+import ReactMarkdown from 'react-markdown';
 
 const Dashboard: React.FC = () => {
     const { activeProfile, profiles, setActiveProfileId, login, removeProfile } = useUser();
@@ -112,7 +113,8 @@ const Dashboard: React.FC = () => {
             const summary = await generateBriefing(
                 { sleep: d1.sleep[0], readiness: d1.readiness[0], activity: d1.activity[0] },
                 { sleep: d2.sleep[0], readiness: d2.readiness[0], activity: d2.activity[0] },
-                p1.email || 'User A', p2.email || 'User B'
+                (p1.email || 'User A').split('@')[0],
+                (p2.email || 'User B').split('@')[0]
             );
             setBriefing(summary);
         }
@@ -294,7 +296,7 @@ const Dashboard: React.FC = () => {
                                     <h3 className="text-xl font-bold text-text-primary">{leaderboardData[0].name.split('@')[0]}</h3>
                                     <p className="text-accent-green font-mono text-lg">{leaderboardData[0].average} Avg</p>
                                 </div>
-                                <div className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-red-500 to-yellow-500">VS</div>
+                                <div className="text-3xl font-bold text-text-muted">VS</div>
                                 <div className="text-center">
                                     <h3 className="text-xl font-bold text-text-primary">{leaderboardData[1].name.split('@')[0]}</h3>
                                     <p className="text-accent-purple font-mono text-lg">{leaderboardData[1].average} Avg</p>
@@ -304,17 +306,21 @@ const Dashboard: React.FC = () => {
                             <button
                                 onClick={handleGenerateBriefing}
                                 disabled={isGeneratingBriefing}
-                                className="w-full md:w-auto px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-bold hover:shadow-lg hover:shadow-purple-500/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                className="w-full md:w-auto px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                             >
-                                {isGeneratingBriefing ? <span className="animate-pulse">Consulting Coach...</span> : '✨ Morning Briefing'}
+                                {isGeneratingBriefing ? <span className="animate-pulse">Generating...</span> : 'Get AI Insights'}
                             </button>
                         </div>
 
                         {briefing && (
-                            <div className="mb-6 p-6 bg-gradient-to-br from-purple-900/30 to-blue-900/30 border border-purple-500/30 rounded-xl relative overflow-hidden">
-                                <div className="absolute top-0 left-0 w-1 h-full bg-purple-500"></div>
-                                <h4 className="text-sm font-bold text-purple-300 uppercase tracking-wider mb-2">Coach Says:</h4>
-                                <p className="text-lg text-purple-100 italic leading-relaxed">"{briefing}"</p>
+                            <div className="mb-6 card p-6">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <span className="text-lg">💡</span>
+                                    <h4 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">AI Insights</h4>
+                                </div>
+                                <div className="prose prose-sm prose-invert max-w-none prose-headings:text-text-primary prose-headings:font-semibold prose-headings:mt-4 prose-headings:mb-2 prose-p:text-text-secondary prose-p:my-2 prose-p:leading-relaxed prose-strong:text-text-primary prose-ul:my-2 prose-li:text-text-secondary prose-li:my-1">
+                                    <ReactMarkdown>{briefing}</ReactMarkdown>
+                                </div>
                             </div>
                         )}
 

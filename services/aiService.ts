@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Initialize Gemini API
-const API_KEY = import.meta.env.GEMINI_API_KEY;
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
 export const generateBriefing = async (statsA: any, statsB: any, nameA: string, nameB: string) => {
     if (!API_KEY) {
@@ -11,19 +11,31 @@ export const generateBriefing = async (statsA: any, statsB: any, nameA: string, 
 
     try {
         const genAI = new GoogleGenerativeAI(API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+        const model = genAI.getGenerativeModel({ model: "gemini-flash-lite-latest" });
 
         const prompt = `
-        Compare these two Oura ring stats for a couple, ${nameA} and ${nameB}:
-        ${nameA}: ${JSON.stringify(statsA)}
-        ${nameB}: ${JSON.stringify(statsB)}
+        Analyze the Oura ring health data for ${nameA} and ${nameB} (always use these names, NOT emails).
+
+        ${nameA}'s data: ${JSON.stringify(statsA)}
+        ${nameB}'s data: ${JSON.stringify(statsB)}
         
-        Output a 3-sentence summary in a "Coach" persona (sassy but supportive):
-        1. Who "won" sleep (based on score, readiness, etc).
-        2. One specific insight (e.g., "${nameB}'s HRV tanked").
-        3. A fun suggestion for their day together based on their energy levels.
-        
-        Keep it concise and fun.
+        Provide a concise health comparison using the following markdown structure:
+
+        ## Today's Winner
+        Who had better overall metrics today and why (1-2 sentences).
+
+        ## ${nameA}'s Insights
+        - Key strength from their data
+        - One area to focus on
+
+        ## ${nameB}'s Insights  
+        - Key strength from their data
+        - One area to focus on
+
+        ## Recommendations
+        Brief, actionable suggestions for both based on their energy levels and recovery status.
+
+        Keep the tone friendly and supportive. Be specific and reference actual numbers from their data.
       `;
 
         const result = await model.generateContent(prompt);
