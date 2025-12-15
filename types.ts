@@ -129,6 +129,11 @@ export interface LeaderboardEntry {
   average: number;
   isCurrentUser: boolean;
   avatar?: string;
+  steps?: number;
+  activeCalories?: number;
+  sleepDuration?: number | null;
+  averageHrv?: number | null;
+  restingHeartRate?: number | null;
 }
 
 export interface HeartRate {
