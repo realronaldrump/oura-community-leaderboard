@@ -25,11 +25,12 @@ import MetricComparisonGroup from '../components/MetricComparisonGroup';
 import ComparisonHeartRateChart from '../components/charts/ComparisonHeartRateChart';
 import { generateBriefing } from '../services/aiService';
 import ReactMarkdown from 'react-markdown';
+import AllTimeHistory from '../components/AllTimeHistory';
 
 const Dashboard: React.FC = () => {
     const { activeProfile, profiles, setActiveProfileId, login, removeProfile } = useUser();
     const [loading, setLoading] = useState(false);
-    const [isVersusMode, setIsVersusMode] = useState(false);
+    const [viewMode, setViewMode] = useState<'daily' | 'versus' | 'history'>('daily');
 
     // AI Briefing State
     const [briefing, setBriefing] = useState<string | null>(null);
@@ -165,8 +166,8 @@ const Dashboard: React.FC = () => {
     const p2Data = userQueries[1]?.data as DailyStats | undefined;
 
     // Fetch HR for Versus Mode (only if versus mode is active and we have profiles)
-    const { data: p1Hr } = useHeartRate(profiles[0]?.token || '', isVersusMode && !!profiles[0]);
-    const { data: p2Hr } = useHeartRate(profiles[1]?.token || '', isVersusMode && !!profiles[1]);
+    const { data: p1Hr } = useHeartRate(profiles[0]?.token || '', viewMode === 'versus' && !!profiles[0]);
+    const { data: p2Hr } = useHeartRate(profiles[1]?.token || '', viewMode === 'versus' && !!profiles[1]);
 
     // We compare index 0 (latest)
     const p1Sleep = p1Data?.sleep[0];
@@ -354,19 +355,35 @@ const Dashboard: React.FC = () => {
                         subtitle="See how you compare against others."
                     >
                         <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-6">
-                            <button
-                                onClick={() => setIsVersusMode(!isVersusMode)}
-                                className={`px-6 py-3 rounded-xl font-semibold transition-all duration-300 ${isVersusMode
-                                    ? 'bg-gradient-to-r from-accent-cyan to-accent-purple text-white shadow-glow-cyan'
-                                    : 'btn-secondary'
-                                    }`}
-                            >
-                                {isVersusMode ? 'Exit Versus Mode' : 'Enter Versus Mode'}
-                            </button>
+                            <div className="flex bg-white/5 p-1 rounded-xl">
+                                <button
+                                    onClick={() => setViewMode('daily')}
+                                    className={`px-6 py-2 rounded-lg font-medium transition-all ${viewMode === 'daily' ? 'bg-accent-cyan/20 text-accent-cyan shadow-glow-cyan' : 'hover:text-white'}`}
+                                >
+                                    Daily
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('versus')}
+                                    className={`px-6 py-2 rounded-lg font-medium transition-all ${viewMode === 'versus' ? 'bg-accent-purple/20 text-accent-purple shadow-glow-purple' : 'hover:text-white'}`}
+                                >
+                                    Versus
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('history')}
+                                    className={`px-6 py-2 rounded-lg font-medium transition-all ${viewMode === 'history' ? 'bg-accent-orange/20 text-accent-orange shadow-glow-orange' : 'hover:text-white'}`}
+                                >
+                                    History
+                                </button>
+                            </div>
                         </div>
 
+                        {/* History Mode UI */}
+                        {viewMode === 'history' && (
+                            <AllTimeHistory profiles={profiles} userQueries={userQueries} />
+                        )}
+
                         {/* Versus Mode UI */}
-                        {isVersusMode && leaderboardData.length >= 2 && (
+                        {viewMode === 'versus' && leaderboardData.length >= 2 && (
                             <div className="space-y-6 animate-fade-in">
                                 {/* Header */}
                                 <div className="glass-card p-6 flex flex-col md:flex-row items-center justify-between gap-6">
@@ -448,7 +465,7 @@ const Dashboard: React.FC = () => {
                         )}
 
                         {/* Standard Leaderboard */}
-                        {!isVersusMode && (
+                        {viewMode === 'daily' && (
                             <Reveal>
                                 <div className="glass-card overflow-hidden">
                                     <div className="grid grid-cols-6 text-xs text-text-muted uppercase tracking-wider p-4 border-b border-dashboard-border font-medium">
@@ -490,7 +507,7 @@ const Dashboard: React.FC = () => {
                 <SectionDivider />
 
                 {/* ========== DATE NAVIGATION ========== */}
-                {!isVersusMode && (
+                {viewMode === 'daily' && (
                     <div className="flex items-center justify-between mb-8">
                         <h2 className="text-2xl md:text-3xl font-bold">Your Metrics</h2>
                         <div className="flex items-center gap-2">
@@ -516,7 +533,7 @@ const Dashboard: React.FC = () => {
                 )}
 
                 {/* ========== MAIN SCORES ========== */}
-                {!isVersusMode && (
+                {viewMode === 'daily' && (
                     <ParallaxSection parallaxSpeed={0.05}>
                         <div className="grid grid-cols-3 gap-4 md:gap-8">
                             <Reveal delay={0}>
@@ -567,7 +584,7 @@ const Dashboard: React.FC = () => {
                 <SectionDivider />
 
                 {/* ========== SLEEP DETAILS ========== */}
-                {!isVersusMode && (
+                {viewMode === 'daily' && (
                     <ParallaxSection
                         title="Sleep Details"
                         subtitle="Deep dive into your sleep architecture and quality."
@@ -597,7 +614,7 @@ const Dashboard: React.FC = () => {
                 <SectionDivider />
 
                 {/* ========== HEART RATE & HRV ========== */}
-                {!isVersusMode && (
+                {viewMode === 'daily' && (
                     <ParallaxSection
                         title="Heart Rate & HRV"
                         subtitle="Track your cardiovascular health and recovery."
@@ -663,7 +680,7 @@ const Dashboard: React.FC = () => {
                 <SectionDivider />
 
                 {/* ========== ACTIVITY DETAILS ========== */}
-                {!isVersusMode && (
+                {viewMode === 'daily' && (
                     <ParallaxSection
                         title="Activity Details"
                         subtitle="Your movement and energy expenditure."
@@ -685,7 +702,7 @@ const Dashboard: React.FC = () => {
                 <SectionDivider />
 
                 {/* ========== SCORE CONTRIBUTORS ========== */}
-                {!isVersusMode && (
+                {viewMode === 'daily' && (
                     <ParallaxSection
                         title="Score Contributors"
                         subtitle="What's impacting your scores today."
