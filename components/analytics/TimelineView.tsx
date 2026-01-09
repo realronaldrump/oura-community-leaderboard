@@ -18,7 +18,6 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
         today.setDate(today.getDate() - 1);
         return today.toISOString().split('T')[0];
     });
-    const [zoomedHour, setZoomedHour] = useState<number | null>(null);
 
     const availableDates = useMemo(() => {
         const dates = new Set<string>();
@@ -58,13 +57,6 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
         }).filter(u => u.session);
     }, [profiles, usersData, selectedDate]);
 
-    const formatHour = (hour: number) => {
-        if (hour === 0) return '12AM';
-        if (hour === 12) return '12PM';
-        if (hour < 12) return `${hour}AM`;
-        return `${hour - 12}PM`;
-    };
-
     const formatTime = (date: Date) => {
         return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     };
@@ -100,7 +92,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                     <InfoTooltip
                         title="24-Hour Timeline"
                         description="Visualize when each user slept during the day. Compare sleep timing patterns side-by-side."
-                        calculation="Sleep periods are shown as horizontal bars representing bedtime to wake time. Hover over markers to see exact times."
+                        calculation="Sleep periods are shown on a Noon-to-Noon axis (12 PM previous day to 12 PM selected day) to display sessions continuously."
                     />
                 </div>
                 <p className="text-sm text-[var(--text-muted)] mt-1">
@@ -169,21 +161,36 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
 
             {/* Timeline Visualization */}
             <div className="card overflow-hidden">
-                {/* Hour labels */}
+                {/* Hour labels (Noon to Noon) */}
                 <div className="flex border-b border-[var(--border-subtle)] bg-[var(--bg-elevated)]">
                     <div className="w-24 flex-shrink-0 p-2 text-xs text-[var(--text-muted)] font-medium">
                         User
                     </div>
-                    <div className="flex-1 flex">
-                        {[0, 3, 6, 9, 12, 15, 18, 21].map(hour => (
-                            <div
-                                key={hour}
-                                className="flex-1 p-2 text-xs text-[var(--text-muted)] text-center border-l border-[var(--border-subtle)] cursor-pointer hover:bg-[var(--bg-hover)]"
-                                onClick={() => setZoomedHour(zoomedHour === hour ? null : hour)}
-                            >
-                                {formatHour(hour)}
-                            </div>
-                        ))}
+                    <div className="flex-1 flex relative h-8">
+                        {/* 0 = 12PM prev day, 12 = 12AM, 24 = 12PM current day */}
+                        {[0, 3, 6, 9, 12, 15, 18, 21, 24].map(offsetHours => {
+                            const isMidnight = offsetHours === 12;
+                            let label = '';
+                            if (offsetHours % 12 === 0) {
+                                label = isMidnight ? '12AM' : '12PM';
+                            } else {
+                                const h = offsetHours % 12; // 3, 6, 9
+                                const isAm = offsetHours > 12 && offsetHours < 24;
+                                label = `${h}${isAm ? 'AM' : 'PM'}`;
+                            }
+
+                            return (
+                                <div
+                                    key={offsetHours}
+                                    className="absolute top-0 bottom-0 flex items-center justify-center transform -translate-x-1/2"
+                                    style={{ left: `${(offsetHours / 24) * 100}%` }}
+                                >
+                                    <span className={`text-xs ${isMidnight ? 'text-[var(--text-primary)] font-medium' : 'text-[var(--text-muted)]'}`}>
+                                        {label}
+                                    </span>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -195,24 +202,34 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                     const sleepStart = session.bedtime_start ? new Date(session.bedtime_start) : null;
                     const sleepEnd = session.bedtime_end ? new Date(session.bedtime_end) : null;
 
-                    // Calculate sleep bar position (handle overnight sleep)
-                    let sleepBarStyle = {};
-                    if (sleepStart && sleepEnd) {
-                        const startHour = sleepStart.getHours() + sleepStart.getMinutes() / 60;
-                        const endHour = sleepEnd.getHours() + sleepEnd.getMinutes() / 60;
+                    // Calculate window relative to Selected Date
+                    // "Day" for sleep is usually the wake-up day.
+                    // Window: 12PM (Day - 1) to 12PM (Day)
+                    const dateObj = new Date(selectedDate + 'T12:00:00'); // Valid ISO for noon
+                    const windowEnd = dateObj.getTime();
+                    const windowStart = windowEnd - 24 * 60 * 60 * 1000;
+                    const totalDuration = windowEnd - windowStart;
 
-                        let leftPercent, widthPercent;
-                        if (startHour > endHour) {
-                            leftPercent = (startHour / 24) * 100;
-                            widthPercent = ((24 - startHour + endHour) / 24) * 100;
-                        } else {
-                            leftPercent = (startHour / 24) * 100;
-                            widthPercent = ((endHour - startHour) / 24) * 100;
-                        }
+                    const getLeftPercent = (date: Date) => {
+                        const t = date.getTime();
+                        if (t < windowStart) return 0;
+                        if (t > windowEnd) return 100;
+                        return ((t - windowStart) / totalDuration) * 100;
+                    };
+
+                    let sleepBarStyle: React.CSSProperties = { display: 'none' };
+                    let startLeft = 0;
+                    let endLeft = 0;
+
+                    if (sleepStart && sleepEnd) {
+                        startLeft = getLeftPercent(sleepStart);
+                        endLeft = getLeftPercent(sleepEnd);
+                        const width = Math.max(endLeft - startLeft, 1); // Min 1% width to show *something*
 
                         sleepBarStyle = {
-                            left: `${leftPercent}%`,
-                            width: `${widthPercent}%`
+                            left: `${startLeft}%`,
+                            width: `${width}%`,
+                            display: 'flex'
                         };
                     }
 
@@ -233,7 +250,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                                 {[0, 3, 6, 9, 12, 15, 18, 21].map(hour => (
                                     <div
                                         key={hour}
-                                        className="absolute top-0 bottom-0 border-l border-[var(--border-subtle)]"
+                                        className={`absolute top-0 bottom-0 border-l ${hour === 12 ? 'border-[var(--text-muted)] opacity-50' : 'border-[var(--border-subtle)]'}`}
                                         style={{ left: `${(hour / 24) * 100}%` }}
                                     />
                                 ))}
@@ -241,7 +258,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                                 {/* Sleep bar */}
                                 {sleepStart && sleepEnd && (
                                     <div
-                                        className="absolute top-1/2 -translate-y-1/2 h-8 rounded-full opacity-60 flex items-center justify-center"
+                                        className="absolute top-1/2 -translate-y-1/2 h-8 rounded-full opacity-60 flex items-center justify-center overflow-hidden"
                                         style={{
                                             ...sleepBarStyle,
                                             backgroundColor: color
@@ -257,13 +274,13 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                                 {sleepStart && (
                                     <div
                                         className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 group cursor-pointer z-10"
-                                        style={{ left: `${((sleepStart.getHours() + sleepStart.getMinutes() / 60) / 24) * 100}%` }}
+                                        style={{ left: `${startLeft}%` }}
                                     >
                                         <div
                                             className="w-4 h-4 rounded-full border-2 border-white"
                                             style={{ backgroundColor: color }}
                                         />
-                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[var(--bg-base)] border border-[var(--border-default)] rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20">
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[var(--bg-base)] border border-[var(--border-default)] rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20 pointer-events-none shadow-lg">
                                             Fell asleep: {formatTime(sleepStart)}
                                         </div>
                                     </div>
@@ -273,13 +290,13 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                                 {sleepEnd && (
                                     <div
                                         className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 group cursor-pointer z-10"
-                                        style={{ left: `${((sleepEnd.getHours() + sleepEnd.getMinutes() / 60) / 24) * 100}%` }}
+                                        style={{ left: `${endLeft}%` }}
                                     >
                                         <div
                                             className="w-4 h-4 rounded-full border-2 border-white"
                                             style={{ backgroundColor: color }}
                                         />
-                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[var(--bg-base)] border border-[var(--border-default)] rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20">
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[var(--bg-base)] border border-[var(--border-default)] rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20 pointer-events-none shadow-lg">
                                             Woke up: {formatTime(sleepEnd)}
                                         </div>
                                     </div>
