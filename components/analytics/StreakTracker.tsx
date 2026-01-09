@@ -4,6 +4,7 @@ import { Streak, Badge, BadgeTier } from '../../types/analyticsTypes';
 import { calculateStreaks, generateBadges, BADGE_TIERS } from '../../services/analyticsService';
 import { Flame, Trophy, TrendingUp, TrendingDown, Star, Crown, Zap, Footprints, Moon, Heart, Award, HeartPulse, Activity } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
+import DetailsModal from './DetailsModal';
 
 interface StreakTrackerProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -45,6 +46,12 @@ const getStreakIcon = (type: string, iconId?: string) => {
 };
 
 const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) => {
+    const [selectedItem, setSelectedItem] = React.useState<{
+        type: 'streak' | 'badge';
+        data: Streak | Badge;
+        streakData?: Streak; // The underlying streak data (for badges)
+    } | null>(null);
+
     const analytics = useMemo(() => {
         const allStreaks: Streak[] = [];
         const allBadges: Badge[] = [];
@@ -71,6 +78,27 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
         .sort((a, b) => b.progress - a.progress)
         .slice(0, 6);
 
+    const handleStreakClick = (streak: Streak) => {
+        setSelectedItem({
+            type: 'streak',
+            data: streak,
+            streakData: streak
+        });
+    };
+
+    const handleBadgeClick = (badge: Badge) => {
+        // Find the underlying streak to get the dates/stats
+        const streak = analytics.streaks.find(s =>
+            s.userId === badge.userId && s.type === badge.streakType
+        );
+
+        setSelectedItem({
+            type: 'badge',
+            data: badge,
+            streakData: streak
+        });
+    };
+
     if (!analytics.streaks.length) {
         return (
             <div className="card p-8 text-center">
@@ -87,6 +115,44 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
 
     return (
         <div className="space-y-6">
+            <DetailsModal
+                isOpen={!!selectedItem}
+                onClose={() => setSelectedItem(null)}
+                title={selectedItem?.type === 'badge'
+                    ? (selectedItem.data as Badge).name
+                    : (selectedItem?.data as Streak)?.userName + "'s Streak"}
+                subtitle={selectedItem?.type === 'badge' ? undefined : (
+                    (selectedItem?.data as Streak)?.type === 'sleep_consistency' ? 'Sleep Consistency' :
+                        (selectedItem?.data as Streak)?.type === 'readiness_streak' ? 'Readiness Streak' :
+                            (selectedItem?.data as Streak)?.type === 'step_goal' ? 'Step Goal Streak' :
+                                (selectedItem?.data as Streak)?.type === 'early_bedtime' ? 'Early Bedtime' : 'HRV Hero'
+                )}
+                description={selectedItem?.type === 'badge'
+                    ? (selectedItem.data as Badge).description
+                    : `Active streak of ${(selectedItem?.data as Streak)?.currentLength} days matching the criteria.`}
+                stats={[
+                    {
+                        label: selectedItem?.type === 'badge' ? 'Requirement' : 'Current Length',
+                        value: selectedItem?.type === 'badge'
+                            ? `${(selectedItem.data as Badge).requirement} Days`
+                            : `${(selectedItem?.data as Streak)?.currentLength} Days`
+                    },
+                    {
+                        label: 'Record',
+                        value: `${selectedItem?.streakData?.longestLength || 0} Days`
+                    },
+                    ...(selectedItem?.streakData?.avgValue ? [{
+                        label: 'Avg Value',
+                        value: selectedItem.streakData.avgValue.toFixed(1)
+                    }] : []),
+                    ...(selectedItem?.streakData?.impactOnTrend ? [{
+                        label: 'Impact',
+                        value: `${selectedItem.streakData.impactOnTrend > 0 ? '+' : ''}${selectedItem.streakData.impactOnTrend.toFixed(1)}%`
+                    }] : [])
+                ]}
+                dates={selectedItem?.streakData?.dates}
+            />
+
             {/* Active Streaks */}
             {activeStreaks.length > 0 && (
                 <div>
@@ -103,7 +169,8 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                         {activeStreaks.map(streak => (
                             <div
                                 key={streak.id}
-                                className="card p-4 border-l-4 border-l-[var(--accent)]"
+                                onClick={() => handleStreakClick(streak)}
+                                className="card p-4 border-l-4 border-l-[var(--accent)] cursor-pointer hover:bg-[var(--bg-hover)] transition-all transform hover:scale-[1.02]"
                             >
                                 <div className="flex items-center justify-between mb-2">
                                     {getStreakIcon(streak.type, streak.icon)}
@@ -140,7 +207,7 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                         Trophy Case
                         <InfoTooltip
                             title="Trophy Case"
-                            description="Badges you've earned by maintaining streaks. Higher tiers require longer consecutive streaks."
+                            description="Badges you've earned by maintaining streaks. Higher tiers require longer consecutive streaks. Click a badge to see details."
                             calculation="Bronze: 7 days, Silver: 14 days, Gold: 30 days, Platinum: 60+ days of consistent behavior."
                         />
                     </h3>
@@ -149,7 +216,8 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                             {unlockedBadges.map(badge => (
                                 <div
                                     key={badge.id}
-                                    className={`relative p-4 rounded-lg border ${tierBorderColors[badge.tier]} bg-[var(--bg-elevated)] flex flex-col items-center text-center group hover:scale-105 transition-transform`}
+                                    onClick={() => handleBadgeClick(badge)}
+                                    className={`relative p-4 rounded-lg border ${tierBorderColors[badge.tier]} bg-[var(--bg-elevated)] flex flex-col items-center text-center group hover:scale-105 transition-all cursor-pointer shadow-sm hover:shadow-md`}
                                 >
                                     <div className={`absolute inset-0 bg-gradient-to-br ${tierColors[badge.tier]} opacity-10 rounded-lg`} />
                                     <Award className={`w-8 h-8 mb-2 relative z-10 ${badge.tier === 'platinum' ? 'text-purple-400' :
@@ -165,11 +233,6 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                                         }`}>
                                         {badge.tier}
                                     </span>
-
-                                    {/* Tooltip */}
-                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-[var(--bg-base)] border border-[var(--border-default)] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
-                                        <p className="text-xs text-[var(--text-secondary)]">{badge.description}</p>
-                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -191,7 +254,7 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {progressBadges.map(badge => (
-                            <div key={badge.id} className="card p-4">
+                            <div key={badge.id} className="card p-4 opacity-75 hover:opacity-100 transition-opacity">
                                 <div className="flex items-center gap-3 mb-3">
                                     <Award className={`w-6 h-6 opacity-50 ${badge.tier === 'platinum' ? 'text-purple-400' :
                                         badge.tier === 'gold' ? 'text-yellow-400' :
@@ -228,7 +291,7 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                     Personal Records
                     <InfoTooltip
                         title="Personal Records"
-                        description="Your best and current streak lengths across all categories."
+                        description="Your best and current streak lengths across all categories. Click on a row to see details."
                         calculation="'Current' shows your active streak (if any). 'Best' is your all-time longest streak for each category."
                     />
                 </h3>
@@ -242,7 +305,8 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                     {analytics.streaks.map(streak => (
                         <div
                             key={streak.id}
-                            className="grid grid-cols-4 p-3 items-center hover:bg-[var(--bg-hover)] transition-colors"
+                            onClick={() => handleStreakClick(streak)}
+                            className="grid grid-cols-4 p-3 items-center hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
                         >
                             <div className="font-medium text-[var(--text-primary)]">
                                 {streak.userName}

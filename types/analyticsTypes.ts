@@ -24,6 +24,8 @@ export interface Streak {
     startDate: string;          // ISO date
     endDate?: string;           // ISO date (undefined if active)
     isActive: boolean;
+    dates: string[];            // ISO dates included in the streak
+    avgValue?: number;          // Average value during the streak
     threshold?: number;         // e.g., sleep score > 80
     impactOnTrend?: number;     // % improvement during streak
     icon?: string;              // Icon identifier

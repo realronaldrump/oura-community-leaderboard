@@ -4,6 +4,7 @@ import { Milestone, CalendarHeatmapDay } from '../../types/analyticsTypes';
 import { calculateMilestones, generateCalendarHeatmap } from '../../services/analyticsService';
 import { Trophy, Target, Calendar, Users, User, BedDouble, Footprints, Flame, TrendingUp, Check } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
+import DetailsModal from './DetailsModal';
 
 interface MilestoneTrackerProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -38,6 +39,7 @@ type HeatmapMetric = 'sleep' | 'readiness' | 'activity' | 'average';
 const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData }) => {
     const [selectedUser, setSelectedUser] = useState(0);
     const [heatmapMetric, setHeatmapMetric] = useState<HeatmapMetric>('average');
+    const [selectedMilestone, setSelectedMilestone] = useState<Milestone | null>(null);
 
     const milestones = useMemo(() => {
         const usersDataFormatted = profiles.map((profile, idx) => ({
@@ -129,6 +131,32 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
         return 'bg-green-500/70';
     };
 
+    const getMilestoneHistory = (milestone: Milestone) => {
+        // Find user data
+        const userId = milestone.userId || profiles[selectedUser]?.id;
+        const userIdx = profiles.findIndex(p => p.id === userId);
+        const data = usersData[userIdx]?.data;
+
+        if (!data) return [];
+
+        if (milestone.type === 'days_tracked') {
+            const dates = new Set([
+                ...(data.sleep || []).map(s => s.day),
+                ...(data.readiness || []).map(r => r.day),
+                ...(data.activity || []).map(a => a.day)
+            ]);
+            return Array.from(dates).sort().reverse();
+        } else if (milestone.type === 'total_sleep_hours') {
+            return (data.session || [])
+                .filter(s => s.total_sleep_duration != null)
+                .map(s => s.day)
+                .sort()
+                .reverse();
+        }
+
+        return [];
+    };
+
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     if (usersData.every(u => !u.data)) {
@@ -147,6 +175,30 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
 
     return (
         <div className="space-y-6">
+            <DetailsModal
+                isOpen={!!selectedMilestone}
+                onClose={() => setSelectedMilestone(null)}
+                title={selectedMilestone?.name || ''}
+                subtitle={selectedMilestone?.type === 'total_sleep_hours' ? 'Cumulative Sleep' : 'Consistency Tracker'}
+                description={selectedMilestone?.description || ''}
+                stats={[
+                    {
+                        label: 'Current Progress',
+                        value: selectedMilestone?.value.toLocaleString() || 0,
+                        subValue: selectedMilestone?.type === 'total_sleep_hours' ? 'Hours' : 'Days'
+                    },
+                    {
+                        label: 'Target',
+                        value: selectedMilestone?.target.toLocaleString() || 0
+                    },
+                    {
+                        label: 'Completion',
+                        value: `${selectedMilestone ? Math.min(100, (selectedMilestone.value / selectedMilestone.target) * 100).toFixed(1) : 0}%`
+                    }
+                ]}
+                dates={selectedMilestone ? getMilestoneHistory(selectedMilestone) : undefined}
+            />
+
             {/* Header with User Selector */}
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -184,7 +236,8 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                         {achievedMilestones.slice(0, 12).map(milestone => (
                             <div
                                 key={milestone.id}
-                                className="card p-4 text-center border-[var(--accent)]/30 bg-[var(--accent)]/5"
+                                onClick={() => setSelectedMilestone(milestone)}
+                                className="card p-4 text-center border-[var(--accent)]/30 bg-[var(--accent)]/5 cursor-pointer hover:bg-[var(--accent)]/10 transition-colors"
                             >
                                 <div className="flex justify-center mb-2">
                                     {getMilestoneIcon(milestone.type, milestone.icon)}
@@ -212,7 +265,11 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                         {upcomingMilestones.map(milestone => {
                             const progress = (milestone.value / milestone.target) * 100;
                             return (
-                                <div key={milestone.id} className="card p-4">
+                                <div
+                                    key={milestone.id}
+                                    onClick={() => setSelectedMilestone(milestone)}
+                                    className="card p-4 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
+                                >
                                     <div className="flex items-center gap-3 mb-3">
                                         {getMilestoneIcon(milestone.type, milestone.icon)}
                                         <div className="flex-1 min-w-0">
@@ -366,7 +423,8 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                             return (
                                 <div
                                     key={milestone.id}
-                                    className={`card p-4 ${milestone.isAchieved ? 'border-[var(--accent)]/30 bg-[var(--accent)]/5' : ''}`}
+                                    onClick={() => setSelectedMilestone(milestone)}
+                                    className={`card p-4 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors ${milestone.isAchieved ? 'border-[var(--accent)]/30 bg-[var(--accent)]/5' : ''}`}
                                 >
                                     <div className="flex items-center justify-between mb-2">
                                         <div className="flex items-center gap-2">

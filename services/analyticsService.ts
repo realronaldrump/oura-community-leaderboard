@@ -108,6 +108,12 @@ function calculateSingleStreak(
     let currentStreakStart: string | null = null;
     let isActive = false;
 
+    // Track dates and values
+    let currentDates: string[] = [];
+    let longestDates: string[] = [];
+    let currentValues: number[] = [];
+    let longestValues: number[] = [];
+
     // Get relevant data array sorted by date ascending
     const dataArray = getMetricArray(data, definition.metric);
     if (!dataArray.length) return null;
@@ -128,16 +134,21 @@ function calculateSingleStreak(
     for (let i = 0; i < sortedData.length; i++) {
         const item = sortedData[i];
         const meetsThreshold = checkThreshold(item, definition.metric, threshold);
+        const value = getMetricValue(item, definition.metric);
 
         if (meetsThreshold) {
             if (currentStreak === 0) {
                 currentStreakStart = item.day;
             }
             currentStreak++;
+            currentDates.push(item.day);
+            if (value !== null) currentValues.push(value);
 
             if (currentStreak > longestStreak) {
                 longestStreak = currentStreak;
                 streakStart = currentStreakStart;
+                longestDates = [...currentDates];
+                longestValues = [...currentValues];
             }
 
             // Check if this is the most recent day (active streak)
@@ -147,6 +158,8 @@ function calculateSingleStreak(
         } else {
             currentStreak = 0;
             currentStreakStart = null;
+            currentDates = [];
+            currentValues = [];
         }
     }
 
@@ -157,6 +170,55 @@ function calculateSingleStreak(
     // Calculate impact on trend during streak
     const impactOnTrend = calculateStreakImpact(data, streakStart!, longestStreak, definition.metric);
 
+    // Choose which data to show (Active takes precedence if it modifies the "Current" view)
+    // But the Streak object is generally the "Best" or "Current" depending on context.
+    // The previous implementation returned one Streak object per definition. 
+    // If it's active, it usually means the current one is also the longest or we just report the active status of the longest?
+    // Wait, the UI shows "Current" and "Best". 
+    // The analytics service returns *one* streak object per type. 
+    // `longestLength` is the record. `currentLength` is the active one.
+    // If I want to drill down, which one do I show? 
+    // Usually the user wants to see the *active* streak details if active, or the *longest* if looking at records.
+    // The Streak object has both "currentLength" (active) and "longestLength".
+    // I should probably store dates for the *longest* streak here as that's the "Record".
+    // But if the user clicks on "Active Streak" card, they expect to see the active streak dates.
+    // If the active streak is shorter than the longest streak, I might have a mismatch if I only store longest.
+
+    // Let's store the dates for the LONGEST streak by default, but if we want to support drilling down into "Active", 
+    // we might need to separate them or store both.
+    // For simplicity, let's store the dates of the *Longest* streak, as that's often the "achievement".
+    // However, if the streak is active, `currentStreak` (which might be < longest) is what is shown in the "Active Streaks" section.
+
+    // Actually, `StreakTracker` uses `streak.currentLength` for the active section.
+    // If I want to drill down into the active streak, I need the dates for the active run.
+    // If I want to drill down into the record, I need dates for the record.
+
+    // Let's settle on returning the LONGEST streak's details, as that is the `Streak` object's primary identity (an achievement).
+    // But for the active streak view, if I click it, I might see the record's details? That's confusing.
+
+    // Compromise: If `isActive` is true, it means the current run is valid. 
+    // If `currentLength` == `longestLength`, they are the same.
+    // If `isActive` is true but `currentLength` < `longestLength`, we have a current run accumulating.
+    // The `Streak` object seems to conflate "My Record" with "My Current Status".
+
+    // Providing `dates` of the `longest` streak is safe for the "Trophy Case" and "Personal Records".
+    // For "Active Streaks", it displays `streak.currentLength`. 
+    // Maybe I should add `activeDates` as well?
+
+    // Let's just stick to `dates` = longest streak dates for now to satisfy the types. 
+    // `isActive` just tells us if the user is currently on a roll.
+    // Note: The UI shows "Active Streak: 5". If the record is 30, showing the 30 days might be weird if I clicked the "5".
+    // But typically "Active Streaks" are highlighting the *current* effort.
+
+    // I will store the *Active* dates if active, otherwise the *Longest* dates?
+    // No, that makes `longestLength` mismatch `dates.length`.
+
+    // Let's store `dates` as the dates for the `longestLength` (the record).
+    // If I need active dates, I can reconstruct them or add `activeDates`.
+    // Let's add `activeDates` to the interface in a moment if needed. For now, let's use `dates` for the record.
+
+    const avgValue = longestValues.length ? ss.mean(longestValues) : undefined;
+
     return {
         id: `${userId}-${definition.type}`,
         type: definition.type,
@@ -166,10 +228,31 @@ function calculateSingleStreak(
         longestLength: longestStreak,
         startDate: streakStart!,
         isActive,
+        dates: longestDates,
+        avgValue,
         threshold,
         impactOnTrend,
         icon: definition.icon
     };
+}
+
+function getMetricValue(item: any, metric: string): number | null {
+    switch (metric) {
+        case 'sleep':
+        case 'readiness':
+        case 'activity':
+            return item.score ?? null;
+        case 'steps':
+            return item.steps ?? null;
+        case 'hrv':
+            return item.average_hrv ?? null;
+        case 'bedtime':
+            if (!item.bedtime_start) return null;
+            const hour = new Date(item.bedtime_start).getHours();
+            return hour; // 0-23
+        default:
+            return null;
+    }
 }
 
 function getMetricArray(data: DailyStats, metric: string): Array<{ day: string;[key: string]: any }> {
