@@ -4,6 +4,7 @@ import { CorrelationResult, MetricOption } from '../../types/analyticsTypes';
 import { calculateCorrelation } from '../../services/analyticsService';
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import html2canvas from 'html2canvas';
+import { BarChart3, Image, Lightbulb } from 'lucide-react';
 
 interface CorrelationExplorerProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -97,7 +98,9 @@ const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, use
     if (usersData.every(u => !u.data)) {
         return (
             <div className="card p-8 text-center">
-                <div className="text-4xl mb-4">📊</div>
+                <div className="flex justify-center mb-4">
+                    <BarChart3 className="w-12 h-12 text-[var(--text-muted)]" />
+                </div>
                 <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">No Data Available</h3>
                 <p className="text-[var(--text-muted)] text-sm">
                     Sync your data to explore correlations between metrics.
@@ -129,9 +132,7 @@ const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, use
                         </>
                     ) : (
                         <>
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
+                            <Image className="w-4 h-4" />
                             Export PNG
                         </>
                     )}
@@ -280,7 +281,7 @@ const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, use
                             <div className="mt-3 pt-3 border-t border-[var(--border-subtle)]">
                                 <div className="flex items-center gap-2">
                                     <span className={`w-2 h-2 rounded-full ${correlation.direction === 'positive' ? 'bg-green-400' :
-                                            correlation.direction === 'negative' ? 'bg-red-400' : 'bg-gray-400'
+                                        correlation.direction === 'negative' ? 'bg-red-400' : 'bg-gray-400'
                                         }`} />
                                     <span className="text-sm text-[var(--text-secondary)]">
                                         {correlation.direction === 'positive' ? 'Positive' :
@@ -292,8 +293,8 @@ const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, use
 
                         {/* Insight */}
                         <div className="card p-4">
-                            <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2">
-                                💡 Insight
+                            <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2 flex items-center gap-1">
+                                <Lightbulb className="w-3 h-3" /> Insight
                             </p>
                             <p className="text-sm text-[var(--text-secondary)]">
                                 {correlation.insight}

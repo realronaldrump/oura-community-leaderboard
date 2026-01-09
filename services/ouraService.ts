@@ -30,11 +30,16 @@ class OuraService {
     }
 
     const today = new Date();
+    // Extend end date by 1 day to ensure we capture the latest data (inclusive/exclusive boundary safety)
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
     const pastDate = new Date(today);
-    pastDate.setDate(pastDate.getDate() - daysBackOrStart);
+    pastDate.setDate(pastDate.getDate() - (typeof daysBackOrStart === 'number' ? daysBackOrStart : 30));
+
     return {
       start_date: pastDate.toISOString().split('T')[0],
-      end_date: today.toISOString().split('T')[0],
+      end_date: tomorrow.toISOString().split('T')[0],
     };
   }
 

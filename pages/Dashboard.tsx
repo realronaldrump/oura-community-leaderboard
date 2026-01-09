@@ -122,7 +122,10 @@ const Dashboard: React.FC = () => {
             const lastSleep = sleep[0];
             const lastReadiness = readiness[0];
             const lastActivity = activity[0];
-            const lastSession = session[0];
+
+            // Fix: Find the session that matches the sleep day, or null if not found
+            // This prevents showing yesterday's sleep data with today's score
+            const lastSession = lastSleep ? session.find(s => s.day === lastSleep.day) : null;
 
             const sScore = lastSleep?.score || 0;
             const rScore = lastReadiness?.score || 0;
@@ -165,7 +168,9 @@ const Dashboard: React.FC = () => {
     const currentSleep = sleepHistory[dateIndex] || sleepHistory[0];
     const currentReadiness = readinessHistory[dateIndex] || readinessHistory[0];
     const currentActivity = activityHistory[dateIndex] || activityHistory[0];
-    const currentSession = sessionHistory.find(s => s.day === currentSleep?.day) || sessionHistory[dateIndex] || sessionHistory[0];
+
+    // Fix: Strict matching for session data to avoid showing data from wrong day
+    const currentSession = currentSleep ? sessionHistory.find(s => s.day === currentSleep.day) : undefined;
 
 
     const handleGenerateBriefing = async () => {
