@@ -21,7 +21,7 @@ export const STREAK_DEFINITIONS: StreakDefinition[] = [
         type: 'sleep_consistency',
         name: 'Sleep King',
         description: 'Sleep score above 80 for consecutive days',
-        icon: '👑',
+        icon: 'crown',
         threshold: 80,
         minDays: 3,
         metric: 'sleep'
@@ -30,7 +30,7 @@ export const STREAK_DEFINITIONS: StreakDefinition[] = [
         type: 'readiness_streak',
         name: 'Ready Warrior',
         description: 'Readiness score above 75 for consecutive days',
-        icon: '⚔️',
+        icon: 'zap',
         threshold: 75,
         minDays: 3,
         metric: 'readiness'
@@ -39,7 +39,7 @@ export const STREAK_DEFINITIONS: StreakDefinition[] = [
         type: 'step_goal',
         name: 'Step Champion',
         description: 'Hit 10,000 steps for consecutive days',
-        icon: '🏃',
+        icon: 'footprints',
         threshold: 10000,
         minDays: 3,
         metric: 'steps'
@@ -48,7 +48,7 @@ export const STREAK_DEFINITIONS: StreakDefinition[] = [
         type: 'early_bedtime',
         name: 'Early Bird',
         description: 'In bed before 11 PM for consecutive days',
-        icon: '🌙',
+        icon: 'moon',
         threshold: 23, // 11 PM in 24h
         minDays: 3,
         metric: 'bedtime'
@@ -57,7 +57,7 @@ export const STREAK_DEFINITIONS: StreakDefinition[] = [
         type: 'hrv_improvement',
         name: 'HRV Hero',
         description: 'HRV above personal average for consecutive days',
-        icon: '💓',
+        icon: 'heart',
         threshold: 0, // Calculated dynamically
         minDays: 3,
         metric: 'hrv'
@@ -167,7 +167,8 @@ function calculateSingleStreak(
         startDate: streakStart!,
         isActive,
         threshold,
-        impactOnTrend
+        impactOnTrend,
+        icon: definition.icon
     };
 }
 
@@ -728,7 +729,7 @@ export function calculateMilestones(
                 type: 'days_tracked',
                 name: `${target} Days Tracked`,
                 description: `Track your health for ${target} consecutive days`,
-                icon: target >= 365 ? '🏆' : target >= 100 ? '🎯' : '📅',
+                icon: target >= 365 ? 'trophy' : target >= 100 ? 'target' : 'calendar',
                 value: daysTracked,
                 target,
                 isAchieved: daysTracked >= target,
@@ -747,7 +748,7 @@ export function calculateMilestones(
                 type: 'total_sleep_hours',
                 name: `${target} Hours Slept`,
                 description: `Accumulate ${target} total hours of sleep`,
-                icon: target >= 2500 ? '😴' : '🛏️',
+                icon: target >= 2500 ? 'sleep' : 'bed',
                 value: Math.round(totalSleepHours),
                 target,
                 isAchieved: totalSleepHours >= target,
@@ -769,7 +770,7 @@ export function calculateMilestones(
             type: 'total_sleep_hours',
             name: `Group: ${target} Hours Slept`,
             description: `Combined sleep hours across all users`,
-            icon: '👥',
+            icon: 'users',
             value: Math.round(combinedSleepHours),
             target,
             isAchieved: combinedSleepHours >= target

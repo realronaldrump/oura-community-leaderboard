@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { DailyStats } from '../../types';
 import { Streak, Badge, BadgeTier } from '../../types/analyticsTypes';
 import { calculateStreaks, generateBadges, BADGE_TIERS } from '../../services/analyticsService';
-import { Flame, Trophy, TrendingUp, Star, Crown, Zap, Footprints, Moon, Heart, Award } from 'lucide-react';
+import { Flame, Trophy, TrendingUp, TrendingDown, Star, Crown, Zap, Footprints, Moon, Heart, Award, HeartPulse, Activity } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
 
 interface StreakTrackerProps {
@@ -24,7 +24,17 @@ const tierBorderColors: Record<BadgeTier, string> = {
     platinum: 'border-purple-400/50'
 };
 
-const getStreakIcon = (type: string) => {
+const getStreakIcon = (type: string, iconId?: string) => {
+    if (iconId) {
+        switch (iconId) {
+            case 'crown': return <Crown className="w-5 h-5 text-yellow-400" />;
+            case 'zap': return <Zap className="w-5 h-5 text-green-400" />;
+            case 'footprints': return <Footprints className="w-5 h-5 text-blue-400" />;
+            case 'moon': return <Moon className="w-5 h-5 text-purple-400" />;
+            case 'heart': return <HeartPulse className="w-5 h-5 text-red-500" />;
+        }
+    }
+
     switch (type) {
         case 'sleep_consistency': return <Crown className="w-5 h-5 text-yellow-400" />;
         case 'readiness_streak': return <Zap className="w-5 h-5 text-green-400" />;
@@ -96,7 +106,7 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                                 className="card p-4 border-l-4 border-l-[var(--accent)]"
                             >
                                 <div className="flex items-center justify-between mb-2">
-                                    {getStreakIcon(streak.type)}
+                                    {getStreakIcon(streak.type, streak.icon)}
                                     <span className="text-3xl font-bold text-[var(--accent)] font-mono">
                                         {streak.currentLength}
                                     </span>
@@ -111,8 +121,9 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                                                 streak.type === 'early_bedtime' ? 'Early Bedtime' : 'HRV Hero'}
                                 </p>
                                 {streak.impactOnTrend != null && streak.impactOnTrend !== 0 && (
-                                    <p className={`text-xs mt-2 ${streak.impactOnTrend > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                        {streak.impactOnTrend > 0 ? '↑' : '↓'} {Math.abs(streak.impactOnTrend).toFixed(1)}% readiness during streak
+                                    <p className={`text-xs mt-2 flex items-center gap-1 ${streak.impactOnTrend > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        {streak.impactOnTrend > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                        {Math.abs(streak.impactOnTrend).toFixed(1)}% readiness during streak
                                     </p>
                                 )}
                             </div>
@@ -237,7 +248,7 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                                 {streak.userName}
                             </div>
                             <div className="text-[var(--text-secondary)] text-sm flex items-center gap-2">
-                                {getStreakIcon(streak.type)}
+                                {getStreakIcon(streak.type, streak.icon)}
                                 {streak.type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
                             </div>
                             <div className={`text-center font-mono ${streak.isActive ? 'text-[var(--accent)] font-bold' : 'text-[var(--text-muted)]'}`}>

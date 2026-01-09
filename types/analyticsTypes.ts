@@ -26,6 +26,7 @@ export interface Streak {
     isActive: boolean;
     threshold?: number;         // e.g., sleep score > 80
     impactOnTrend?: number;     // % improvement during streak
+    icon?: string;              // Icon identifier
 }
 
 export interface StreakDefinition {

@@ -11,6 +11,7 @@ interface UserContextType {
     setActiveProfileId: (id: string) => void;
     addProfile: (token: string) => Promise<void>;
     removeProfile: (id: string) => void;
+    updateProfile: (profile: Partial<UserProfile>) => Promise<void>;
     authStatus: AuthStatus;
     login: () => void;
     // New: Error and loading states
@@ -110,6 +111,21 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
+    const updateProfile = async (profileData: Partial<UserProfile>) => {
+        if (!activeProfileId) return;
+
+        const profileToUpdate = profiles.find(p => p.id === activeProfileId);
+        if (!profileToUpdate) return;
+
+        const updatedProfile = {
+            ...profileToUpdate,
+            ...profileData,
+            lastUpdated: new Date().toISOString()
+        };
+
+        await firebaseService.saveProfile(updatedProfile);
+    };
+
     return (
         <UserContext.Provider value={{
             profiles,
@@ -118,6 +134,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setActiveProfileId,
             addProfile,
             removeProfile,
+            updateProfile,
             authStatus,
             login,
             firebaseError,

@@ -36,6 +36,7 @@ export const generateBriefing = async (statsA: any, statsB: any, nameA: string, 
         Brief, actionable suggestions for both based on their energy levels and recovery status.
 
         Keep the tone friendly and supportive. Be specific and reference actual numbers from their data.
+        Do not use any emojis in your response.
       `;
 
         const result = await model.generateContent(prompt);

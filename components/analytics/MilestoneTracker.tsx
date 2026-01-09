@@ -10,7 +10,19 @@ interface MilestoneTrackerProps {
     usersData: Array<{ data: DailyStats | undefined }>;
 }
 
-const getMilestoneIcon = (type: string) => {
+const getMilestoneIcon = (type: string, iconId?: string) => {
+    // If an explicit icon identifier is provided from the service, use it
+    if (iconId) {
+        switch (iconId) {
+            case 'trophy': return <Trophy className="w-6 h-6 text-yellow-400" />;
+            case 'target': return <Target className="w-6 h-6 text-red-400" />;
+            case 'calendar': return <Calendar className="w-6 h-6 text-blue-400" />;
+            case 'sleep': return <BedDouble className="w-6 h-6 text-purple-400" />;
+            case 'bed': return <BedDouble className="w-6 h-6 text-indigo-400" />;
+            case 'users': return <Users className="w-6 h-6 text-cyan-400" />;
+        }
+    }
+
     switch (type) {
         case 'days_tracked': return <Calendar className="w-6 h-6 text-blue-400" />;
         case 'total_sleep_hours': return <BedDouble className="w-6 h-6 text-purple-400" />;
@@ -175,7 +187,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                                 className="card p-4 text-center border-[var(--accent)]/30 bg-[var(--accent)]/5"
                             >
                                 <div className="flex justify-center mb-2">
-                                    {getMilestoneIcon(milestone.type)}
+                                    {getMilestoneIcon(milestone.type, milestone.icon)}
                                 </div>
                                 <h5 className="font-medium text-[var(--text-primary)] text-sm">
                                     {milestone.name}
@@ -202,7 +214,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                             return (
                                 <div key={milestone.id} className="card p-4">
                                     <div className="flex items-center gap-3 mb-3">
-                                        {getMilestoneIcon(milestone.type)}
+                                        {getMilestoneIcon(milestone.type, milestone.icon)}
                                         <div className="flex-1 min-w-0">
                                             <h5 className="font-medium text-[var(--text-primary)] truncate">
                                                 {milestone.name}

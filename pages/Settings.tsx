@@ -5,7 +5,7 @@ import { fullSync, SyncProgress } from '../services/syncService';
 import SyncModal from '../components/SyncModal';
 
 const Settings: React.FC = () => {
-    const { activeProfile, profiles, setActiveProfileId, login } = useUser();
+    const { activeProfile, profiles, setActiveProfileId, login, updateProfile } = useUser();
     const queryClient = useQueryClient();
 
     const [showSyncModal, setShowSyncModal] = useState(false);
@@ -16,6 +16,36 @@ const Settings: React.FC = () => {
         totalSteps: 0,
         details: '',
     });
+
+    const [firstName, setFirstName] = useState(activeProfile?.firstName || '');
+    const [lastName, setLastName] = useState(activeProfile?.lastName || '');
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveMessage, setSaveMessage] = useState('');
+
+    React.useEffect(() => {
+        if (activeProfile) {
+            setFirstName(activeProfile.firstName || '');
+            setLastName(activeProfile.lastName || '');
+        }
+    }, [activeProfile]);
+
+    const handleSaveProfile = async () => {
+        if (!activeProfile) return;
+        setIsSaving(true);
+        try {
+            await updateProfile({
+                firstName,
+                lastName
+            });
+            setSaveMessage('Profile updated!');
+            setTimeout(() => setSaveMessage(''), 3000);
+        } catch (error) {
+            console.error('Failed to update profile:', error);
+            setSaveMessage('Failed to save.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     const handleFullSync = async () => {
         if (!activeProfile) return;
@@ -83,22 +113,61 @@ const Settings: React.FC = () => {
             <div className="max-w-2xl mx-auto px-4 pt-24 pb-12">
                 {/* Profile Section */}
                 <section className="mb-8">
-                    <h2 className="text-sm text-text-muted uppercase tracking-wider mb-4">Profile</h2>
-                    <div className="glass-card p-4">
-                        <div className="flex items-center justify-between">
+                    <h2 className="text-sm text-text-muted uppercase tracking-wider mb-4">Profile Settings</h2>
+                    <div className="glass-card p-6 space-y-6">
+                        <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <p className="text-text-primary font-medium">
-                                    {activeProfile.email?.split('@')[0] || 'User'}
-                                </p>
-                                <p className="text-text-muted text-sm">
-                                    {activeProfile.email}
-                                </p>
+                                <label className="block text-xs text-text-muted mb-2 uppercase tracking-wide">First Name</label>
+                                <input
+                                    type="text"
+                                    value={firstName}
+                                    onChange={(e) => setFirstName(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-text-primary focus:border-accent-cyan focus:ring-1 focus:ring-accent-cyan outline-none transition-all placeholder-text-dim/50"
+                                    placeholder="Enter first name"
+                                />
                             </div>
+                            <div>
+                                <label className="block text-xs text-text-muted mb-2 uppercase tracking-wide">Last Name</label>
+                                <input
+                                    type="text"
+                                    value={lastName}
+                                    onChange={(e) => setLastName(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-text-primary focus:border-accent-cyan focus:ring-1 focus:ring-accent-cyan outline-none transition-all placeholder-text-dim/50"
+                                    placeholder="Enter last name"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2">
+                            <div>
+                                <p className="text-xs text-text-muted mb-1">Email Account</p>
+                                <p className="text-sm text-text-secondary">{activeProfile.email}</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                {saveMessage && (
+                                    <span className={`text-sm ${saveMessage.includes('Failed') ? 'text-accent-rose' : 'text-accent-cyan'}`}>
+                                        {saveMessage}
+                                    </span>
+                                )}
+                                <button
+                                    onClick={handleSaveProfile}
+                                    disabled={isSaving}
+                                    className="btn-primary px-6 py-2 text-sm disabled:opacity-50"
+                                >
+                                    {isSaving ? 'Saving...' : 'Save Changes'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <hr className="border-white/5" />
+
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm text-text-muted">Switch to a different profile?</span>
                             <button
                                 onClick={() => setActiveProfileId('')}
                                 className="text-sm text-accent-cyan hover:text-accent-cyan/80 transition-colors"
                             >
-                                Switch
+                                Switch Profile
                             </button>
                         </div>
                     </div>

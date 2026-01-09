@@ -38,6 +38,8 @@ import {
     DailySnapshot
 } from '../components/analytics';
 
+import { Lightbulb, ChevronLeft, ChevronRight, X } from 'lucide-react';
+
 const Dashboard: React.FC = () => {
     const { activeProfile, profiles, setActiveProfileId, login, removeProfile, firebaseError, isLoadingProfiles, retryFirebaseConnection } = useUser();
     const [loading, setLoading] = useState(false);
@@ -133,7 +135,7 @@ const Dashboard: React.FC = () => {
 
             return {
                 id: p.id,
-                name: p.email || 'User',
+                name: p.firstName || (p.email || 'User').split('@')[0],
                 readiness: rScore,
                 sleep: sScore,
                 activity: aScore,
@@ -182,11 +184,12 @@ const Dashboard: React.FC = () => {
         const d2 = userQueries[1].data as DailyStats | undefined;
 
         if (d1 && d2) {
+            const getDisplayName = (p: typeof profiles[0]) => p.firstName || (p.email || 'User').split('@')[0];
             const summary = await generateBriefing(
                 { sleep: d1.sleep[0], readiness: d1.readiness[0], activity: d1.activity[0] },
                 { sleep: d2.sleep[0], readiness: d2.readiness[0], activity: d2.activity[0] },
-                (p1.email || 'User A').split('@')[0],
-                (p2.email || 'User B').split('@')[0]
+                getDisplayName(p1),
+                getDisplayName(p2)
             );
             setBriefing(summary);
         }
@@ -257,7 +260,7 @@ const Dashboard: React.FC = () => {
     const p2Spo2 = p2Data?.spo2[0];
 
     // Get user name for display
-    const userName = activeProfile?.email?.split('@')[0] || 'there';
+    const userName = activeProfile?.firstName || activeProfile?.email?.split('@')[0] || 'there';
 
     // ============================================
     // LOGIN SCREEN - Redesigned with new aesthetic
@@ -343,7 +346,7 @@ const Dashboard: React.FC = () => {
                                             className="flex-1 glass-card p-4 text-left hover:border-accent-cyan/50 transition-all duration-300 flex items-center justify-between group"
                                         >
                                             <span className="text-text-primary font-medium group-hover:text-accent-cyan transition-colors">
-                                                {(p.email || 'User').split('@')[0]}
+                                                {p.firstName ? `${p.firstName} ${p.lastName || ''}` : (p.email || 'User').split('@')[0]}
                                             </span>
                                             <span className="text-xs text-text-dim group-hover:text-text-muted transition-colors">
                                                 {new Date(p.lastUpdated || '').toLocaleDateString()}
@@ -356,10 +359,10 @@ const Dashboard: React.FC = () => {
                                                     removeProfile(p.id);
                                                 }
                                             }}
-                                            className="px-4 glass-card text-accent-rose hover:bg-accent-rose/10 hover:border-accent-rose/30 transition-all duration-300"
+                                            className="px-4 glass-card text-accent-rose hover:bg-accent-rose/10 hover:border-accent-rose/30 transition-all duration-300 flex items-center justify-center font-bold"
                                             title="Remove Profile"
                                         >
-                                            ✕
+                                            <X className="w-4 h-4" />
                                         </button>
                                     </div>
                                 ))}
@@ -653,7 +656,7 @@ const Dashboard: React.FC = () => {
                                     <Reveal>
                                         <div className="glass-card p-6">
                                             <div className="flex items-center gap-2 mb-4">
-                                                <span className="text-lg">💡</span>
+                                                <Lightbulb className="w-5 h-5 text-yellow-400" />
                                                 <h4 className="text-sm font-semibold text-text-muted uppercase tracking-wider">AI Insights</h4>
                                             </div>
                                             <div className="prose prose-sm prose-invert max-w-none prose-headings:text-text-primary prose-p:text-text-secondary prose-strong:text-accent-cyan">
@@ -756,7 +759,7 @@ const Dashboard: React.FC = () => {
                                 onClick={() => setDateIndex(dateIndex + 1)}
                                 className="p-3 rounded-xl hover:bg-white/5 disabled:opacity-30 transition-all"
                             >
-                                ←
+                                <ChevronLeft className="w-5 h-5" />
                             </button>
                             <span className="px-4 py-2 glass-card font-mono text-sm">
                                 {currentSleep?.day || 'Today'}
@@ -766,7 +769,7 @@ const Dashboard: React.FC = () => {
                                 onClick={() => setDateIndex(dateIndex - 1)}
                                 className="p-3 rounded-xl hover:bg-white/5 disabled:opacity-30 transition-all"
                             >
-                                →
+                                <ChevronRight className="w-5 h-5" />
                             </button>
                         </div>
                     </div>
