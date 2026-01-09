@@ -18,7 +18,7 @@ import { Reveal } from '../hooks/useScrollReveal';
 import {
     LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip
 } from 'recharts';
-import { useQueries } from '@tanstack/react-query';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { fetchDailyStats, useHeartRate, useAllTimeStats } from '../hooks/useOuraData';
 import ComparisonRow from '../components/ComparisonRow';
 import MetricComparisonGroup from '../components/MetricComparisonGroup';
@@ -31,6 +31,24 @@ const Dashboard: React.FC = () => {
     const { activeProfile, profiles, setActiveProfileId, login, removeProfile, firebaseError, isLoadingProfiles, retryFirebaseConnection } = useUser();
     const [loading, setLoading] = useState(false);
     const [viewMode, setViewMode] = useState<'daily' | 'versus' | 'history'>('daily');
+    const [isSyncing, setIsSyncing] = useState(false);
+    const queryClient = useQueryClient();
+
+    // Sync all data - invalidates cache and refetches everything
+    const handleSyncAllData = async () => {
+        setIsSyncing(true);
+        try {
+            // Invalidate all queries to trigger refetch
+            await queryClient.invalidateQueries({ queryKey: ['dailyStats'] });
+            await queryClient.invalidateQueries({ queryKey: ['allTimeStats'] });
+            await queryClient.invalidateQueries({ queryKey: ['heartRate'] });
+        } catch (err) {
+            console.error('Sync failed:', err);
+        } finally {
+            // Give it a moment to show the sync animation
+            setTimeout(() => setIsSyncing(false), 1000);
+        }
+    };
 
     // AI Briefing State
     const [briefing, setBriefing] = useState<string | null>(null);
@@ -244,21 +262,20 @@ const Dashboard: React.FC = () => {
                         Me sees you when you is sleeping.  Me sees when you's awake.  Me knows if you sleeps bad or good but mine will always be worse for goodness sake
                     </p>
 
-                    {/* Firebase Error Alert */}
+                    {/* Friendly Error Alert */}
                     {firebaseError && (
-                        <div className="mb-6 p-4 glass-card border-accent-rose/30 bg-accent-rose/10 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+                        <div className="mb-6 p-4 glass-card border-accent-purple/30 bg-accent-purple/10 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
                             <div className="flex items-center gap-3 text-left">
-                                <span className="text-2xl">⚠️</span>
                                 <div className="flex-1">
-                                    <p className="text-accent-rose font-medium">Connection Error</p>
+                                    <p className="text-accent-purple font-medium">Oops!</p>
                                     <p className="text-text-muted text-sm">{firebaseError}</p>
                                 </div>
                             </div>
                             <button
                                 onClick={retryFirebaseConnection}
-                                className="mt-3 w-full py-2 px-4 rounded-lg bg-accent-rose/20 text-accent-rose hover:bg-accent-rose/30 transition-colors text-sm font-medium"
+                                className="mt-3 w-full py-2 px-4 rounded-lg bg-accent-purple/20 text-accent-purple hover:bg-accent-purple/30 transition-colors text-sm font-medium"
                             >
-                                Retry Connection
+                                Try Again
                             </button>
                         </div>
                     )}
@@ -353,6 +370,15 @@ const Dashboard: React.FC = () => {
                         <span className="gradient-text">Davis Watches You Sleep</span>
                     </h1>
                     <div className="flex items-center gap-3">
+                        <button
+                            onClick={handleSyncAllData}
+                            disabled={isSyncing}
+                            className="text-sm text-text-muted hover:text-accent-cyan transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                            title="Refresh all your data"
+                        >
+                            <span className={isSyncing ? 'animate-spin' : ''}>🔄</span>
+                            {isSyncing ? 'Syncing...' : 'Sync'}
+                        </button>
                         <button
                             onClick={() => setActiveProfileId('')}
                             className="text-sm text-text-muted hover:text-text-primary transition-colors"

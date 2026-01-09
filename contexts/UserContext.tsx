@@ -51,11 +51,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             (error) => {
                 console.error('Firebase subscription error:', error);
                 setIsLoadingProfiles(false);
-                if (error.code === 'permission-denied') {
-                    setFirebaseError('Unable to connect to database. Please check Firebase permissions.');
-                } else {
-                    setFirebaseError(`Database connection failed: ${error.message}`);
-                }
+                // Keep error message friendly and non-technical
+                setFirebaseError('Having trouble connecting. Tap to try again!');
             }
         );
         return () => unsubscribe();
