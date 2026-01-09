@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { DailyStats } from '../../types';
 import { TimelineDataPoint, TimelineInsight } from '../../types/analyticsTypes';
 import { generateTimelineData } from '../../services/analyticsService';
+import { Clock, BedDouble, Activity, Heart, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface TimelineViewProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -13,7 +14,7 @@ const userColors = ['#00C896', '#A855F7', '#F59E0B', '#3B82F6'];
 const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
     const [selectedDate, setSelectedDate] = useState<string>(() => {
         const today = new Date();
-        today.setDate(today.getDate() - 1); // Default to yesterday
+        today.setDate(today.getDate() - 1);
         return today.toISOString().split('T')[0];
     });
     const [zoomedHour, setZoomedHour] = useState<number | null>(null);
@@ -39,20 +40,6 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
 
         return generateTimelineData(selectedDate, usersDataFormatted);
     }, [profiles, usersData, selectedDate]);
-
-    // Group data points by user
-    const userDataGroups = useMemo(() => {
-        const groups = new Map<string, { userName: string; points: TimelineDataPoint[] }>();
-
-        for (const point of dataPoints) {
-            if (!groups.has(point.userId)) {
-                groups.set(point.userId, { userName: point.userName, points: [] });
-            }
-            groups.get(point.userId)!.points.push(point);
-        }
-
-        return Array.from(groups.entries());
-    }, [dataPoints]);
 
     // Get session data for detailed timeline
     const sessionData = useMemo(() => {
@@ -81,10 +68,20 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
         return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     };
 
+    const getInsightIcon = (type: string) => {
+        switch (type) {
+            case 'sleep_timing': return <BedDouble className="w-4 h-4 text-blue-400" />;
+            case 'activity': return <Activity className="w-4 h-4 text-green-400" />;
+            default: return <Heart className="w-4 h-4 text-red-400" />;
+        }
+    };
+
     if (usersData.every(u => !u.data)) {
         return (
             <div className="card p-8 text-center">
-                <div className="text-4xl mb-4">⏰</div>
+                <div className="flex justify-center mb-4">
+                    <Clock className="w-12 h-12 text-[var(--text-muted)]" />
+                </div>
                 <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">No Timeline Data</h3>
                 <p className="text-[var(--text-muted)] text-sm">
                     Sync your data to see the daily timeline view.
@@ -115,7 +112,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                         disabled={availableDates.indexOf(selectedDate) >= availableDates.length - 1}
                         className="p-2 rounded-lg hover:bg-[var(--bg-hover)] disabled:opacity-30 transition-all"
                     >
-                        ←
+                        <ChevronLeft className="w-4 h-4" />
                     </button>
                     <select
                         value={selectedDate}
@@ -142,7 +139,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                         disabled={availableDates.indexOf(selectedDate) <= 0}
                         className="p-2 rounded-lg hover:bg-[var(--bg-hover)] disabled:opacity-30 transition-all"
                     >
-                        →
+                        <ChevronRight className="w-4 h-4" />
                     </button>
                 </div>
             </div>
@@ -155,10 +152,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                             key={idx}
                             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--accent)]/10 border border-[var(--accent)]/20"
                         >
-                            <span className="text-lg">
-                                {insight.type === 'sleep_timing' ? '🛏️' :
-                                    insight.type === 'activity' ? '🏃' : '❤️'}
-                            </span>
+                            {getInsightIcon(insight.type)}
                             <span className="text-sm text-[var(--text-secondary)]">
                                 {insight.description}
                             </span>
@@ -201,10 +195,8 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                         const startHour = sleepStart.getHours() + sleepStart.getMinutes() / 60;
                         const endHour = sleepEnd.getHours() + sleepEnd.getMinutes() / 60;
 
-                        // Sleep typically spans midnight
                         let leftPercent, widthPercent;
                         if (startHour > endHour) {
-                            // Overnight sleep - show from start to midnight, then midnight to end
                             leftPercent = (startHour / 24) * 100;
                             widthPercent = ((24 - startHour + endHour) / 24) * 100;
                         } else {
@@ -249,8 +241,8 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                                             backgroundColor: color
                                         }}
                                     >
-                                        <span className="text-xs font-medium text-white px-2 truncate">
-                                            💤 Sleep
+                                        <span className="text-xs font-medium text-white px-2 truncate flex items-center gap-1">
+                                            <BedDouble className="w-3 h-3" /> Sleep
                                         </span>
                                     </div>
                                 )}

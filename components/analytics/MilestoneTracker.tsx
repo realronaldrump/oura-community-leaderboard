@@ -2,18 +2,22 @@ import React, { useMemo, useState } from 'react';
 import { DailyStats } from '../../types';
 import { Milestone, CalendarHeatmapDay } from '../../types/analyticsTypes';
 import { calculateMilestones, generateCalendarHeatmap } from '../../services/analyticsService';
+import { Trophy, Target, Calendar, Users, User, BedDouble, Footprints, Flame, TrendingUp, Check } from 'lucide-react';
 
 interface MilestoneTrackerProps {
     profiles: Array<{ id: string; email?: string | null }>;
     usersData: Array<{ data: DailyStats | undefined }>;
 }
 
-const MILESTONE_ICONS: Record<string, string> = {
-    days_tracked: '📅',
-    total_sleep_hours: '😴',
-    total_steps: '🏃',
-    streak_achievement: '🔥',
-    score_improvement: '📈'
+const getMilestoneIcon = (type: string) => {
+    switch (type) {
+        case 'days_tracked': return <Calendar className="w-6 h-6 text-blue-400" />;
+        case 'total_sleep_hours': return <BedDouble className="w-6 h-6 text-purple-400" />;
+        case 'total_steps': return <Footprints className="w-6 h-6 text-green-400" />;
+        case 'streak_achievement': return <Flame className="w-6 h-6 text-orange-400" />;
+        case 'score_improvement': return <TrendingUp className="w-6 h-6 text-cyan-400" />;
+        default: return <Target className="w-6 h-6 text-gray-400" />;
+    }
 };
 
 type HeatmapMetric = 'sleep' | 'readiness' | 'activity' | 'average';
@@ -117,7 +121,9 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
     if (usersData.every(u => !u.data)) {
         return (
             <div className="card p-8 text-center">
-                <div className="text-4xl mb-4">🏆</div>
+                <div className="flex justify-center mb-4">
+                    <Trophy className="w-12 h-12 text-[var(--text-muted)]" />
+                </div>
                 <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">No Milestones Yet</h3>
                 <p className="text-[var(--text-muted)] text-sm">
                     Sync your data to start tracking milestones.
@@ -154,7 +160,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
             {achievedMilestones.length > 0 && (
                 <div>
                     <h4 className="section-header flex items-center gap-2">
-                        <span>🏆</span> Achieved
+                        <Trophy className="w-5 h-5 text-yellow-400" /> Achieved
                     </h4>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                         {achievedMilestones.slice(0, 12).map(milestone => (
@@ -162,14 +168,15 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                                 key={milestone.id}
                                 className="card p-4 text-center border-[var(--accent)]/30 bg-[var(--accent)]/5"
                             >
-                                <span className="text-3xl block mb-2">
-                                    {MILESTONE_ICONS[milestone.type] || '🎯'}
-                                </span>
+                                <div className="flex justify-center mb-2">
+                                    {getMilestoneIcon(milestone.type)}
+                                </div>
                                 <h5 className="font-medium text-[var(--text-primary)] text-sm">
                                     {milestone.name}
                                 </h5>
-                                <p className="text-xs text-[var(--text-muted)] mt-1">
-                                    {milestone.userId ? '🙋 Personal' : '👥 Group'}
+                                <p className="text-xs text-[var(--text-muted)] mt-1 flex items-center justify-center gap-1">
+                                    {milestone.userId ? <User className="w-3 h-3" /> : <Users className="w-3 h-3" />}
+                                    {milestone.userId ? 'Personal' : 'Group'}
                                 </p>
                             </div>
                         ))}
@@ -181,7 +188,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
             {upcomingMilestones.length > 0 && (
                 <div>
                     <h4 className="section-header flex items-center gap-2">
-                        <span>🎯</span> Next Goals
+                        <Target className="w-5 h-5 text-blue-400" /> Next Goals
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {upcomingMilestones.map(milestone => {
@@ -189,9 +196,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                             return (
                                 <div key={milestone.id} className="card p-4">
                                     <div className="flex items-center gap-3 mb-3">
-                                        <span className="text-2xl">
-                                            {MILESTONE_ICONS[milestone.type] || '🎯'}
-                                        </span>
+                                        {getMilestoneIcon(milestone.type)}
                                         <div className="flex-1 min-w-0">
                                             <h5 className="font-medium text-[var(--text-primary)] truncate">
                                                 {milestone.name}
@@ -230,7 +235,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
             <div>
                 <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-4">
                     <h4 className="section-header mb-0 flex items-center gap-2">
-                        <span>📅</span> Score History
+                        <Calendar className="w-5 h-5 text-blue-400" /> Score History
                     </h4>
 
                     <div className="flex gap-2">
@@ -239,8 +244,8 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                                 key={m}
                                 onClick={() => setHeatmapMetric(m)}
                                 className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${heatmapMetric === m
-                                        ? 'bg-[var(--accent)] text-black'
-                                        : 'bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                                    ? 'bg-[var(--accent)] text-black'
+                                    : 'bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                                     }`}
                             >
                                 {m.charAt(0).toUpperCase() + m.slice(1)}
@@ -335,7 +340,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
             {groupMilestones.length > 0 && (
                 <div>
                     <h4 className="section-header flex items-center gap-2">
-                        <span>👥</span> Group Achievements
+                        <Users className="w-5 h-5 text-cyan-400" /> Group Achievements
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {groupMilestones.slice(0, 4).map(milestone => {
@@ -347,7 +352,10 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                                 >
                                     <div className="flex items-center justify-between mb-2">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-xl">{milestone.isAchieved ? '✅' : '🎯'}</span>
+                                            {milestone.isAchieved
+                                                ? <Check className="w-5 h-5 text-green-400" />
+                                                : <Target className="w-5 h-5 text-[var(--text-muted)]" />
+                                            }
                                             <h5 className="font-medium text-[var(--text-primary)]">
                                                 {milestone.name}
                                             </h5>

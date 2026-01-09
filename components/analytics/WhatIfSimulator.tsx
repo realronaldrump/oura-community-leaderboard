@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { DailyStats } from '../../types';
 import { WhatIfScenario, WhatIfResult } from '../../types/analyticsTypes';
 import { simulateWhatIf } from '../../services/analyticsService';
+import { Sparkles, BedDouble, Footprints, Heart, Moon, HelpCircle, Lightbulb, BarChart3 } from 'lucide-react';
 
 interface WhatIfSimulatorProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -16,7 +17,8 @@ const SCENARIO_OPTIONS = [
         min: -60,
         max: 60,
         step: 15,
-        icon: '🛏️'
+        Icon: BedDouble,
+        color: 'text-blue-400'
     },
     {
         metric: 'steps',
@@ -25,7 +27,8 @@ const SCENARIO_OPTIONS = [
         min: -5000,
         max: 5000,
         step: 1000,
-        icon: '🏃'
+        Icon: Footprints,
+        color: 'text-green-400'
     },
     {
         metric: 'hrv',
@@ -34,7 +37,8 @@ const SCENARIO_OPTIONS = [
         min: -20,
         max: 20,
         step: 5,
-        icon: '💓'
+        Icon: Heart,
+        color: 'text-red-400'
     },
     {
         metric: 'sleep_duration',
@@ -43,7 +47,8 @@ const SCENARIO_OPTIONS = [
         min: -90,
         max: 90,
         step: 15,
-        icon: '💤'
+        Icon: Moon,
+        color: 'text-purple-400'
     }
 ];
 
@@ -54,7 +59,7 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
     const results = useMemo((): WhatIfResult[] => {
         const scenario: WhatIfScenario = {
             metric: selectedMetric.metric,
-            currentAverage: 0, // Will be calculated per user
+            currentAverage: 0,
             adjustment,
             unit: selectedMetric.unit
         };
@@ -75,7 +80,9 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
     if (usersData.every(u => !u.data)) {
         return (
             <div className="card p-8 text-center">
-                <div className="text-4xl mb-4">🔮</div>
+                <div className="flex justify-center mb-4">
+                    <Sparkles className="w-12 h-12 text-[var(--text-muted)]" />
+                </div>
                 <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">No Data Available</h3>
                 <p className="text-[var(--text-muted)] text-sm">
                     Sync your data to run what-if simulations.
@@ -103,22 +110,25 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                             Metric to Change
                         </label>
                         <div className="flex gap-2 flex-wrap">
-                            {SCENARIO_OPTIONS.map(option => (
-                                <button
-                                    key={option.metric}
-                                    onClick={() => {
-                                        setSelectedMetric(option);
-                                        setAdjustment(option.step * 2);
-                                    }}
-                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${selectedMetric.metric === option.metric
+                            {SCENARIO_OPTIONS.map(option => {
+                                const Icon = option.Icon;
+                                return (
+                                    <button
+                                        key={option.metric}
+                                        onClick={() => {
+                                            setSelectedMetric(option);
+                                            setAdjustment(option.step * 2);
+                                        }}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${selectedMetric.metric === option.metric
                                             ? 'bg-[var(--accent)] text-black'
                                             : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                        }`}
-                                >
-                                    <span>{option.icon}</span>
-                                    {option.label}
-                                </button>
-                            ))}
+                                            }`}
+                                    >
+                                        <Icon className={`w-4 h-4 ${selectedMetric.metric === option.metric ? '' : option.color}`} />
+                                        {option.label}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
 
@@ -162,7 +172,7 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
             {/* Question Display */}
             <div className="card p-6 bg-[var(--accent)]/5 border-[var(--accent)]/20">
                 <div className="flex items-center gap-4">
-                    <span className="text-3xl">🤔</span>
+                    <HelpCircle className="w-8 h-8 text-[var(--accent)] flex-shrink-0" />
                     <p className="text-lg text-[var(--text-primary)]">
                         If I {adjustment >= 0 ? 'increased' : 'decreased'} my {selectedMetric.label.toLowerCase()} by{' '}
                         <span className="font-bold text-[var(--accent)]">{Math.abs(adjustment)} {selectedMetric.unit}</span>,
@@ -254,7 +264,7 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                     {results.length > 1 && results[0].projectedChange !== results[1].projectedChange && (
                         <div className="card p-4 bg-[var(--bg-elevated)]">
                             <div className="flex items-center gap-3">
-                                <span className="text-xl">💡</span>
+                                <Lightbulb className="w-5 h-5 text-yellow-400 flex-shrink-0" />
                                 <p className="text-sm text-[var(--text-secondary)]">
                                     {results[0].projectedChange > results[1].projectedChange
                                         ? `This change would benefit ${results[0].userName} more than ${results[1].userName}, likely due to their different baselines.`
@@ -274,9 +284,10 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
             )}
 
             {/* Methodology Note */}
-            <div className="text-xs text-[var(--text-muted)] text-center p-4">
+            <div className="text-xs text-[var(--text-muted)] text-center p-4 flex items-center justify-center gap-2">
+                <BarChart3 className="w-4 h-4" />
                 <p>
-                    📊 Projections are based on linear regression of your historical {selectedMetric.label.toLowerCase()} vs next-day readiness.
+                    Projections are based on linear regression of your historical {selectedMetric.label.toLowerCase()} vs next-day readiness.
                     Results show correlation, not causation. Individual responses may vary.
                 </p>
             </div>
