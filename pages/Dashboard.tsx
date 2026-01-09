@@ -672,8 +672,8 @@ const Dashboard: React.FC = () => {
                                         title="Readiness"
                                         scoreA={p1Readiness?.score}
                                         scoreB={p2Readiness?.score}
-                                        userAName={leaderboardData[0]?.name.split('@')[0]}
-                                        userBName={leaderboardData[1]?.name.split('@')[0]}
+                                        userAName={profiles[0]?.firstName || profiles[0]?.email?.split('@')[0]}
+                                        userBName={profiles[1]?.firstName || profiles[1]?.email?.split('@')[0]}
                                         defaultOpen={true}
                                         metrics={[
                                             {
@@ -703,8 +703,8 @@ const Dashboard: React.FC = () => {
                                         title="Sleep"
                                         scoreA={p1Sleep?.score}
                                         scoreB={p2Sleep?.score}
-                                        userAName={leaderboardData[0]?.name.split('@')[0]}
-                                        userBName={leaderboardData[1]?.name.split('@')[0]}
+                                        userAName={profiles[0]?.firstName || profiles[0]?.email?.split('@')[0]}
+                                        userBName={profiles[1]?.firstName || profiles[1]?.email?.split('@')[0]}
                                         defaultOpen={true}
                                         metrics={[
                                             {
