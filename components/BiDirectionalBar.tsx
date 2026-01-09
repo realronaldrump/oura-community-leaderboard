@@ -6,10 +6,11 @@ interface BiDirectionalBarProps {
     rightValue: number;
     leftLabel?: string;
     rightLabel?: string;
-    label: string;
+    label?: string; // Optional if showLabels is false
     max: number; // The max value for the scale (e.g. 100 for scores, or max observed for others)
     unit?: string;
     inverse?: boolean; // If true, lower is better (e.g. resting heart rate)
+    showLabels?: boolean;
 }
 
 export const BiDirectionalBar: React.FC<BiDirectionalBarProps> = ({
@@ -21,6 +22,7 @@ export const BiDirectionalBar: React.FC<BiDirectionalBarProps> = ({
     max,
     unit = '',
     inverse = false,
+    showLabels = true,
 }) => {
     // Determine winner
     const leftWins = inverse ? leftValue < rightValue : leftValue > rightValue;
@@ -34,15 +36,17 @@ export const BiDirectionalBar: React.FC<BiDirectionalBarProps> = ({
 
     return (
         <div className="w-full py-2">
-            <div className="flex justify-between text-xs text-text-muted mb-1 px-1">
-                <span className={leftWins && !isTie ? 'text-accent-green font-bold' : ''}>
-                    {leftLabel || leftValue} {unit}
-                </span>
-                <span className="font-semibold text-text-primary uppercase tracking-wider text-[10px]">{label}</span>
-                <span className={!leftWins && !isTie ? 'text-accent-purple font-bold' : ''}>
-                    {rightLabel || rightValue} {unit}
-                </span>
-            </div>
+            {showLabels && (
+                <div className="flex justify-between text-xs text-text-muted mb-1 px-1">
+                    <span className={leftWins && !isTie ? 'text-accent-green font-bold' : ''}>
+                        {leftLabel || leftValue} {unit}
+                    </span>
+                    <span className="font-semibold text-text-primary uppercase tracking-wider text-[10px]">{label}</span>
+                    <span className={!leftWins && !isTie ? 'text-accent-purple font-bold' : ''}>
+                        {rightLabel || rightValue} {unit}
+                    </span>
+                </div>
+            )}
 
             <div className="relative h-3 bg-dashboard-card rounded-full flex overflow-hidden">
                 {/* Center marker */}

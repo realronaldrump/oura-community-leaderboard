@@ -18,11 +18,13 @@ interface Props {
     title: string;
     scoreA?: number | null;
     scoreB?: number | null;
+    userAName?: string;
+    userBName?: string;
     metrics: MetricData[];
     defaultOpen?: boolean;
 }
 
-const MetricComparisonGroup: React.FC<Props> = ({ title, scoreA, scoreB, metrics, defaultOpen = false }) => {
+const MetricComparisonGroup: React.FC<Props> = ({ title, scoreA, scoreB, userAName, userBName, metrics, defaultOpen = false }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
 
     // Calculate winner for the group header
@@ -62,6 +64,11 @@ const MetricComparisonGroup: React.FC<Props> = ({ title, scoreA, scoreB, metrics
                         transition={{ duration: 0.3 }}
                     >
                         <div className="p-4 border-t border-dashboard-border space-y-1">
+                            {/* User Header Row */}
+                            <div className="flex justify-between items-center mb-4 px-1 text-sm font-semibold text-text-muted uppercase tracking-wider">
+                                <span className="text-accent-green">{userAName || 'User A'}</span>
+                                <span className="text-accent-purple">{userBName || 'User B'}</span>
+                            </div>
                             {metrics.map((metric, idx) => (
                                 <ComparisonRow
                                     key={idx}
