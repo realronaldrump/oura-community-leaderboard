@@ -128,7 +128,9 @@ const Settings: React.FC = () => {
 
                         {/* Info */}
                         <div className="flex items-start gap-3 text-sm">
-                            <span className="text-accent-cyan">ℹ️</span>
+                            <svg className="w-5 h-5 text-accent-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
                             <p className="text-text-muted">
                                 The "Sync" button in the dashboard only fetches recent data to keep things fast. Use Full Sync here to backfill your complete history.
                             </p>
