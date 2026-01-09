@@ -28,7 +28,7 @@ import ReactMarkdown from 'react-markdown';
 import AllTimeHistory from '../components/AllTimeHistory';
 
 const Dashboard: React.FC = () => {
-    const { activeProfile, profiles, setActiveProfileId, login, removeProfile } = useUser();
+    const { activeProfile, profiles, setActiveProfileId, login, removeProfile, firebaseError, isLoadingProfiles, retryFirebaseConnection } = useUser();
     const [loading, setLoading] = useState(false);
     const [viewMode, setViewMode] = useState<'daily' | 'versus' | 'history'>('daily');
 
@@ -244,8 +244,37 @@ const Dashboard: React.FC = () => {
                         Me sees you when you is sleeping.  Me sees when you's awake.  Me knows if you sleeps bad or good but mine will always be worse for goodness sake
                     </p>
 
+                    {/* Firebase Error Alert */}
+                    {firebaseError && (
+                        <div className="mb-6 p-4 glass-card border-accent-rose/30 bg-accent-rose/10 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+                            <div className="flex items-center gap-3 text-left">
+                                <span className="text-2xl">⚠️</span>
+                                <div className="flex-1">
+                                    <p className="text-accent-rose font-medium">Connection Error</p>
+                                    <p className="text-text-muted text-sm">{firebaseError}</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={retryFirebaseConnection}
+                                className="mt-3 w-full py-2 px-4 rounded-lg bg-accent-rose/20 text-accent-rose hover:bg-accent-rose/30 transition-colors text-sm font-medium"
+                            >
+                                Retry Connection
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Loading profiles indicator */}
+                    {isLoadingProfiles && !firebaseError && (
+                        <div className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+                            <div className="flex items-center justify-center gap-3 p-4 glass-card">
+                                <div className="w-5 h-5 border-2 border-accent-cyan/20 border-t-accent-cyan rounded-full animate-spin" />
+                                <span className="text-text-muted">Loading profiles...</span>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Existing profiles */}
-                    {profiles.length > 0 && (
+                    {!isLoadingProfiles && profiles.length > 0 && (
                         <div className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
                             <p className="text-text-muted text-sm mb-4 uppercase tracking-wider">Select a profile</p>
                             <div className="space-y-3">
@@ -286,7 +315,7 @@ const Dashboard: React.FC = () => {
                         className="btn-primary w-full text-lg py-4 animate-fade-in-up"
                         style={{ animationDelay: '0.3s' }}
                     >
-                        Connect Oura Ring
+                        {profiles.length > 0 ? 'Add Another Profile' : 'Connect Oura Ring'}
                     </button>
                 </div>
             </div>

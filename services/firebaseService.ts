@@ -17,15 +17,28 @@ export const firebaseService = {
     /**
      * Subscribe to real-time updates of all profiles
      */
-    subscribeToProfiles: (callback: (profiles: UserProfile[]) => void) => {
+    subscribeToProfiles: (
+        callback: (profiles: UserProfile[]) => void,
+        onError?: (error: any) => void
+    ) => {
         const q = collection(db, PROFILES_COLLECTION);
-        return onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
-            const profiles: UserProfile[] = [];
-            querySnapshot.forEach((doc) => {
-                profiles.push(doc.data() as UserProfile);
-            });
-            callback(profiles);
-        });
+        return onSnapshot(
+            q,
+            (querySnapshot: QuerySnapshot<DocumentData>) => {
+                const profiles: UserProfile[] = [];
+                querySnapshot.forEach((doc) => {
+                    profiles.push(doc.data() as UserProfile);
+                });
+                callback(profiles);
+            },
+            (error) => {
+                if (onError) {
+                    onError(error);
+                } else {
+                    console.error("Firestore subscription error:", error);
+                }
+            }
+        );
     },
 
     /**

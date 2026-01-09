@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { UserProfile, AuthStatus, LeaderboardEntry } from '../types';
 import { getAuthUrl } from '../constants';
 import { ouraService } from '../services/ouraService';
@@ -13,6 +13,10 @@ interface UserContextType {
     removeProfile: (id: string) => void;
     authStatus: AuthStatus;
     login: () => void;
+    // New: Error and loading states
+    firebaseError: string | null;
+    isLoadingProfiles: boolean;
+    retryFirebaseConnection: () => void;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -28,12 +32,37 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const [authStatus, setAuthStatus] = useState<AuthStatus>(AuthStatus.UNAUTHENTICATED);
 
-    // Subscribe to Firebase profiles
+    // New: Firebase connection state
+    const [firebaseError, setFirebaseError] = useState<string | null>(null);
+    const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
+    const [retryCount, setRetryCount] = useState(0);
+
+    // Subscribe to Firebase profiles with error handling
     useEffect(() => {
-        const unsubscribe = firebaseService.subscribeToProfiles((updatedProfiles) => {
-            setProfiles(updatedProfiles);
-        });
+        setIsLoadingProfiles(true);
+        setFirebaseError(null);
+
+        const unsubscribe = firebaseService.subscribeToProfiles(
+            (updatedProfiles) => {
+                setProfiles(updatedProfiles);
+                setIsLoadingProfiles(false);
+                setFirebaseError(null);
+            },
+            (error) => {
+                console.error('Firebase subscription error:', error);
+                setIsLoadingProfiles(false);
+                if (error.code === 'permission-denied') {
+                    setFirebaseError('Unable to connect to database. Please check Firebase permissions.');
+                } else {
+                    setFirebaseError(`Database connection failed: ${error.message}`);
+                }
+            }
+        );
         return () => unsubscribe();
+    }, [retryCount]);
+
+    const retryFirebaseConnection = useCallback(() => {
+        setRetryCount(c => c + 1);
     }, []);
 
     useEffect(() => {
@@ -93,7 +122,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             addProfile,
             removeProfile,
             authStatus,
-            login
+            login,
+            firebaseError,
+            isLoadingProfiles,
+            retryFirebaseConnection
         }}>
             {children}
         </UserContext.Provider>
