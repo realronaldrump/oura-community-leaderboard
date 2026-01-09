@@ -3,6 +3,7 @@ import { DailyStats } from '../../types';
 import { Milestone, CalendarHeatmapDay } from '../../types/analyticsTypes';
 import { calculateMilestones, generateCalendarHeatmap } from '../../services/analyticsService';
 import { Trophy, Target, Calendar, Users, User, BedDouble, Footprints, Flame, TrendingUp, Check } from 'lucide-react';
+import InfoTooltip from './InfoTooltip';
 
 interface MilestoneTrackerProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -136,12 +137,17 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
         <div className="space-y-6">
             {/* Header with User Selector */}
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                <div>
+                <div className="flex items-center gap-2">
                     <h3 className="section-header mb-0">Long-Term Milestones</h3>
-                    <p className="text-sm text-[var(--text-muted)] mt-1">
-                        Track your journey and celebrate achievements
-                    </p>
+                    <InfoTooltip
+                        title="Milestone Tracking"
+                        description="Track cumulative achievements across your health journey. Includes personal and group milestones."
+                        calculation="Milestones track total progress like days tracked, total steps, and sleep hours. The heatmap shows daily scores over the past year."
+                    />
                 </div>
+                <p className="text-sm text-[var(--text-muted)] mt-1">
+                    Track your journey and celebrate achievements
+                </p>
 
                 <select
                     value={selectedUser}

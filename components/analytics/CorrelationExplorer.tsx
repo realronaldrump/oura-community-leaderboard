@@ -5,6 +5,7 @@ import { calculateCorrelation } from '../../services/analyticsService';
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import html2canvas from 'html2canvas';
 import { BarChart3, Image, Lightbulb } from 'lucide-react';
+import InfoTooltip from './InfoTooltip';
 
 interface CorrelationExplorerProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -113,12 +114,17 @@ const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, use
         <div className="space-y-6">
             {/* Header */}
             <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-                <div>
+                <div className="flex items-center gap-2">
                     <h3 className="section-header mb-0">Trend Correlation Explorer</h3>
-                    <p className="text-sm text-[var(--text-muted)] mt-1">
-                        Discover how different metrics relate to each other
-                    </p>
+                    <InfoTooltip
+                        title="Correlation Analysis"
+                        description="Explore statistical relationships between any two metrics. Find out which behaviors most impact your scores."
+                        calculation="Uses Pearson correlation coefficient (r) ranging from -1 to +1. Positive values mean metrics move together; negative means they move opposite. Strength: |r| > 0.6 = strong, 0.3-0.6 = moderate, < 0.3 = weak."
+                    />
                 </div>
+                <p className="text-sm text-[var(--text-muted)] mt-1">
+                    Discover how different metrics relate to each other
+                </p>
 
                 <button
                     onClick={handleExport}

@@ -3,6 +3,7 @@ import { DailyStats } from '../../types';
 import { TimelineDataPoint, TimelineInsight } from '../../types/analyticsTypes';
 import { generateTimelineData } from '../../services/analyticsService';
 import { Clock, BedDouble, Activity, Heart, ChevronLeft, ChevronRight } from 'lucide-react';
+import InfoTooltip from './InfoTooltip';
 
 interface TimelineViewProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -94,12 +95,17 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
         <div className="space-y-6">
             {/* Date Selector */}
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                <div>
+                <div className="flex items-center gap-2">
                     <h3 className="section-header mb-0">24-Hour Timeline</h3>
-                    <p className="text-sm text-[var(--text-muted)] mt-1">
-                        Compare daily patterns across users
-                    </p>
+                    <InfoTooltip
+                        title="24-Hour Timeline"
+                        description="Visualize when each user slept during the day. Compare sleep timing patterns side-by-side."
+                        calculation="Sleep periods are shown as horizontal bars representing bedtime to wake time. Hover over markers to see exact times."
+                    />
                 </div>
+                <p className="text-sm text-[var(--text-muted)] mt-1">
+                    Compare daily patterns across users
+                </p>
 
                 <div className="flex items-center gap-2">
                     <button

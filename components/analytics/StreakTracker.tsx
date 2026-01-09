@@ -3,6 +3,7 @@ import { DailyStats } from '../../types';
 import { Streak, Badge, BadgeTier } from '../../types/analyticsTypes';
 import { calculateStreaks, generateBadges, BADGE_TIERS } from '../../services/analyticsService';
 import { Flame, Trophy, TrendingUp, Star, Crown, Zap, Footprints, Moon, Heart, Award } from 'lucide-react';
+import InfoTooltip from './InfoTooltip';
 
 interface StreakTrackerProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -82,6 +83,11 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                     <h3 className="section-header flex items-center gap-2">
                         <Flame className="w-5 h-5 text-orange-400" />
                         Active Streaks
+                        <InfoTooltip
+                            title="Active Streaks"
+                            description="Consecutive days you've maintained healthy habits. Streaks of 3+ days are shown here."
+                            calculation="A streak counts each consecutive day where you meet the criteria (e.g., 7+ hours sleep, 10k steps). The impact percentage shows how your readiness changes during streaks."
+                        />
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {activeStreaks.map(streak => (
@@ -121,6 +127,11 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                     <h3 className="section-header flex items-center gap-2">
                         <Trophy className="w-5 h-5 text-yellow-400" />
                         Trophy Case
+                        <InfoTooltip
+                            title="Trophy Case"
+                            description="Badges you've earned by maintaining streaks. Higher tiers require longer consecutive streaks."
+                            calculation="Bronze: 7 days, Silver: 14 days, Gold: 30 days, Platinum: 60+ days of consistent behavior."
+                        />
                     </h3>
                     <div className="card p-4">
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -131,8 +142,8 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                                 >
                                     <div className={`absolute inset-0 bg-gradient-to-br ${tierColors[badge.tier]} opacity-10 rounded-lg`} />
                                     <Award className={`w-8 h-8 mb-2 relative z-10 ${badge.tier === 'platinum' ? 'text-purple-400' :
-                                            badge.tier === 'gold' ? 'text-yellow-400' :
-                                                badge.tier === 'silver' ? 'text-gray-300' : 'text-amber-500'
+                                        badge.tier === 'gold' ? 'text-yellow-400' :
+                                            badge.tier === 'silver' ? 'text-gray-300' : 'text-amber-500'
                                         }`} />
                                     <span className="text-xs font-medium text-[var(--text-primary)] relative z-10">
                                         {badge.name.split('(')[0].trim()}
@@ -161,14 +172,19 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                     <h3 className="section-header flex items-center gap-2">
                         <TrendingUp className="w-5 h-5 text-green-400" />
                         Almost There
+                        <InfoTooltip
+                            title="Upcoming Badges"
+                            description="Badges you're close to earning. Keep up your streaks to unlock these!"
+                            calculation="Shows badges where you've completed at least 30% of the required days. Progress resets if you break the streak."
+                        />
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {progressBadges.map(badge => (
                             <div key={badge.id} className="card p-4">
                                 <div className="flex items-center gap-3 mb-3">
                                     <Award className={`w-6 h-6 opacity-50 ${badge.tier === 'platinum' ? 'text-purple-400' :
-                                            badge.tier === 'gold' ? 'text-yellow-400' :
-                                                badge.tier === 'silver' ? 'text-gray-300' : 'text-amber-500'
+                                        badge.tier === 'gold' ? 'text-yellow-400' :
+                                            badge.tier === 'silver' ? 'text-gray-300' : 'text-amber-500'
                                         }`} />
                                     <div className="flex-1">
                                         <h4 className="font-medium text-[var(--text-primary)] text-sm">
@@ -199,6 +215,11 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                 <h3 className="section-header flex items-center gap-2">
                     <Star className="w-5 h-5 text-yellow-400" />
                     Personal Records
+                    <InfoTooltip
+                        title="Personal Records"
+                        description="Your best and current streak lengths across all categories."
+                        calculation="'Current' shows your active streak (if any). 'Best' is your all-time longest streak for each category."
+                    />
                 </h3>
                 <div className="card overflow-hidden">
                     <div className="grid grid-cols-4 text-xs text-[var(--text-muted)] uppercase tracking-wider p-3 border-b border-[var(--border-subtle)] font-medium">

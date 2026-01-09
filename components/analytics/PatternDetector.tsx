@@ -3,6 +3,7 @@ import { DailyStats } from '../../types';
 import { Pattern, PatternType } from '../../types/analyticsTypes';
 import { detectPatterns } from '../../services/analyticsService';
 import { Calendar, Activity, Heart, Users, Sun, PartyPopper, Search, ChevronDown, Lightbulb, Info } from 'lucide-react';
+import InfoTooltip from './InfoTooltip';
 
 interface PatternDetectorProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -102,12 +103,17 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
         <div className="space-y-6">
             {/* Header with filters */}
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                <div>
+                <div className="flex items-center gap-2">
                     <h3 className="section-header mb-0">Pattern Feed</h3>
-                    <p className="text-sm text-[var(--text-muted)] mt-1">
-                        {patterns.length} patterns detected from your data
-                    </p>
+                    <InfoTooltip
+                        title="Pattern Detection"
+                        description="Automatically detected trends and correlations in your health data across multiple dimensions."
+                        calculation="Patterns are found by analyzing your data for recurring relationships (e.g., high activity days → poor sleep). Confidence indicates how consistent the pattern is. Impact shows the effect size."
+                    />
                 </div>
+                <p className="text-sm text-[var(--text-muted)] mt-1">
+                    {patterns.length} patterns detected from your data
+                </p>
 
                 <div className="flex gap-2">
                     <select
@@ -155,8 +161,8 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
                                             {pattern.title}
                                         </h4>
                                         <span className={`text-xs px-2 py-0.5 rounded-full ${pattern.confidence >= 0.8 ? 'bg-green-500/20 text-green-400' :
-                                                pattern.confidence >= 0.6 ? 'bg-yellow-500/20 text-yellow-400' :
-                                                    'bg-gray-500/20 text-gray-400'
+                                            pattern.confidence >= 0.6 ? 'bg-yellow-500/20 text-yellow-400' :
+                                                'bg-gray-500/20 text-gray-400'
                                             }`}>
                                             {(pattern.confidence * 100).toFixed(0)}% confident
                                         </span>

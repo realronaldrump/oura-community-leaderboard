@@ -3,6 +3,7 @@ import { DailyStats } from '../../types';
 import { WhatIfScenario, WhatIfResult } from '../../types/analyticsTypes';
 import { simulateWhatIf } from '../../services/analyticsService';
 import { Sparkles, BedDouble, Footprints, Heart, Moon, HelpCircle, Lightbulb, BarChart3 } from 'lucide-react';
+import InfoTooltip from './InfoTooltip';
 
 interface WhatIfSimulatorProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -95,7 +96,14 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
         <div className="space-y-6">
             {/* Header */}
             <div>
-                <h3 className="section-header mb-0">What-If Simulator</h3>
+                <div className="flex items-center gap-2">
+                    <h3 className="section-header mb-0">What-If Simulator</h3>
+                    <InfoTooltip
+                        title="What-If Analysis"
+                        description="Explore hypothetical scenarios to see how changes to your habits might affect your readiness score."
+                        calculation="Uses linear regression on your historical data to predict how changes in one metric (like deep sleep) correlate with changes in next-day readiness. Confidence intervals show prediction uncertainty."
+                    />
+                </div>
                 <p className="text-sm text-[var(--text-muted)] mt-1">
                     Explore how changes might affect your readiness score
                 </p>
@@ -184,7 +192,14 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
             {/* Results */}
             {results.length > 0 ? (
                 <div className="space-y-4">
-                    <h4 className="section-header">Projected Impact</h4>
+                    <div className="flex items-center gap-2">
+                        <h4 className="section-header">Projected Impact</h4>
+                        <InfoTooltip
+                            title="Projected Impact"
+                            description="How much your readiness score is predicted to change based on your selected adjustment."
+                            calculation="The projection uses your personal correlation between the selected metric and next-day readiness. The confidence range (±) indicates how reliable the prediction is based on data variability."
+                        />
+                    </div>
 
                     {results.map((result, idx) => (
                         <div key={result.userId} className="card p-4">
