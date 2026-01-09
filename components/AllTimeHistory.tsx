@@ -285,12 +285,12 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                             <select
                                 value={smoothing}
                                 onChange={(e) => setSmoothing(e.target.value as Smoothing)}
-                                className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs focus:outline-none focus:border-accent-cyan"
+                                className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs focus:outline-none focus:border-accent-cyan text-white"
                             >
-                                <option value="raw">None (Raw)</option>
-                                <option value="3d">3-Day Avg</option>
-                                <option value="7d">7-Day Avg</option>
-                                <option value="14d">14-Day Avg</option>
+                                <option value="raw" className="bg-gray-900 text-white">None (Raw)</option>
+                                <option value="3d" className="bg-gray-900 text-white">3-Day Avg</option>
+                                <option value="7d" className="bg-gray-900 text-white">7-Day Avg</option>
+                                <option value="14d" className="bg-gray-900 text-white">14-Day Avg</option>
                             </select>
                         </div>
                     </div>
