@@ -7,6 +7,8 @@ interface MetricData {
     label: string;
     valA: number | string | undefined | null;
     valB: number | string | undefined | null;
+    displayA?: string | number | null;
+    displayB?: string | number | null;
     unit?: string;
     inverse?: boolean;
     max?: number;

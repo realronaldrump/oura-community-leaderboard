@@ -674,8 +674,22 @@ const Dashboard: React.FC = () => {
                                         scoreB={p2Readiness?.score}
                                         defaultOpen={true}
                                         metrics={[
-                                            { label: "Resting HR", valA: p1Readiness?.contributors.resting_heart_rate, valB: p2Readiness?.contributors.resting_heart_rate, max: 100 },
-                                            { label: "HRV Balance", valA: p1Readiness?.contributors.hrv_balance, valB: p2Readiness?.contributors.hrv_balance, max: 100 },
+                                            {
+                                                label: "Resting HR",
+                                                valA: p1Readiness?.contributors.resting_heart_rate,
+                                                valB: p2Readiness?.contributors.resting_heart_rate,
+                                                displayA: p1Session?.lowest_heart_rate ? `${p1Session.lowest_heart_rate} bpm (Score: ${p1Readiness?.contributors.resting_heart_rate})` : undefined,
+                                                displayB: p2Session?.lowest_heart_rate ? `${p2Session.lowest_heart_rate} bpm (Score: ${p2Readiness?.contributors.resting_heart_rate})` : undefined,
+                                                max: 100
+                                            },
+                                            {
+                                                label: "HRV Balance",
+                                                valA: p1Readiness?.contributors.hrv_balance,
+                                                valB: p2Readiness?.contributors.hrv_balance,
+                                                displayA: p1Session?.average_hrv ? `${p1Session.average_hrv} ms (Score: ${p1Readiness?.contributors.hrv_balance})` : undefined,
+                                                displayB: p2Session?.average_hrv ? `${p2Session.average_hrv} ms (Score: ${p2Readiness?.contributors.hrv_balance})` : undefined,
+                                                max: 100
+                                            },
                                             { label: "Sleep Balance", valA: p1Readiness?.contributors.sleep_balance, valB: p2Readiness?.contributors.sleep_balance, max: 100 },
                                             { label: "Recovery Index", valA: p1Readiness?.contributors.recovery_index, valB: p2Readiness?.contributors.recovery_index, max: 100 },
                                         ]}
@@ -686,10 +700,38 @@ const Dashboard: React.FC = () => {
                                         scoreB={p2Sleep?.score}
                                         defaultOpen={true}
                                         metrics={[
-                                            { label: "Total Sleep", valA: p1Sleep?.contributors.total_sleep, valB: p2Sleep?.contributors.total_sleep, max: 100 },
-                                            { label: "Efficiency", valA: p1Sleep?.contributors.efficiency, valB: p2Sleep?.contributors.efficiency, max: 100 },
-                                            { label: "Deep Score", valA: p1Sleep?.contributors.deep_sleep, valB: p2Sleep?.contributors.deep_sleep, max: 100 },
-                                            { label: "REM Score", valA: p1Sleep?.contributors.rem_sleep, valB: p2Sleep?.contributors.rem_sleep, max: 100 },
+                                            {
+                                                label: "Total Sleep",
+                                                valA: p1Sleep?.contributors.total_sleep,
+                                                valB: p2Sleep?.contributors.total_sleep,
+                                                displayA: p1Session?.total_sleep_duration ? `${formatDuration(p1Session.total_sleep_duration)} (Score: ${p1Sleep?.contributors.total_sleep})` : undefined,
+                                                displayB: p2Session?.total_sleep_duration ? `${formatDuration(p2Session.total_sleep_duration)} (Score: ${p2Sleep?.contributors.total_sleep})` : undefined,
+                                                max: 100
+                                            },
+                                            {
+                                                label: "Efficiency",
+                                                valA: p1Sleep?.contributors.efficiency,
+                                                valB: p2Sleep?.contributors.efficiency,
+                                                displayA: p1Session?.efficiency ? `${p1Session.efficiency}% (Score: ${p1Sleep?.contributors.efficiency})` : undefined,
+                                                displayB: p2Session?.efficiency ? `${p2Session.efficiency}% (Score: ${p2Sleep?.contributors.efficiency})` : undefined,
+                                                max: 100
+                                            },
+                                            {
+                                                label: "Deep Sleep",
+                                                valA: p1Sleep?.contributors.deep_sleep,
+                                                valB: p2Sleep?.contributors.deep_sleep,
+                                                displayA: p1Session?.deep_sleep_duration ? `${formatDuration(p1Session.deep_sleep_duration)} (Score: ${p1Sleep?.contributors.deep_sleep})` : undefined,
+                                                displayB: p2Session?.deep_sleep_duration ? `${formatDuration(p2Session.deep_sleep_duration)} (Score: ${p2Sleep?.contributors.deep_sleep})` : undefined,
+                                                max: 100
+                                            },
+                                            {
+                                                label: "REM Sleep",
+                                                valA: p1Sleep?.contributors.rem_sleep,
+                                                valB: p2Sleep?.contributors.rem_sleep,
+                                                displayA: p1Session?.rem_sleep_duration ? `${formatDuration(p1Session.rem_sleep_duration)} (Score: ${p1Sleep?.contributors.rem_sleep})` : undefined,
+                                                displayB: p2Session?.rem_sleep_duration ? `${formatDuration(p2Session.rem_sleep_duration)} (Score: ${p2Sleep?.contributors.rem_sleep})` : undefined,
+                                                max: 100
+                                            },
                                         ]}
                                     />
                                 </div>

@@ -5,12 +5,14 @@ interface Props {
     label: string;
     valA: number | undefined | string | null;
     valB: number | undefined | string | null;
+    displayA?: string | number | null;
+    displayB?: string | number | null;
     unit?: string;
     inverse?: boolean; // True if lower is better (e.g., Resting HR)
     max?: number;
 }
 
-const ComparisonRow: React.FC<Props> = ({ label, valA, valB, unit = '', inverse, max }) => {
+const ComparisonRow: React.FC<Props> = ({ label, valA, valB, displayA, displayB, unit = '', inverse, max }) => {
     if (valA === undefined || valB === undefined || valA === null || valB === null) return null;
 
     // Ensure values are numbers for comparison
@@ -29,6 +31,8 @@ const ComparisonRow: React.FC<Props> = ({ label, valA, valB, unit = '', inverse,
                 label={label}
                 leftValue={numA}
                 rightValue={numB}
+                leftLabel={displayA?.toString()}
+                rightLabel={displayB?.toString()}
                 unit={unit}
                 max={activeMax}
                 inverse={inverse}
