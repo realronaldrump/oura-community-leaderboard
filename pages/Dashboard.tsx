@@ -28,11 +28,22 @@ import ReactMarkdown from 'react-markdown';
 import AllTimeHistory from '../components/AllTimeHistory';
 import SyncModal from '../components/SyncModal';
 import { smartSync, SyncProgress } from '../services/syncService';
+import {
+    StreakTracker,
+    PatternDetector,
+    TimelineView,
+    CorrelationExplorer,
+    WhatIfSimulator,
+    MilestoneTracker,
+    DailySnapshot
+} from '../components/analytics';
 
 const Dashboard: React.FC = () => {
     const { activeProfile, profiles, setActiveProfileId, login, removeProfile, firebaseError, isLoadingProfiles, retryFirebaseConnection } = useUser();
     const [loading, setLoading] = useState(false);
-    const [viewMode, setViewMode] = useState<'daily' | 'versus' | 'history'>('daily');
+    const [viewMode, setViewMode] = useState<'daily' | 'versus' | 'history' | 'insights' | 'analytics'>('daily');
+    const [analyticsSubTab, setAnalyticsSubTab] = useState<'timeline' | 'correlation'>('timeline');
+    const [insightsSubTab, setInsightsSubTab] = useState<'streaks' | 'patterns' | 'whatif' | 'milestones' | 'snapshot'>('streaks');
     const [isSyncing, setIsSyncing] = useState(false);
     const [showSyncModal, setShowSyncModal] = useState(false);
     const [syncProgress, setSyncProgress] = useState<SyncProgress>({
@@ -468,31 +479,142 @@ const Dashboard: React.FC = () => {
                         subtitle="See how you compare against others."
                     >
                         <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-6">
-                            <div className="flex bg-white/5 p-1 rounded-xl">
+                            <div className="flex flex-wrap bg-white/5 p-1 rounded-xl gap-1">
                                 <button
                                     onClick={() => setViewMode('daily')}
-                                    className={`px-6 py-2 rounded-lg font-medium transition-all ${viewMode === 'daily' ? 'bg-accent-cyan/20 text-accent-cyan shadow-glow-cyan' : 'hover:text-white'}`}
+                                    className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${viewMode === 'daily' ? 'bg-accent-cyan/20 text-accent-cyan shadow-glow-cyan' : 'hover:text-white'}`}
                                 >
                                     Daily
                                 </button>
                                 <button
                                     onClick={() => setViewMode('versus')}
-                                    className={`px-6 py-2 rounded-lg font-medium transition-all ${viewMode === 'versus' ? 'bg-accent-purple/20 text-accent-purple shadow-glow-purple' : 'hover:text-white'}`}
+                                    className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${viewMode === 'versus' ? 'bg-accent-purple/20 text-accent-purple shadow-glow-purple' : 'hover:text-white'}`}
                                 >
                                     Versus
                                 </button>
                                 <button
                                     onClick={() => setViewMode('history')}
-                                    className={`px-6 py-2 rounded-lg font-medium transition-all ${viewMode === 'history' ? 'bg-accent-orange/20 text-accent-orange shadow-glow-orange' : 'hover:text-white'}`}
+                                    className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${viewMode === 'history' ? 'bg-accent-orange/20 text-accent-orange shadow-glow-orange' : 'hover:text-white'}`}
                                 >
                                     History
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('insights')}
+                                    className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${viewMode === 'insights' ? 'bg-green-500/20 text-green-400' : 'hover:text-white'}`}
+                                >
+                                    Insights
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('analytics')}
+                                    className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${viewMode === 'analytics' ? 'bg-blue-500/20 text-blue-400' : 'hover:text-white'}`}
+                                >
+                                    Analytics
                                 </button>
                             </div>
                         </div>
 
+                        {/* Sub-tabs for Insights Mode */}
+                        {viewMode === 'insights' && (
+                            <div className="flex flex-wrap gap-2 mb-6">
+                                {[
+                                    { key: 'streaks', label: 'Streaks & Badges' },
+                                    { key: 'patterns', label: 'Patterns' },
+                                    { key: 'whatif', label: 'What-If' },
+                                    { key: 'milestones', label: 'Milestones' },
+                                    { key: 'snapshot', label: 'Snapshot' },
+                                ].map(tab => (
+                                    <button
+                                        key={tab.key}
+                                        onClick={() => setInsightsSubTab(tab.key as any)}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${insightsSubTab === tab.key
+                                            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                                            : 'bg-white/5 text-text-muted hover:text-white'
+                                            }`}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Sub-tabs for Analytics Mode */}
+                        {viewMode === 'analytics' && (
+                            <div className="flex flex-wrap gap-2 mb-6">
+                                {[
+                                    { key: 'timeline', label: '24h Timeline' },
+                                    { key: 'correlation', label: 'Correlations' },
+                                ].map(tab => (
+                                    <button
+                                        key={tab.key}
+                                        onClick={() => setAnalyticsSubTab(tab.key as any)}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${analyticsSubTab === tab.key
+                                            ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                            : 'bg-white/5 text-text-muted hover:text-white'
+                                            }`}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
                         {/* History Mode UI */}
                         {viewMode === 'history' && (
                             <AllTimeHistory profiles={profiles} userQueries={allTimeQueries} />
+                        )}
+
+                        {/* Insights Mode UI */}
+                        {viewMode === 'insights' && (
+                            <div className="animate-fade-in">
+                                {insightsSubTab === 'streaks' && (
+                                    <StreakTracker
+                                        profiles={profiles}
+                                        usersData={userQueries.map(q => ({ data: q.data as DailyStats | undefined }))}
+                                    />
+                                )}
+                                {insightsSubTab === 'patterns' && (
+                                    <PatternDetector
+                                        profiles={profiles}
+                                        usersData={userQueries.map(q => ({ data: q.data as DailyStats | undefined }))}
+                                    />
+                                )}
+                                {insightsSubTab === 'whatif' && (
+                                    <WhatIfSimulator
+                                        profiles={profiles}
+                                        usersData={userQueries.map(q => ({ data: q.data as DailyStats | undefined }))}
+                                    />
+                                )}
+                                {insightsSubTab === 'milestones' && (
+                                    <MilestoneTracker
+                                        profiles={profiles}
+                                        usersData={allTimeQueries.map(q => ({ data: q.data as DailyStats | undefined }))}
+                                    />
+                                )}
+                                {insightsSubTab === 'snapshot' && (
+                                    <DailySnapshot
+                                        profiles={profiles}
+                                        usersData={userQueries.map(q => ({ data: q.data as DailyStats | undefined }))}
+                                    />
+                                )}
+                            </div>
+                        )}
+
+                        {/* Analytics Mode UI */}
+                        {viewMode === 'analytics' && (
+                            <div className="animate-fade-in">
+                                {analyticsSubTab === 'timeline' && (
+                                    <TimelineView
+                                        profiles={profiles}
+                                        usersData={userQueries.map(q => ({ data: q.data as DailyStats | undefined }))}
+                                    />
+                                )}
+                                {analyticsSubTab === 'correlation' && (
+                                    <CorrelationExplorer
+                                        profiles={profiles}
+                                        usersData={userQueries.map(q => ({ data: q.data as DailyStats | undefined }))}
+                                    />
+                                )}
+                            </div>
                         )}
 
                         {/* Versus Mode UI */}
