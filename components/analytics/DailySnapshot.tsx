@@ -4,6 +4,7 @@ import { DailySnapshotData } from '../../types/analyticsTypes';
 import { generateDailySnapshot } from '../../services/analyticsService';
 import html2canvas from 'html2canvas';
 import { Camera, ChevronLeft, ChevronRight, Image, Pin, BedDouble, Zap, Flame, Footprints, Clock, Trophy, BarChart2 } from 'lucide-react';
+import InfoTooltip from './InfoTooltip';
 
 interface DailySnapshotProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -108,12 +109,17 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
         <div className="space-y-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                <div>
+                <div className="flex items-center gap-2">
                     <h3 className="section-header mb-0">Daily Snapshot</h3>
-                    <p className="text-sm text-[var(--text-muted)] mt-1">
-                        Create shareable daily comparison cards
-                    </p>
+                    <InfoTooltip
+                        title="Daily Snapshot"
+                        description="A shareable card summarizing the day's performance for all users. Perfect for sharing progress or friendly competition."
+                        calculation="Aggregates sleep, readiness, and activity scores. Highlights are automatically awarded to the user with the highest score in each category."
+                    />
                 </div>
+                <p className="text-sm text-[var(--text-muted)] mt-1">
+                    Create shareable daily comparison cards
+                </p>
 
                 <div className="flex items-center gap-2">
                     <button
