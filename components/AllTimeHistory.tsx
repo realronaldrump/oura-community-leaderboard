@@ -383,11 +383,11 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                     <select
                         value={filterUser}
                         onChange={(e) => setFilterUser(e.target.value)}
-                        className="bg-base/50 text-text-primary text-xs border border-white/10 rounded px-2 py-1 focus:outline-none"
+                        className="bg-base/50 text-text-primary text-xs border border-white/10 rounded px-2 py-1 focus:outline-none text-white"
                     >
-                        <option value="all">All Users</option>
+                        <option value="all" className="bg-gray-900 text-white">All Users</option>
                         {profiles.map(p => (
-                            <option key={p.id} value={p.id}>{(p.email || 'User').split('@')[0]}</option>
+                            <option key={p.id} value={p.id} className="bg-gray-900 text-white">{(p.email || 'User').split('@')[0]}</option>
                         ))}
                     </select>
                 </div>
