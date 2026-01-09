@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { UserProvider, useUser } from './contexts/UserContext';
 import Dashboard from './pages/Dashboard';
+import Settings from './pages/Settings';
 
 const Router = () => {
     const { addProfile } = useUser();
@@ -33,6 +34,11 @@ const Router = () => {
             }
         }
     }, [addProfile]);
+
+    // Simple routing
+    if (path === '/settings') {
+        return <Settings />;
+    }
 
     return <Dashboard />;
 };
