@@ -3,6 +3,7 @@ import { DailyStats, formatDuration } from '../../types';
 import { DailySnapshotData } from '../../types/analyticsTypes';
 import { generateDailySnapshot } from '../../services/analyticsService';
 import html2canvas from 'html2canvas';
+import { Camera, ChevronLeft, ChevronRight, Image, Pin, BedDouble, Zap, Flame, Footprints, Clock, Trophy, BarChart2 } from 'lucide-react';
 
 interface DailySnapshotProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -79,20 +80,22 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
 
     const isPinned = pinnedSnapshots.some(s => s.date === selectedDate);
 
-    const getWinnerEmoji = (category: string) => {
+    const getCategoryIcon = (category: string) => {
         switch (category) {
-            case 'sleep': return '😴';
-            case 'readiness': return '⚡';
-            case 'activity': return '🏃';
-            case 'steps': return '👟';
-            default: return '🏆';
+            case 'sleep': return <BedDouble className="w-3 h-3" />;
+            case 'readiness': return <Zap className="w-3 h-3" />;
+            case 'activity': return <Flame className="w-3 h-3" />;
+            case 'steps': return <Footprints className="w-3 h-3" />;
+            default: return <Trophy className="w-3 h-3" />;
         }
     };
 
     if (usersData.every(u => !u.data)) {
         return (
             <div className="card p-8 text-center">
-                <div className="text-4xl mb-4">📸</div>
+                <div className="flex justify-center mb-4">
+                    <Camera className="w-12 h-12 text-[var(--text-muted)]" />
+                </div>
                 <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">No Data Available</h3>
                 <p className="text-[var(--text-muted)] text-sm">
                     Sync your data to create shareable daily snapshots.
@@ -123,7 +126,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                         disabled={availableDates.indexOf(selectedDate) >= availableDates.length - 1}
                         className="p-2 rounded-lg hover:bg-[var(--bg-hover)] disabled:opacity-30 transition-all"
                     >
-                        ←
+                        <ChevronLeft className="w-4 h-4" />
                     </button>
                     <select
                         value={selectedDate}
@@ -150,7 +153,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                         disabled={availableDates.indexOf(selectedDate) <= 0}
                         className="p-2 rounded-lg hover:bg-[var(--bg-hover)] disabled:opacity-30 transition-all"
                     >
-                        →
+                        <ChevronRight className="w-4 h-4" />
                     </button>
                 </div>
             </div>
@@ -183,7 +186,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                                         })}
                                     </h4>
                                 </div>
-                                <div className="text-4xl">📊</div>
+                                <BarChart2 className="w-10 h-10 text-[var(--accent)]" />
                             </div>
                         </div>
 
@@ -210,9 +213,15 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                                                 {user.userName}
                                             </h5>
                                             <div className="flex gap-4 text-sm mt-1">
-                                                <span className="text-blue-400">😴 {user.sleep}</span>
-                                                <span className="text-green-400">⚡ {user.readiness}</span>
-                                                <span className="text-amber-400">🏃 {user.activity}</span>
+                                                <span className="text-blue-400 flex items-center gap-1">
+                                                    <BedDouble className="w-3 h-3" /> {user.sleep}
+                                                </span>
+                                                <span className="text-green-400 flex items-center gap-1">
+                                                    <Zap className="w-3 h-3" /> {user.readiness}
+                                                </span>
+                                                <span className="text-amber-400 flex items-center gap-1">
+                                                    <Flame className="w-3 h-3" /> {user.activity}
+                                                </span>
                                             </div>
                                         </div>
                                         <div className="text-right">
@@ -233,12 +242,12 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                                     {snapshot.highlights.map((highlight, idx) => (
                                         <span
                                             key={idx}
-                                            className={`px-3 py-1 rounded-full text-xs font-medium ${highlight.type === 'winner'
-                                                    ? 'bg-[var(--accent)]/20 text-[var(--accent)]'
-                                                    : 'bg-white/10 text-[var(--text-secondary)]'
+                                            className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${highlight.type === 'winner'
+                                                ? 'bg-[var(--accent)]/20 text-[var(--accent)]'
+                                                : 'bg-white/10 text-[var(--text-secondary)]'
                                                 }`}
                                         >
-                                            {getWinnerEmoji(highlight.category)} {highlight.description}
+                                            {getCategoryIcon(highlight.category)} {highlight.description}
                                         </span>
                                     ))}
                                 </div>
@@ -275,9 +284,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                                 </>
                             ) : (
                                 <>
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                    </svg>
+                                    <Image className="w-5 h-5" />
                                     Export as PNG
                                 </>
                             )}
@@ -285,11 +292,12 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                         <button
                             onClick={handlePin}
                             className={`px-4 py-3 rounded-lg font-medium transition-all flex items-center gap-2 ${isPinned
-                                    ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
-                                    : 'btn-secondary'
+                                ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                                : 'btn-secondary'
                                 }`}
                         >
-                            {isPinned ? '📌 Pinned' : '📌 Pin'}
+                            <Pin className={`w-4 h-4 ${isPinned ? 'fill-current' : ''}`} />
+                            {isPinned ? 'Pinned' : 'Pin'}
                         </button>
                     </div>
                 </div>
@@ -344,9 +352,13 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                                         </div>
                                         {user.steps != null && (
                                             <div className="flex gap-4 text-xs text-[var(--text-muted)]">
-                                                <span>👟 {user.steps.toLocaleString()} steps</span>
+                                                <span className="flex items-center gap-1">
+                                                    <Footprints className="w-3 h-3" /> {user.steps.toLocaleString()} steps
+                                                </span>
                                                 {user.sleepDuration != null && (
-                                                    <span>⏱️ {formatDuration(user.sleepDuration)} sleep</span>
+                                                    <span className="flex items-center gap-1">
+                                                        <Clock className="w-3 h-3" /> {formatDuration(user.sleepDuration)} sleep
+                                                    </span>
                                                 )}
                                             </div>
                                         )}
@@ -362,7 +374,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
             {pinnedSnapshots.length > 0 && (
                 <div>
                     <h4 className="section-header flex items-center gap-2">
-                        <span>📌</span> Highlight Reel
+                        <Pin className="w-5 h-5 text-yellow-400" /> Highlight Reel
                     </h4>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                         {pinnedSnapshots.map(snap => (
