@@ -1,13 +1,14 @@
 import React from 'react';
 import { X, Calculator, TrendingUp, Target, Clock, Thermometer, Heart, Moon, Zap } from 'lucide-react';
 import { DailyReadiness, DailySleep, DailyActivity, SleepSession } from '../types';
+import { IOSModal, IOSListItem, IOSButton } from './ios';
 
 interface ScoreBreakdownModalProps {
     isOpen: boolean;
     onClose: () => void;
     scoreType: 'readiness' | 'sleep' | 'activity';
     scoreData: DailyReadiness | DailySleep | DailyActivity | null;
-    sessionData?: SleepSession | null; // For additional context like actual values
+    sessionData?: SleepSession | null;
 }
 
 interface FactorDefinition {
@@ -211,163 +212,84 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
     const date = scoreData.day;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            {/* Backdrop */}
-            <div
-                className="absolute inset-0 bg-[var(--bg-void)]/80 backdrop-blur-sm"
-                onClick={onClose}
-            />
-
-            {/* Modal */}
-            <div className="relative card w-full max-w-4xl max-h-[85vh] flex flex-col animate-fade-in-up border border-[var(--border-default)] shadow-2xl bg-[var(--bg-elevated)]">
-                {/* Header */}
-                <div className="p-6 border-b border-[var(--border-subtle)]">
-                    <div className="flex items-start justify-between">
-                        <div>
-                            <h3 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-                                <Calculator className="w-5 h-5" />
-                                {title}
-                            </h3>
-                            <p className="text-[var(--accent)] text-sm font-medium mt-1">
-                                Score: {score}/100 • {new Date(date).toLocaleDateString(undefined, {
-                                    weekday: 'long',
-                                    year: 'numeric',
-                                    month: 'long',
-                                    day: 'numeric'
-                                })}
-                            </p>
-                        </div>
-                        <button
-                            onClick={onClose}
-                            className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1"
-                        >
-                            <X className="w-6 h-6" />
-                        </button>
+        <IOSModal isOpen={isOpen} onClose={onClose} title={title}>
+            <div className="space-y-4">
+                <div className="flex items-center justify-between py-2">
+                    <div>
+                        <p className="text-[#00C896] text-sm font-medium">
+                            Score: {score}/100
+                        </p>
+                        <p className="text-[#666666] text-xs mt-1">
+                            {new Date(date).toLocaleDateString(undefined, {
+                                weekday: 'long',
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                            })}
+                        </p>
                     </div>
                 </div>
 
                 {/* Content */}
-                <div className="p-6 overflow-y-auto custom-scrollbar">
+                <div className="overflow-y-auto ios-scroll max-h-[60vh]">
                     <div className="mb-6">
-                        <p className="text-[var(--text-secondary)]">
+                        <p className="text-[#A0A0A0] text-sm">
                             Your {scoreType} score is calculated by weighting various health factors.
-                            Each factor contributes to the overall score based on its importance and your individual metrics.
+                            Each factor contributes to overall score based on its importance and your individual metrics.
                         </p>
                     </div>
 
                     {/* Score Calculation Explanation */}
-                    <div className="bg-[var(--bg-base)] p-4 rounded-lg border border-[var(--border-subtle)] mb-6">
-                        <h4 className="text-sm font-medium text-[var(--text-primary)] mb-2 flex items-center gap-2">
+                    <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222] mb-6">
+                        <h4 className="text-sm font-medium text-[#FAFAFA] mb-2 flex items-center gap-2">
                             <Calculator className="w-4 h-4" />
-                            How the Score is Calculated
+                            How Score is Calculated
                         </h4>
-                        <p className="text-[var(--text-secondary)] text-sm">
+                        <p className="text-[#A0A0A0] text-sm">
                             Your {scoreType} score of <strong>{score}/100</strong> is calculated by Oura's proprietary algorithm that combines
                             multiple health factors. Each factor receives a score (1-100) based on your performance in that area.
                             These factor scores are then weighted and combined to produce your final {scoreType} score.
-                            The exact weighting formula is not publicly disclosed by Oura.
                         </p>
                     </div>
 
-                    {/* Factors Table */}
-                    <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-subtle)] overflow-hidden">
-                        <div className="px-4 py-3 border-b border-[var(--border-subtle)]">
-                            <h4 className="text-sm font-medium text-[var(--text-primary)]">Score Factors & Individual Scores</h4>
-                        </div>
-
-                        <div className="divide-y divide-[var(--border-subtle)]">
-                            {factors.map((factor, idx) => (
-                                <div key={factor.key} className="p-4 hover:bg-[var(--bg-void)]/30 transition-colors">
-                                    <div className="grid grid-cols-12 gap-4 items-center">
-                                        {/* Factor Icon & Name */}
-                                        <div className="col-span-4 flex items-center gap-3">
-                                            <div className="text-[var(--accent)]">
-                                                {factor.icon}
-                                            </div>
-                                            <div>
-                                                <h5 className="font-medium text-[var(--text-primary)] text-sm">
-                                                    {factor.label}
-                                                </h5>
-                                                <p className="text-xs text-[var(--text-secondary)] mt-1">
-                                                    {factor.description}
-                                                </p>
-                                            </div>
+                    {/* Factors List */}
+                    <div className="space-y-2">
+                        {factors.map((factor, idx) => (
+                            <IOSListItem
+                                key={factor.key}
+                                title={factor.label}
+                                subtitle={factor.description}
+                                icon={<div className="text-[#00C896] ios-touch-target">{factor.icon}</div>}
+                                rightElement={
+                                    <div className="text-right">
+                                        <div className="text-[#FAFAFA] font-mono font-bold">
+                                            {factor.weight || '--'}
                                         </div>
-
-                                        {/* Factor Score */}
-                                        <div className="col-span-2 text-center">
-                                            <div className="bg-[var(--bg-elevated)] px-3 py-2 rounded-lg border border-[var(--border-subtle)]">
-                                                <p className="text-lg font-mono font-bold text-[var(--text-primary)]">
-                                                    {factor.weight || '--'}
-                                                </p>
-                                                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">
-                                                    Factor Score
-                                                </p>
+                                        {factor.actualValue && (
+                                            <div className="text-[#666666] text-xs">
+                                                {factor.actualValue}
                                             </div>
-                                        </div>
-
-                                        {/* Actual Value (if available) */}
-                                        <div className="col-span-3 text-center">
-                                            {factor.actualValue ? (
-                                                <div className="bg-[var(--bg-elevated)] px-3 py-2 rounded-lg border border-[var(--border-subtle)]">
-                                                    <p className="text-sm font-mono text-[var(--text-primary)]">
-                                                        {factor.actualValue}
-                                                    </p>
-                                                    <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">
-                                                        Actual
-                                                    </p>
-                                                </div>
-                                            ) : (
-                                                <div className="text-[var(--text-muted)] text-xs">
-                                                    --
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Contribution Indicator */}
-                                        <div className="col-span-3">
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex-1 bg-[var(--bg-void)] rounded-full h-2">
-                                                    <div
-                                                        className={`h-2 rounded-full transition-all duration-500 ${
-                                                            factor.weight && factor.weight >= 80 ? 'bg-green-500' :
-                                                            factor.weight && factor.weight >= 60 ? 'bg-yellow-500' :
-                                                            factor.weight && factor.weight >= 40 ? 'bg-orange-500' :
-                                                            'bg-red-500'
-                                                        }`}
-                                                        style={{ width: `${factor.weight || 0}%` }}
-                                                    />
-                                                </div>
-                                                <span className={`text-xs font-medium ${
-                                                    factor.weight && factor.weight >= 80 ? 'text-green-400' :
-                                                    factor.weight && factor.weight >= 60 ? 'text-yellow-400' :
-                                                    factor.weight && factor.weight >= 40 ? 'text-orange-400' :
-                                                    'text-red-400'
-                                                }`}>
-                                                    {factor.weight && factor.weight >= 80 ? 'Excellent' :
-                                                     factor.weight && factor.weight >= 60 ? 'Good' :
-                                                     factor.weight && factor.weight >= 40 ? 'Fair' :
-                                                     'Needs Work'}
-                                                </span>
-                                            </div>
-                                        </div>
+                                        )}
                                     </div>
-                                </div>
-                            ))}
-                        </div>
+                                }
+                            />
+                        ))}
                     </div>
 
                     {/* Summary */}
-                    <div className="mt-6 p-4 bg-[var(--bg-base)] rounded-lg border border-[var(--border-subtle)]">
-                        <p className="text-[var(--text-secondary)] text-sm">
+                    <div className="mt-6 p-4 bg-[#0C0C0C] rounded-xl border border-[#222]">
+                        <p className="text-[#A0A0A0] text-sm">
                             <strong>Note:</strong> Each factor receives an individual score (1-100) based on your performance in that area.
-                            These factor scores are then combined using Oura's proprietary weighting algorithm to produce your final {scoreType} score.
                             Higher factor scores indicate better performance in that specific health area.
                         </p>
                     </div>
                 </div>
+
+                <IOSButton onClick={onClose} className="w-full" variant="secondary">
+                    Close
+                </IOSButton>
             </div>
-        </div>
+        </IOSModal>
     );
 };
 

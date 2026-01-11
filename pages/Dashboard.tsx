@@ -399,16 +399,15 @@ const Dashboard: React.FC = () => {
     // ============================================
     if (!activeData && userQueries.some(q => q.isLoading)) {
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden">
+            <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden ios-scroll">
                 <div className="absolute inset-0 bg-gradient-mesh opacity-30" />
 
-                {/* Loading spinner */}
-                <div className="relative">
-                    <div className="w-16 h-16 border-2 border-accent-cyan/20 border-t-accent-cyan rounded-full animate-spin" />
-                    <div className="absolute inset-0 w-16 h-16 border-2 border-accent-purple/20 border-b-accent-purple rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} />
+                {/* iOS-style loading spinner */}
+                <div className="relative ios-spring">
+                    <div className="ios-spinner ios-spinner-lg" />
                 </div>
 
-                <p className="text-text-secondary mt-6 animate-pulse">Loading your data...</p>
+                <p className="text-[#A0A0A0] mt-6 animate-pulse">Loading your data...</p>
             </div>
         );
     }

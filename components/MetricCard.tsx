@@ -1,5 +1,6 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useTilt } from '../hooks/useMousePosition';
+import { useHapticFeedback } from './ios';
 
 interface MetricCardProps {
   title: string;
@@ -10,6 +11,7 @@ interface MetricCardProps {
   icon?: React.ReactNode;
   glowColor?: string;
   tiltEnabled?: boolean;
+  onClick?: () => void;
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -21,34 +23,43 @@ const MetricCard: React.FC<MetricCardProps> = ({
   icon,
   glowColor,
   tiltEnabled = true,
+  onClick,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const { style: tiltStyle } = useTilt(cardRef as React.RefObject<HTMLElement>, 8);
+  const { triggerHaptic } = useHapticFeedback();
+  const [isPressed, setIsPressed] = useState(false);
 
   const effectiveGlow = glowColor || color;
+
+  const handleTouchStart = () => {
+    setIsPressed(true);
+    if (onClick) {
+      triggerHaptic('light');
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsPressed(false);
+  };
 
   return (
     <div
       ref={cardRef}
-      className="glass-card p-5 flex flex-col justify-between min-h-[120px] cursor-pointer group"
+      className={`bg-[#141414] rounded-2xl border border-[#222] p-5 flex flex-col justify-between min-h-[120px] ${onClick ? 'cursor-pointer ios-card' : ''}`}
       style={tiltEnabled ? tiltStyle : undefined}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onClick={onClick}
     >
-      {/* Glow effect on hover */}
-      <div
-        className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-        style={{
-          background: `radial-gradient(circle at 50% 100%, ${effectiveGlow}15, transparent 70%)`,
-        }}
-      />
-
       {/* Header */}
       <div className="flex items-center justify-between mb-3 relative z-10">
-        <h3 className="text-text-muted text-sm font-medium group-hover:text-text-secondary transition-colors">
+        <h3 className="text-[#666666] text-sm font-medium">
           {title}
         </h3>
         {icon && (
           <span
-            className="text-text-muted group-hover:scale-110 transition-transform"
+            className="text-[#666666]"
             style={{ color: value != null ? color : undefined }}
           >
             {icon}
@@ -59,33 +70,25 @@ const MetricCard: React.FC<MetricCardProps> = ({
       {/* Value */}
       <div className="flex items-baseline gap-2 relative z-10">
         <span
-          className="text-3xl font-mono font-bold transition-all duration-300 group-hover:scale-105"
+          className="text-3xl font-mono font-bold transition-all duration-200"
           style={{
             color,
-            textShadow: value != null ? `0 0 30px ${effectiveGlow}40` : undefined,
+            transform: isPressed ? 'scale(0.95)' : 'scale(1)',
           }}
         >
           {value ?? '--'}
         </span>
         {unit && value != null && (
-          <span className="text-text-muted text-sm font-medium">{unit}</span>
+          <span className="text-[#666666] text-sm font-medium">{unit}</span>
         )}
       </div>
 
       {/* Subtext */}
       {subtext && (
-        <p className="text-xs text-text-dim mt-3 relative z-10 group-hover:text-text-muted transition-colors">
+        <p className="text-xs text-[#666666] mt-3 relative z-10">
           {subtext}
         </p>
       )}
-
-      {/* Bottom accent line */}
-      <div
-        className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-        style={{
-          background: `linear-gradient(90deg, transparent, ${color}60, transparent)`,
-        }}
-      />
     </div>
   );
 };

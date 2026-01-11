@@ -61,23 +61,11 @@ const ScoreRing: React.FC<ScoreRingProps> = ({
         className="relative transition-transform duration-300 group-hover:scale-105"
         style={{ width: size, height: size }}
       >
-        {/* Background glow */}
-        {showGlow && (
-          <div
-            className="absolute inset-0 rounded-full animate-pulse-glow"
-            style={{
-              background: `radial-gradient(circle, ${color}20, transparent 70%)`,
-              filter: `blur(${size * 0.15}px)`,
-              opacity: pulseOpacity,
-            }}
-          />
-        )}
-
         <svg className="w-full h-full -rotate-90">
-          {/* Track (background circle) */}
+          {/* Track (background circle) - transparent to remove visible background */}
           <circle
             strokeWidth={strokeWidth}
-            stroke="rgba(255, 255, 255, 0.08)"
+            stroke="transparent"
             fill="transparent"
             r={radius}
             cx={size / 2}
@@ -113,10 +101,10 @@ const ScoreRing: React.FC<ScoreRingProps> = ({
         {/* Center content */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span
-            className="font-mono font-bold text-text-primary transition-all duration-300"
+            className="font-mono font-bold transition-all duration-300"
             style={{
               fontSize: size * 0.28,
-              textShadow: showGlow ? `0 0 20px ${color}60` : undefined,
+              color: color,
             }}
           >
             {score != null ? displayedNumber : '--'}
@@ -125,7 +113,7 @@ const ScoreRing: React.FC<ScoreRingProps> = ({
       </div>
 
       {/* Label */}
-      <span className="mt-3 text-xs font-semibold text-text-muted uppercase tracking-widest group-hover:text-text-secondary transition-colors">
+      <span className="mt-3 text-xs font-semibold text-[#666666] uppercase tracking-widest group-hover:text-[#A0A0A0] transition-colors">
         {label}
       </span>
     </div>
