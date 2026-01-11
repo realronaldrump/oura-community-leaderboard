@@ -380,7 +380,7 @@ export const IOSModal: React.FC<IOSModalProps> = ({
             onClick={onClose}
           />
           <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto">
-            <IOSCard className="ios-spring">
+            <IOSCard className="ios-spring p-4 pb-6">
               <div className="flex justify-between items-center mb-4">
                 {title && <h2 className="text-lg font-bold text-[#FAFAFA]">{title}</h2>}
                 <button

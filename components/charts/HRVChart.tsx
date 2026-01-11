@@ -70,7 +70,7 @@ const HRVChart: React.FC<Props> = ({ session, showLabels = false }) => {
                     <span className="ml-auto text-text-muted">During sleep</span>
                 </div>
             )}
-            <ResponsiveContainer width="100%" height={showLabels ? "85%" : "100%"}>
+            <ResponsiveContainer width="100%" height={showLabels ? "85%" : "100%"} minHeight={100}>
                 <AreaChart data={chartData}>
                     <defs>
                         <linearGradient id="hrvGradient" x1="0" y1="0" x2="0" y2="1">

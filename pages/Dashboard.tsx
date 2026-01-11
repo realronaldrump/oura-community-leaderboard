@@ -15,6 +15,8 @@ import HeroSection from '../components/HeroSection';
 import ParallaxSection, { SectionDivider } from '../components/ParallaxSection';
 import FloatingOrb from '../components/FloatingOrb';
 import ScoreBreakdownModal from '../components/ScoreBreakdownModal';
+import MetricDetailModal from '../components/MetricDetailModal';
+import LeaderboardUserDetailModal from '../components/LeaderboardUserDetailModal';
 import DataExport from './DataExport';
 import { Reveal } from '../hooks/useScrollReveal';
 import {
@@ -65,6 +67,31 @@ const Dashboard: React.FC = () => {
     }>({
         isOpen: false,
         scoreType: null,
+    });
+
+    // Metric Detail Modal State
+    const [metricDetailModal, setMetricDetailModal] = useState<{
+        isOpen: boolean;
+        metricType: 'hrv' | 'heart_rate' | 'lowest_hr' | 'spo2' | 'stress' | 'resilience' | 'steps' | 'calories' | 'sleep_duration' | 'deep_sleep' | 'rem_sleep' | 'efficiency' | null;
+        currentValue: number | null;
+        historyData: { date: string; value: number }[];
+        unit?: string;
+        color?: string;
+        date?: string;
+    }>({
+        isOpen: false,
+        metricType: null,
+        currentValue: null,
+        historyData: [],
+    });
+
+    // Leaderboard User Detail Modal State
+    const [leaderboardUserDetail, setLeaderboardUserDetail] = useState<{
+        isOpen: boolean;
+        user: LeaderboardEntry | null;
+    }>({
+        isOpen: false,
+        user: null,
     });
     const queryClient = useQueryClient();
 
@@ -232,6 +259,109 @@ const Dashboard: React.FC = () => {
         { label: 'Latency', value: currentSleep.contributors.latency, color: '#10b981' },
         { label: 'Timing', value: currentSleep.contributors.timing, color: '#10b981' },
     ] : [];
+
+    const getMetricHistoryData = (metricType: string, days: number = 30, data?: DailyStats) => {
+        const dataSource = data || activeData;
+        if (!dataSource) return [];
+
+        const { session: sessionHistory, activity: activityHistory, spo2: spo2History, stress: stressHistory, resilience: resilienceHistory, sleep: sleepHistory } = dataSource;
+
+        const dataPoints: { date: string; value: number }[] = [];
+
+        for (let i = 0; i < Math.min(days, sessionHistory?.length || 0); i++) {
+            const session = sessionHistory?.[i];
+            const activity = activityHistory?.[i];
+            const spo2 = spo2History?.[i];
+            const stress = stressHistory?.[i];
+            const resilience = resilienceHistory?.[i];
+            const sleep = sleepHistory?.[i];
+
+            if (!session?.day) continue;
+
+            let value: number | null = null;
+
+            switch (metricType) {
+                case 'hrv':
+                    value = session.average_hrv ?? null;
+                    break;
+                case 'heart_rate':
+                    value = session.average_heart_rate ?? null;
+                    break;
+                case 'lowest_hr':
+                    value = session.lowest_heart_rate ?? null;
+                    break;
+                case 'spo2':
+                    value = spo2?.spo2_percentage?.average ?? null;
+                    break;
+                case 'stress':
+                    value = stress?.stress_high ?? null;
+                    break;
+                case 'resilience':
+                    if (resilience?.contributors) {
+                        const { sleep_recovery, daytime_recovery, stress } = resilience.contributors;
+                        value = sleep_recovery !== undefined && daytime_recovery !== undefined && stress !== undefined
+                            ? (sleep_recovery + daytime_recovery - stress) / 3
+                            : null;
+                    }
+                    break;
+                case 'steps':
+                    value = activity?.steps ?? null;
+                    break;
+                case 'calories':
+                    value = activity?.active_calories ?? null;
+                    break;
+                case 'sleep_duration':
+                    value = session.total_sleep_duration ? session.total_sleep_duration : null;
+                    break;
+                case 'deep_sleep':
+                    value = session.deep_sleep_duration ? session.deep_sleep_duration : null;
+                    break;
+                case 'rem_sleep':
+                    value = session.rem_sleep_duration ? session.rem_sleep_duration : null;
+                    break;
+                case 'efficiency':
+                    value = session.efficiency ?? null;
+                    break;
+            }
+
+            const isHeartRateMetric = metricType === 'hrv' || metricType === 'heart_rate' || metricType === 'lowest_hr';
+            if (value !== null && (!isHeartRateMetric || value > 0)) {
+                dataPoints.push({ date: session.day, value });
+            }
+        }
+
+        return dataPoints;
+    };
+
+    const handleLeaderboardUserClick = (user: LeaderboardEntry) => {
+        setLeaderboardUserDetail({
+            isOpen: true,
+            user,
+        });
+    };
+
+    const handleMetricCardClick = async (
+        metricType: 'hrv' | 'heart_rate' | 'lowest_hr' | 'spo2' | 'stress' | 'resilience' | 'steps' | 'calories' | 'sleep_duration' | 'deep_sleep' | 'rem_sleep' | 'efficiency',
+        currentValue: number | null,
+        unit?: string,
+        color?: string
+    ) => {
+        if (!activeProfile?.token) return;
+
+        // Fetch all-time data for the metric detail modal
+        const allTimeData = await fetchDailyStats(activeProfile.token, { start: '2016-01-01' });
+        const historyData = getMetricHistoryData(metricType, allTimeData.session?.length || 0, allTimeData);
+
+        setMetricDetailModal({
+            isOpen: true,
+            metricType,
+            currentValue,
+            historyData,
+            unit,
+            color,
+            date: currentSleep?.day,
+        });
+    };
 
     const comparisonMetrics = useMemo(() => [
         { key: 'readiness', label: 'Readiness Score', formatter: (u: LeaderboardEntry) => u.readiness ?? '--', color: 'text-metric-readiness' },
@@ -438,8 +568,32 @@ const Dashboard: React.FC = () => {
                 sessionData={currentSession}
             />
 
+            {/* Metric Detail Modal */}
+            <MetricDetailModal
+                isOpen={metricDetailModal.isOpen}
+                onClose={() => setMetricDetailModal({
+                    isOpen: false,
+                    metricType: null,
+                    currentValue: null,
+                    historyData: [],
+                })}
+                metricType={metricDetailModal.metricType || 'hrv'}
+                currentValue={metricDetailModal.currentValue}
+                historyData={metricDetailModal.historyData}
+                unit={metricDetailModal.unit}
+                color={metricDetailModal.color}
+                date={metricDetailModal.date}
+            />
+
+            {/* Leaderboard User Detail Modal */}
+            <LeaderboardUserDetailModal
+                isOpen={leaderboardUserDetail.isOpen}
+                user={leaderboardUserDetail.user}
+                onClose={() => setLeaderboardUserDetail({ isOpen: false, user: null })}
+            />
+
             {/* Fixed Navigation */}
-            <nav className="fixed top-0 left-0 right-0 z-50 bg-void/80 backdrop-blur-xl border-b border-dashboard-border px-4 md:px-8 py-4">
+            <nav className="fixed top-0 left-0 right-0 z-40 bg-void/80 backdrop-blur-xl border-b border-dashboard-border px-4 md:px-8 py-4">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
                     <h1 className="text-lg font-bold">
                         <span className="gradient-text">Davis Watches You Sleep</span>
@@ -504,6 +658,9 @@ const Dashboard: React.FC = () => {
                 }}
                 onScrollDown={() => {
                     document.getElementById('daily-standings')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                onScoreClick={(scoreType) => {
+                    setScoreBreakdownModal({ isOpen: true, scoreType });
                 }}
             />
 
@@ -790,7 +947,8 @@ const Dashboard: React.FC = () => {
                                     {leaderboardData.map((user, idx) => (
                                         <div
                                             key={user.id}
-                                            className={`grid grid-cols-6 p-4 items-center hover:bg-white/5 transition-colors ${user.isCurrentUser ? 'bg-accent-cyan/5 border-l-2 border-accent-cyan' : ''
+                                            onClick={() => handleLeaderboardUserClick(user)}
+                                            className={`grid grid-cols-6 p-4 items-center hover:bg-white/5 transition-colors cursor-pointer ${user.isCurrentUser ? 'bg-accent-cyan/5 border-l-2 border-accent-cyan' : ''
                                                 }`}
                                         >
                                             <div className="col-span-2 flex items-center gap-3">
@@ -859,9 +1017,21 @@ const Dashboard: React.FC = () => {
                                          color="#10B981"
                                          size={120}
                                      />
-                                     <div className="w-full mt-6 opacity-70 hover:opacity-100 transition-opacity">
-                                         <HistoryChart data={[...readinessHistory].reverse()} dataKey="score" color="#10B981" height={48} />
-                                     </div>
+                                      <div className="w-full mt-6 opacity-70 hover:opacity-100 transition-opacity">
+                                          <HistoryChart
+                                              data={[...readinessHistory].reverse()}
+                                              dataKey="score"
+                                              color="#10B981"
+                                              height={48}
+                                              onDataPointClick={(dataPoint) => {
+                                                  const index = readinessHistory.findIndex(r => r.day === dataPoint.day);
+                                                  if (index >= 0) {
+                                                      setDateIndex(index);
+                                                      setScoreBreakdownModal({ isOpen: true, scoreType: 'readiness' });
+                                                  }
+                                              }}
+                                          />
+                                      </div>
                                  </button>
                              </Reveal>
 
@@ -876,9 +1046,21 @@ const Dashboard: React.FC = () => {
                                          color="#3B82F6"
                                          size={120}
                                      />
-                                     <div className="w-full mt-6 opacity-70 hover:opacity-100 transition-opacity">
-                                         <HistoryChart data={[...sleepHistory].reverse()} dataKey="score" color="#3B82F6" height={48} />
-                                     </div>
+                                      <div className="w-full mt-6 opacity-70 hover:opacity-100 transition-opacity">
+                                          <HistoryChart
+                                              data={[...sleepHistory].reverse()}
+                                              dataKey="score"
+                                              color="#3B82F6"
+                                              height={48}
+                                              onDataPointClick={(dataPoint) => {
+                                                  const index = sleepHistory.findIndex(s => s.day === dataPoint.day);
+                                                  if (index >= 0) {
+                                                      setDateIndex(index);
+                                                      setScoreBreakdownModal({ isOpen: true, scoreType: 'sleep' });
+                                                  }
+                                              }}
+                                          />
+                                      </div>
                                  </button>
                              </Reveal>
 
@@ -893,9 +1075,21 @@ const Dashboard: React.FC = () => {
                                          color="#F59E0B"
                                          size={120}
                                      />
-                                     <div className="w-full mt-6 opacity-70 hover:opacity-100 transition-opacity">
-                                         <HistoryChart data={[...activityHistory].reverse()} dataKey="score" color="#F59E0B" height={48} />
-                                     </div>
+                                      <div className="w-full mt-6 opacity-70 hover:opacity-100 transition-opacity">
+                                          <HistoryChart
+                                              data={[...activityHistory].reverse()}
+                                              dataKey="score"
+                                              color="#F59E0B"
+                                              height={48}
+                                              onDataPointClick={(dataPoint) => {
+                                                  const index = activityHistory.findIndex(a => a.day === dataPoint.day);
+                                                  if (index >= 0) {
+                                                      setDateIndex(index);
+                                                      setScoreBreakdownModal({ isOpen: true, scoreType: 'activity' });
+                                                  }
+                                              }}
+                                          />
+                                      </div>
                                  </button>
                              </Reveal>
                          </div>
@@ -912,14 +1106,43 @@ const Dashboard: React.FC = () => {
                         parallaxSpeed={0.03}
                     >
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-                            <MetricCard title="Total Sleep" value={formatDuration(currentSession?.total_sleep_duration)} color="#3B82F6" />
+                            <MetricCard
+                                title="Total Sleep"
+                                value={formatDuration(currentSession?.total_sleep_duration)}
+                                color="#3B82F6"
+                                metricType="sleep_duration"
+                                showDrillDownIndicator={true}
+                                onClick={() => handleMetricCardClick('sleep_duration', currentSession?.total_sleep_duration ?? null, 'hours', '#3B82F6')}
+                            />
                             <MetricCard title="Time in Bed" value={formatDuration(currentSession?.time_in_bed)} color="#3B82F6" />
                             <MetricCard title="Bedtime" value={formatTime(currentSession?.bedtime_start)} subtext="Fell asleep" />
                             <MetricCard title="Wake Time" value={formatTime(currentSession?.bedtime_end)} subtext="Woke up" />
-                            <MetricCard title="Deep Sleep" value={formatDuration(currentSession?.deep_sleep_duration)} color="#1E40AF" />
-                            <MetricCard title="REM Sleep" value={formatDuration(currentSession?.rem_sleep_duration)} color="#8B5CF6" />
+                            <MetricCard
+                                title="Deep Sleep"
+                                value={formatDuration(currentSession?.deep_sleep_duration)}
+                                color="#1E40AF"
+                                metricType="deep_sleep"
+                                showDrillDownIndicator={true}
+                                onClick={() => handleMetricCardClick('deep_sleep', currentSession?.deep_sleep_duration ?? null, 'hours', '#1E40AF')}
+                            />
+                            <MetricCard
+                                title="REM Sleep"
+                                value={formatDuration(currentSession?.rem_sleep_duration)}
+                                color="#8B5CF6"
+                                metricType="rem_sleep"
+                                showDrillDownIndicator={true}
+                                onClick={() => handleMetricCardClick('rem_sleep', currentSession?.rem_sleep_duration ?? null, 'hours', '#8B5CF6')}
+                            />
                             <MetricCard title="Light Sleep" value={formatDuration(currentSession?.light_sleep_duration)} color="#60A5FA" />
-                            <MetricCard title="Efficiency" value={currentSession?.efficiency} unit="%" color="#10B981" />
+                            <MetricCard
+                                title="Efficiency"
+                                value={currentSession?.efficiency}
+                                unit="%"
+                                color="#10B981"
+                                metricType="efficiency"
+                                showDrillDownIndicator={true}
+                                onClick={() => handleMetricCardClick('efficiency', currentSession?.efficiency, '%', '#10B981')}
+                            />
                         </div>
 
                         {/* Sleep Stages Chart */}
@@ -942,10 +1165,46 @@ const Dashboard: React.FC = () => {
                         parallaxSpeed={0.03}
                     >
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-                            <MetricCard title="Lowest HR" value={currentSession?.lowest_heart_rate} unit="bpm" color="#EF4444" subtext="During sleep" />
-                            <MetricCard title="Avg HR" value={currentSession?.average_heart_rate?.toFixed(0)} unit="bpm" color="#EF4444" subtext="During sleep" />
-                            <MetricCard title="HRV" value={currentSession?.average_hrv} unit="ms" color="#A855F7" subtext="Heart rate variability" />
-                            <MetricCard title="SpO2" value={currentSpo2?.spo2_percentage?.average?.toFixed(1)} unit="%" color="#06B6D4" subtext="Oxygen saturation" />
+                            <MetricCard
+                                title="Lowest HR"
+                                value={currentSession?.lowest_heart_rate}
+                                unit="bpm"
+                                color="#EF4444"
+                                subtext="During sleep"
+                                metricType="lowest_hr"
+                                showDrillDownIndicator={true}
+                                onClick={() => handleMetricCardClick('lowest_hr', currentSession?.lowest_heart_rate, 'bpm', '#EF4444')}
+                            />
+                            <MetricCard
+                                title="Avg HR"
+                                value={currentSession?.average_heart_rate?.toFixed(0)}
+                                unit="bpm"
+                                color="#EF4444"
+                                subtext="During sleep"
+                                metricType="heart_rate"
+                                showDrillDownIndicator={true}
+                                onClick={() => handleMetricCardClick('heart_rate', currentSession?.average_heart_rate, 'bpm', '#EF4444')}
+                            />
+                            <MetricCard
+                                title="HRV"
+                                value={currentSession?.average_hrv}
+                                unit="ms"
+                                color="#A855F7"
+                                subtext="Heart rate variability"
+                                metricType="hrv"
+                                showDrillDownIndicator={true}
+                                onClick={() => handleMetricCardClick('hrv', currentSession?.average_hrv, 'ms', '#A855F7')}
+                            />
+                            <MetricCard
+                                title="SpO2"
+                                value={currentSpo2?.spo2_percentage?.average?.toFixed(1)}
+                                unit="%"
+                                color="#06B6D4"
+                                subtext="Oxygen saturation"
+                                metricType="spo2"
+                                showDrillDownIndicator={true}
+                                onClick={() => handleMetricCardClick('spo2', currentSpo2?.spo2_percentage?.average, '%', '#06B6D4')}
+                            />
                         </div>
 
                         {hrData && hrData.length > 0 && (
@@ -960,7 +1219,7 @@ const Dashboard: React.FC = () => {
                         <Reveal delay={100}>
                             <div className="glass-card p-6 mt-4" style={{ height: 200 }}>
                                 <h3 className="text-sm text-text-muted uppercase tracking-wider mb-4">HRV Trend (30 Days)</h3>
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer width="100%" height="100%" minHeight={100}>
                                     <LineChart data={sessionHistory.slice(0, 30).reverse()}>
                                         <XAxis
                                             dataKey="day"
@@ -1008,9 +1267,33 @@ const Dashboard: React.FC = () => {
                         parallaxSpeed={0.03}
                     >
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <MetricCard title="Steps" value={currentActivity?.steps?.toLocaleString()} color="#F59E0B" />
-                            <MetricCard title="Active Calories" value={currentActivity?.active_calories?.toLocaleString()} unit="kcal" color="#F59E0B" />
-                            <MetricCard title="Total Calories" value={currentActivity?.total_calories?.toLocaleString()} unit="kcal" subtext="All calories burned" />
+                            <MetricCard
+                                title="Steps"
+                                value={currentActivity?.steps?.toLocaleString()}
+                                color="#F59E0B"
+                                metricType="steps"
+                                showDrillDownIndicator={true}
+                                onClick={() => handleMetricCardClick('steps', currentActivity?.steps, 'steps', '#F59E0B')}
+                            />
+                            <MetricCard
+                                title="Active Calories"
+                                value={currentActivity?.active_calories?.toLocaleString()}
+                                unit="kcal"
+                                color="#F59E0B"
+                                metricType="active_calories"
+                                showDrillDownIndicator={true}
+                                onClick={() => handleMetricCardClick('calories', currentActivity?.active_calories, 'kcal', '#F59E0B')}
+                            />
+                            <MetricCard
+                                title="Total Calories"
+                                value={currentActivity?.total_calories?.toLocaleString()}
+                                unit="kcal"
+                                color="#F59E0B"
+                                subtext="All calories burned"
+                                metricType="total_calories"
+                                showDrillDownIndicator={true}
+                                onClick={() => handleMetricCardClick('calories', currentActivity?.total_calories, 'kcal', '#F59E0B')}
+                            />
                             <MetricCard title="Walking Distance" value={((currentActivity?.equivalent_walking_distance || 0) / 1000).toFixed(1)} unit="km" />
                             <MetricCard title="High Activity" value={formatDuration(currentActivity?.high_activity_time)} color="#DC2626" />
                             <MetricCard title="Medium Activity" value={formatDuration(currentActivity?.medium_activity_time)} color="#F59E0B" />

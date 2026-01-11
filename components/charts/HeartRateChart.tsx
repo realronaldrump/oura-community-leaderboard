@@ -1,6 +1,10 @@
-import React, { useMemo } from 'react';
-import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, ReferenceLine } from 'recharts';
+import React, { useMemo, useState } from 'react';
+import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, ReferenceLine, Dot } from 'recharts';
 import { HeartRate } from '../../types';
+import { IOSModal, IOSButton, IOSListItem } from '../ios';
+import { Clock, Info } from 'lucide-react';
+
+type TimeRange = '6h' | '12h' | '24h' | '48h';
 
 interface Props {
     data: HeartRate[];
@@ -8,13 +12,48 @@ interface Props {
 }
 
 const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
-    // Filter to last 24 hours and transform data for chart
+    const [timeRange, setTimeRange] = useState<TimeRange>('24h');
+    const [selectedPoint, setSelectedPoint] = useState<HeartRate | null>(null);
+
+    const handleDataPointClick = (data: any) => {
+        if (data?.payload) {
+            setSelectedPoint(data.payload);
+        }
+    };
+
+    const getTimeRangeHours = (range: TimeRange): number => {
+        switch (range) {
+            case '6h': return 6;
+            case '12h': return 12;
+            case '24h': return 24;
+            case '48h': return 48;
+            default: return 24;
+        }
+    };
+
+    const CustomDot = (props: any) => {
+        const { cx, cy, payload } = props;
+        return (
+            <Dot
+                cx={cx}
+                cy={cy}
+                r={selectedPoint?.timestamp === payload?.timestamp ? 6 : 3}
+                fill={selectedPoint?.timestamp === payload?.timestamp ? '#EF4444' : '#EF4444'}
+                stroke="#EF4444"
+                strokeWidth={selectedPoint?.timestamp === payload?.timestamp ? 3 : 1.5}
+                className="cursor-pointer transition-all duration-300 hover:r-5"
+                onClick={() => handleDataPointClick(props)}
+            />
+        );
+    };
+
+    // Filter to selected time range and transform data for chart
     const chartData = useMemo(() => {
         const now = new Date();
-        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const hoursAgo = new Date(now.getTime() - getTimeRangeHours(timeRange) * 60 * 60 * 1000);
 
         return data
-            .filter(hr => new Date(hr.timestamp) >= twentyFourHoursAgo)
+            .filter(hr => new Date(hr.timestamp) >= hoursAgo)
             .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
             .map((hr) => ({
                 timestamp: new Date(hr.timestamp).getTime(),
@@ -25,9 +64,10 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                     hour12: true
                 }),
                 hour: new Date(hr.timestamp).getHours(),
-                source: hr.source
+                source: hr.source,
+                fullData: hr
             }));
-    }, [data]);
+    }, [data, timeRange]);
 
     // Calculate stats
     const bpmValues = chartData.map(d => d.bpm).filter(Boolean);
@@ -55,65 +95,135 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
     };
 
     return (
-        <div className="h-full">
-            {showLabels && (
-                <div className="flex gap-4 mb-2 text-xs text-text-secondary">
-                    <span>Min: <span className="text-metric-hr font-mono">{minBpm}</span></span>
-                    <span>Avg: <span className="text-text-primary font-mono">{avgBpm}</span></span>
-                    <span>Max: <span className="text-metric-hr font-mono">{maxBpm}</span></span>
-                    <span className="ml-auto text-text-muted">Last 24 hours</span>
-                </div>
-            )}
-            <ResponsiveContainer width="100%" height={showLabels ? "85%" : "100%"}>
-                <LineChart data={chartData}>
-                    <XAxis
-                        dataKey="timestamp"
-                        type="number"
-                        domain={['dataMin', 'dataMax']}
-                        hide={!showLabels}
-                        tick={{ fill: '#737373', fontSize: 10 }}
-                        axisLine={false}
-                        tickLine={false}
-                        tickFormatter={formatHour}
-                        interval="preserveStartEnd"
-                        minTickGap={40}
-                    />
-                    <YAxis
-                        domain={['auto', 'auto']}
-                        hide
-                    />
-                    {avgBpm && (
-                        <ReferenceLine
-                            y={avgBpm}
-                            stroke="#3a3a3a"
-                            strokeDasharray="3 3"
+        <>
+            <div className="h-full">
+                {/* Time Range Selector */}
+                {showLabels && (
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex gap-2">
+                            {(['6h', '12h', '24h', '48h'] as TimeRange[]).map((range) => (
+                                <button
+                                    key={range}
+                                    onClick={() => setTimeRange(range)}
+                                    className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${timeRange === range
+                                        ? 'bg-[#EF4444] text-white'
+                                        : 'bg-[#1A1A1A] text-text-muted hover:text-text-primary'
+                                        }`}
+                                >
+                                    {range}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-text-secondary">
+                            <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                Min: <span className="text-metric-hr font-mono">{minBpm}</span>
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <Info className="w-3 h-3" />
+                                Avg: <span className="text-text-primary font-mono">{avgBpm}</span>
+                            </span>
+                            <span>Max: <span className="text-metric-hr font-mono">{maxBpm}</span></span>
+                        </div>
+                    </div>
+                )}
+                <ResponsiveContainer width="100%" height={showLabels ? "80%" : "100%"} minHeight={100}>
+                    <LineChart data={chartData}>
+                        <XAxis
+                            dataKey="timestamp"
+                            type="number"
+                            domain={['dataMin', 'dataMax']}
+                            hide={!showLabels}
+                            tick={{ fill: '#737373', fontSize: 10 }}
+                            axisLine={false}
+                            tickLine={false}
+                            tickFormatter={formatHour}
+                            interval="preserveStartEnd"
+                            minTickGap={40}
                         />
-                    )}
-                    <Tooltip
-                        contentStyle={{
-                            backgroundColor: '#1a1a1a',
-                            border: '1px solid #2a2a2a',
-                            borderRadius: '8px',
-                            fontSize: '12px'
-                        }}
-                        labelStyle={{ color: '#737373' }}
-                        labelFormatter={(timestamp: number) => new Date(timestamp).toLocaleTimeString('en-US', {
-                            hour: 'numeric',
-                            minute: '2-digit',
-                            hour12: true
-                        })}
-                        formatter={(value: number) => [`${value} bpm`, 'Heart Rate']}
-                    />
-                    <Line
-                        type="monotone"
-                        dataKey="bpm"
-                        stroke="#ef4444"
-                        dot={false}
-                        strokeWidth={1.5}
-                    />
-                </LineChart>
-            </ResponsiveContainer>
-        </div>
+                        <YAxis
+                            domain={['auto', 'auto']}
+                            hide
+                        />
+                        {avgBpm && (
+                            <ReferenceLine
+                                y={avgBpm}
+                                stroke="#3a3a3a"
+                                strokeDasharray="3 3"
+                            />
+                        )}
+                        <Tooltip
+                            contentStyle={{
+                                backgroundColor: '#1a1a1a',
+                                border: '1px solid #2a2a2a',
+                                borderRadius: '8px',
+                                fontSize: '12px'
+                            }}
+                            labelStyle={{ color: '#737373' }}
+                            labelFormatter={(timestamp: number) => new Date(timestamp).toLocaleTimeString('en-US', {
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true
+                            })}
+                            formatter={(value: number) => [`${value} bpm`, 'Heart Rate']}
+                        />
+                        <Line
+                            type="monotone"
+                            dataKey="bpm"
+                            stroke="#ef4444"
+                            dot={<CustomDot />}
+                            activeDot={{ r: 6, stroke: '#EF4444', strokeWidth: 3 }}
+                            strokeWidth={1.5}
+                        />
+                    </LineChart>
+                </ResponsiveContainer>
+            </div>
+
+            {/* Data Point Detail Modal */}
+            {selectedPoint && (
+                <IOSModal
+                    isOpen={!!selectedPoint}
+                    onClose={() => setSelectedPoint(null)}
+                    title="Heart Rate Detail"
+                >
+                    <div className="space-y-4">
+                        <IOSListItem
+                            title="Heart Rate"
+                            subtitle={`${selectedPoint.bpm} bpm`}
+                            icon={<div className="text-[#EF4444]"><Clock className="w-4 h-4" /></div>}
+                            rightElement={<div className="text-xs text-text-muted">
+                                {new Date(selectedPoint.timestamp).toLocaleTimeString('en-US', {
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                    hour12: true
+                                })}
+                            </div>}
+                        />
+                        <IOSListItem
+                            title="Date & Time"
+                            subtitle={new Date(selectedPoint.timestamp).toLocaleString('en-US', {
+                                weekday: 'long',
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true
+                            })}
+                            icon={<div className="text-[#6B7280]"><Info className="w-4 h-4" /></div>}
+                        />
+                        <IOSListItem
+                            title="Source"
+                            subtitle={selectedPoint.source}
+                            icon={<div className="text-[#3B82F6]"><Clock className="w-4 h-4" /></div>}
+                        />
+                        <IOSButton onClick={() => setSelectedPoint(null)} className="w-full" variant="secondary">
+                            Close
+                        </IOSButton>
+                    </div>
+                </IOSModal>
+            )}
+        </>
     );
 };
 

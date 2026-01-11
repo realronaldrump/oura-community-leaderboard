@@ -37,21 +37,21 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                     {
                         key: 'previous_night',
                         label: 'Previous Night',
-                        description: 'Quality of sleep from the previous night',
+                        description: 'Quality and duration of sleep from the previous night. This factor evaluates how well you slept last night, including total sleep time, sleep stages, and how restful your sleep was. Good sleep quality is fundamental to feeling ready for the day.',
                         weight: readiness.contributors.previous_night,
                         icon: <Moon className="w-4 h-4" />
                     },
                     {
                         key: 'sleep_balance',
                         label: 'Sleep Balance',
-                        description: 'Consistency of sleep patterns over time',
+                        description: 'Consistency and adequacy of your sleep patterns over the past 1-2 weeks. This factor tracks whether you\'re getting enough sleep consistently, going to bed and waking at regular times, and maintaining good sleep habits.',
                         weight: readiness.contributors.sleep_balance,
                         icon: <Clock className="w-4 h-4" />
                     },
                     {
                         key: 'hrv_balance',
                         label: 'HRV Balance',
-                        description: 'Heart rate variability balance (recovery indicator)',
+                        description: 'Heart rate variability trends over time, which indicates your body\'s recovery status and stress levels. Higher and stable HRV suggests good recovery, while declining HRV may indicate accumulated stress or insufficient recovery.',
                         weight: readiness.contributors.hrv_balance,
                         actualValue: session?.average_hrv ? `${session.average_hrv} ms` : undefined,
                         icon: <Heart className="w-4 h-4" />
@@ -59,7 +59,7 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                     {
                         key: 'resting_heart_rate',
                         label: 'Resting Heart Rate',
-                        description: 'Resting heart rate (lower is better)',
+                        description: 'Your resting heart rate compared to your baseline. A lower resting heart rate generally indicates better cardiovascular fitness and recovery, while elevated resting heart rate may suggest stress, fatigue, or incomplete recovery.',
                         weight: readiness.contributors.resting_heart_rate,
                         actualValue: session?.lowest_heart_rate ? `${session.lowest_heart_rate} bpm` : undefined,
                         icon: <Heart className="w-4 h-4" />
@@ -67,28 +67,28 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                     {
                         key: 'recovery_index',
                         label: 'Recovery Index',
-                        description: 'Overall recovery status from physical activity',
+                        description: 'Your body\'s ability to recover from physical stress and exercise. This factor analyzes how quickly your heart rate returns to normal after activity and overall recovery patterns, indicating whether you\'re adequately recovering between workouts.',
                         weight: readiness.contributors.recovery_index,
                         icon: <TrendingUp className="w-4 h-4" />
                     },
                     {
                         key: 'body_temperature',
                         label: 'Body Temperature',
-                        description: 'Body temperature deviation from baseline',
+                        description: 'Your body temperature patterns and deviations from your baseline. Slightly lower resting body temperature can indicate better recovery, while elevated temperature may suggest illness, stress, or accumulated fatigue.',
                         weight: readiness.contributors.body_temperature,
                         icon: <Thermometer className="w-4 h-4" />
                     },
                     {
                         key: 'activity_balance',
                         label: 'Activity Balance',
-                        description: 'Balance between rest and activity periods',
+                        description: 'The balance between physical activity and rest periods. This factor ensures you\'re getting enough movement without overtraining, and adequate rest to allow for recovery and adaptation.',
                         weight: readiness.contributors.activity_balance,
                         icon: <Target className="w-4 h-4" />
                     },
                     {
                         key: 'previous_day_activity',
                         label: 'Previous Day Activity',
-                        description: 'Physical activity from the previous day',
+                        description: 'The intensity and volume of physical activity from the previous day. This factor considers whether your activity level was appropriate and how it impacts your current readiness.',
                         weight: readiness.contributors.previous_day_activity,
                         icon: <Zap className="w-4 h-4" />
                     }
@@ -100,7 +100,7 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                     {
                         key: 'total_sleep',
                         label: 'Total Sleep',
-                        description: 'Total duration of sleep',
+                        description: 'The total amount of time spent asleep during your sleep period. This factor evaluates whether you\'re getting adequate sleep duration for optimal health and performance.',
                         weight: sleep.contributors.total_sleep,
                         actualValue: session?.total_sleep_duration ? `${Math.round(session.total_sleep_duration / 3600)}h ${Math.round((session.total_sleep_duration % 3600) / 60)}m` : undefined,
                         icon: <Clock className="w-4 h-4" />
@@ -108,7 +108,7 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                     {
                         key: 'efficiency',
                         label: 'Efficiency',
-                        description: 'Percentage of time in bed spent sleeping',
+                        description: 'The percentage of time in bed actually spent sleeping. This factor measures sleep quality by evaluating how quickly you fall asleep and how much of your time in bed is spent sleeping versus awake.',
                         weight: sleep.contributors.efficiency,
                         actualValue: session?.efficiency ? `${session.efficiency}%` : undefined,
                         icon: <Target className="w-4 h-4" />
@@ -116,30 +116,30 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                     {
                         key: 'restfulness',
                         label: 'Restfulness',
-                        description: 'How restful and undisturbed the sleep was',
+                        description: 'How restful and undisturbed your sleep was, based on movement and awakenings during the night. More restful sleep with fewer interruptions contributes to higher sleep quality.',
                         weight: sleep.contributors.restfulness,
                         icon: <Moon className="w-4 h-4" />
                     },
                     {
                         key: 'rem_sleep',
                         label: 'REM Sleep',
-                        description: 'Duration of REM (Rapid Eye Movement) sleep',
+                        description: 'The amount of time spent in REM (Rapid Eye Movement) sleep, which is crucial for emotional processing, creativity, memory consolidation, and cognitive function.',
                         weight: sleep.contributors.rem_sleep,
-                        actualValue: session?.rem_sleep_duration ? `${Math.round(session.rem_sleep_duration / 60)}m` : undefined,
+                        actualValue: session?.rem_sleep_duration ? `${Math.round(session.rem_sleep_duration / 3600)}h ${Math.round((session.rem_sleep_duration % 3600) / 60)}m` : undefined,
                         icon: <Zap className="w-4 h-4" />
                     },
                     {
                         key: 'deep_sleep',
                         label: 'Deep Sleep',
-                        description: 'Duration of deep sleep stage',
+                        description: 'The duration of deep sleep stages, which are essential for physical recovery, immune function, tissue repair, and hormone release.',
                         weight: sleep.contributors.deep_sleep,
-                        actualValue: session?.deep_sleep_duration ? `${Math.round(session.deep_sleep_duration / 60)}m` : undefined,
+                        actualValue: session?.deep_sleep_duration ? `${Math.round(session.deep_sleep_duration / 3600)}h ${Math.round((session.deep_sleep_duration % 3600) / 60)}m` : undefined,
                         icon: <Moon className="w-4 h-4" />
                     },
                     {
                         key: 'latency',
                         label: 'Latency',
-                        description: 'Time taken to fall asleep (lower is better)',
+                        description: 'The time it takes to fall asleep after getting into bed. Shorter latency typically indicates better sleep health and less stress before bed.',
                         weight: sleep.contributors.latency,
                         actualValue: session?.latency ? `${Math.round(session.latency / 60)}m` : undefined,
                         icon: <Clock className="w-4 h-4" />
@@ -147,7 +147,7 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                     {
                         key: 'timing',
                         label: 'Timing',
-                        description: 'Alignment of sleep with circadian rhythm',
+                        description: 'How well your sleep timing aligns with your circadian rhythm and regular sleep schedule. Consistent sleep-wake times support better sleep quality and overall health.',
                         weight: sleep.contributors.timing,
                         icon: <Clock className="w-4 h-4" />
                     }
@@ -159,14 +159,14 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                     {
                         key: 'meet_daily_targets',
                         label: 'Meet Daily Targets',
-                        description: 'Success in meeting daily activity goals over 7 days',
+                        description: 'How consistently you meet your daily activity goals over the past 7 days. This factor tracks your ability to maintain regular physical activity and achieve step or calorie targets.',
                         weight: activity.contributors.meet_daily_targets,
                         icon: <Target className="w-4 h-4" />
                     },
                     {
                         key: 'move_every_hour',
                         label: 'Move Every Hour',
-                        description: 'Regular movement breaks preventing long sedentary periods',
+                        description: 'Your success in taking regular movement breaks throughout the day to avoid prolonged sedentary periods. Standing up and moving each hour supports metabolism, circulation, and overall health.',
                         weight: activity.contributors.move_every_hour,
                         actualValue: activity.inactivity_alerts !== undefined ? `${activity.inactivity_alerts} alerts` : undefined,
                         icon: <Clock className="w-4 h-4" />
@@ -174,28 +174,28 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                     {
                         key: 'recovery_time',
                         label: 'Recovery Time',
-                        description: 'Adequate recovery periods between activities over 7 days',
+                        description: 'The balance between activity and adequate rest periods over the past 7 days. This factor ensures you\'re not overtraining and are allowing sufficient recovery between activities.',
                         weight: activity.contributors.recovery_time,
                         icon: <TrendingUp className="w-4 h-4" />
                     },
                     {
                         key: 'stay_active',
                         label: 'Stay Active',
-                        description: 'Consistent activity throughout the day',
+                        description: 'Your level of consistent physical activity spread throughout the day, rather than being sedentary for long periods with occasional bursts of activity.',
                         weight: activity.contributors.stay_active,
                         icon: <Zap className="w-4 h-4" />
                     },
                     {
                         key: 'training_frequency',
                         label: 'Training Frequency',
-                        description: 'Frequency of training sessions over 7 days',
+                        description: 'How often you engage in structured training or higher-intensity physical activity sessions over the past 7 days. Regular training supports cardiovascular fitness and strength.',
                         weight: activity.contributors.training_frequency,
                         icon: <Target className="w-4 h-4" />
                     },
                     {
                         key: 'training_volume',
                         label: 'Training Volume',
-                        description: 'Volume/intensity of training over 7 days',
+                        description: 'The overall intensity and duration of your training activities over the past 7 days. This factor tracks the total workload you\'ve put into physical activities.',
                         weight: activity.contributors.training_volume,
                         icon: <TrendingUp className="w-4 h-4" />
                     }

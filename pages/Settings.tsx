@@ -93,7 +93,7 @@ const Settings: React.FC = () => {
             />
 
             {/* Header */}
-            <nav className="fixed top-0 left-0 right-0 z-50 bg-void/80 backdrop-blur-xl border-b border-dashboard-border px-4 md:px-8 py-4">
+            <nav className="fixed top-0 left-0 right-0 z-40 bg-void/80 backdrop-blur-xl border-b border-dashboard-border px-4 md:px-8 py-4">
                 <div className="max-w-2xl mx-auto flex justify-between items-center">
                     <button
                         onClick={handleBackToDashboard}

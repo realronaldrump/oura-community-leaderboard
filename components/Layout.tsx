@@ -81,7 +81,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onNavigate, onLogo
       </div>
 
       {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-[#141414]/80 backdrop-blur-xl border-b border-[#222] z-50 flex items-center justify-between px-4 safe-top">
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-[#141414]/80 backdrop-blur-xl border-b border-[#222] z-40 flex items-center justify-between px-4 safe-top">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-full bg-[#00C896] flex items-center justify-center">
             <span className="font-bold text-black text-xs">O</span>

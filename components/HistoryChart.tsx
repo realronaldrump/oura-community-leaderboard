@@ -1,16 +1,37 @@
 import React from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Dot } from 'recharts';
 
 interface HistoryChartProps {
-  data: any[];
-  dataKey: string;
-  color: string;
-  height?: number;
+   data: any[];
+   dataKey: string;
+   color: string;
+   height?: number;
+   onDataPointClick?: (dataPoint: any) => void;
 }
 
-const HistoryChart: React.FC<HistoryChartProps> = ({ data, dataKey, color, height = 64 }) => {
+const HistoryChart: React.FC<HistoryChartProps> = ({ data, dataKey, color, height = 64, onDataPointClick }) => {
   // Take only last 7 days for cleanliness
   const chartData = [...data].reverse().slice(-7);
+
+  const handleDataPointClick = (data: any) => {
+    onDataPointClick?.(data.payload);
+  };
+
+  const CustomDot = (props: any) => {
+    const { cx, cy, payload } = props;
+    return (
+        <Dot
+            cx={cx}
+            cy={cy}
+            r={4}
+            fill={color}
+            stroke={color}
+            strokeWidth={2}
+            className="cursor-pointer"
+            onClick={() => handleDataPointClick(payload)}
+        />
+    );
+  };
 
   if (chartData.length === 0) {
     return (
@@ -25,7 +46,7 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ data, dataKey, color, heigh
 
   return (
     <div style={{ height, width: '100%' }}>
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" minHeight={height}>
         <LineChart data={chartData}>
           <XAxis
             dataKey="day"
@@ -53,7 +74,9 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ data, dataKey, color, heigh
             dataKey={dataKey}
             stroke={color}
             strokeWidth={2}
-            dot={false}
+            dot={<CustomDot />}
+            activeDot={{ r: 6, stroke: color, strokeWidth: 3 }}
+            isAnimationActive={true}
           />
         </LineChart>
       </ResponsiveContainer>

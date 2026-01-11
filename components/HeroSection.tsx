@@ -12,6 +12,7 @@ interface HeroSectionProps {
     };
     userName?: string;
     onScrollDown?: () => void;
+    onScoreClick?: (scoreType: 'readiness' | 'sleep' | 'activity') => void;
 }
 
 const HeroSection: React.FC<HeroSectionProps> = ({
@@ -20,6 +21,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({
     scores,
     userName,
     onScrollDown,
+    onScoreClick,
 }) => {
     const { scrollY } = useParallax();
 
@@ -141,6 +143,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({
                                 score={scores.readiness}
                                 label="Readiness"
                                 color="#10B981"
+                                onClick={() => onScoreClick?.('readiness')}
                             />
                         )}
                         {scores.sleep != null && (
@@ -148,6 +151,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({
                                 score={scores.sleep}
                                 label="Sleep"
                                 color="#3B82F6"
+                                onClick={() => onScoreClick?.('sleep')}
                             />
                         )}
                         {scores.activity != null && (
@@ -155,6 +159,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({
                                 score={scores.activity}
                                 label="Activity"
                                 color="#F59E0B"
+                                onClick={() => onScoreClick?.('activity')}
                             />
                         )}
                     </div>
@@ -183,11 +188,12 @@ interface ScoreOrbProps {
     score: number;
     label: string;
     color: string;
+    onClick?: () => void;
 }
 
-const ScoreOrb: React.FC<ScoreOrbProps> = ({ score, label, color }) => {
+const ScoreOrb: React.FC<ScoreOrbProps> = ({ score, label, color, onClick }) => {
     return (
-        <div className="flex flex-col items-center group cursor-pointer">
+        <div className="flex flex-col items-center group cursor-pointer" onClick={onClick}>
             <div
                 className="relative w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center transition-all duration-300 group-hover:scale-110"
                 style={{
