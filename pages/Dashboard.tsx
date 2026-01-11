@@ -14,6 +14,8 @@ import ContributorsBreakdown from '../components/ContributorsBreakdown';
 import HeroSection from '../components/HeroSection';
 import ParallaxSection, { SectionDivider } from '../components/ParallaxSection';
 import FloatingOrb from '../components/FloatingOrb';
+import ScoreBreakdownModal from '../components/ScoreBreakdownModal';
+import DataExport from './DataExport';
 import { Reveal } from '../hooks/useScrollReveal';
 import {
     LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip
@@ -38,12 +40,12 @@ import {
     DailySnapshot
 } from '../components/analytics';
 
-import { Lightbulb, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Lightbulb, ChevronLeft, ChevronRight, X, Database } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
     const { activeProfile, profiles, setActiveProfileId, login, removeProfile, firebaseError, isLoadingProfiles, retryFirebaseConnection } = useUser();
     const [loading, setLoading] = useState(false);
-    const [viewMode, setViewMode] = useState<'daily' | 'versus' | 'history' | 'insights' | 'analytics'>('daily');
+    const [viewMode, setViewMode] = useState<'daily' | 'versus' | 'history' | 'insights' | 'analytics' | 'data-export'>('daily');
     const [analyticsSubTab, setAnalyticsSubTab] = useState<'timeline' | 'correlation'>('timeline');
     const [insightsSubTab, setInsightsSubTab] = useState<'streaks' | 'patterns' | 'whatif' | 'milestones' | 'snapshot'>('streaks');
     const [isSyncing, setIsSyncing] = useState(false);
@@ -54,6 +56,15 @@ const Dashboard: React.FC = () => {
         stepsCompleted: 0,
         totalSteps: 0,
         details: '',
+    });
+
+    // Score Breakdown Modal State
+    const [scoreBreakdownModal, setScoreBreakdownModal] = useState<{
+        isOpen: boolean;
+        scoreType: 'readiness' | 'sleep' | 'activity' | null;
+    }>({
+        isOpen: false,
+        scoreType: null,
     });
     const queryClient = useQueryClient();
 
@@ -414,6 +425,20 @@ const Dashboard: React.FC = () => {
                 onClose={() => setShowSyncModal(false)}
             />
 
+            {/* Score Breakdown Modal */}
+            <ScoreBreakdownModal
+                isOpen={scoreBreakdownModal.isOpen}
+                onClose={() => setScoreBreakdownModal({ isOpen: false, scoreType: null })}
+                scoreType={scoreBreakdownModal.scoreType || 'readiness'}
+                scoreData={
+                    scoreBreakdownModal.scoreType === 'readiness' ? currentReadiness :
+                    scoreBreakdownModal.scoreType === 'sleep' ? currentSleep :
+                    scoreBreakdownModal.scoreType === 'activity' ? currentActivity :
+                    null
+                }
+                sessionData={currentSession}
+            />
+
             {/* Fixed Navigation */}
             <nav className="fixed top-0 left-0 right-0 z-50 bg-void/80 backdrop-blur-xl border-b border-dashboard-border px-4 md:px-8 py-4">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
@@ -438,14 +463,21 @@ const Dashboard: React.FC = () => {
                         >
                             Switch Profile
                         </button>
-                        <button
-                            onClick={() => {
-                                window.history.pushState({}, '', '/settings');
-                                window.dispatchEvent(new PopStateEvent('popstate'));
-                            }}
-                            className="text-text-muted hover:text-text-primary transition-colors"
-                            title="Settings"
-                        >
+                         <button
+                             onClick={() => setViewMode('data-export')}
+                             className="text-text-muted hover:text-accent-purple transition-colors"
+                             title="Data Export"
+                         >
+                             <Database className="w-5 h-5" />
+                         </button>
+                         <button
+                             onClick={() => {
+                                 window.history.pushState({}, '', '/settings');
+                                 window.dispatchEvent(new PopStateEvent('popstate'));
+                             }}
+                             className="text-text-muted hover:text-text-primary transition-colors"
+                             title="Settings"
+                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -512,12 +544,18 @@ const Dashboard: React.FC = () => {
                                 >
                                     Insights
                                 </button>
-                                <button
-                                    onClick={() => setViewMode('analytics')}
-                                    className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${viewMode === 'analytics' ? 'bg-blue-500/20 text-blue-400' : 'hover:text-white'}`}
-                                >
-                                    Analytics
-                                </button>
+                                 <button
+                                     onClick={() => setViewMode('analytics')}
+                                     className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${viewMode === 'analytics' ? 'bg-blue-500/20 text-blue-400' : 'hover:text-white'}`}
+                                 >
+                                     Analytics
+                                 </button>
+                                 <button
+                                     onClick={() => setViewMode('data-export')}
+                                     className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${viewMode === 'data-export' ? 'bg-purple-500/20 text-purple-400' : 'hover:text-white'}`}
+                                 >
+                                     Data Export
+                                 </button>
                             </div>
                         </div>
 
@@ -604,26 +642,8 @@ const Dashboard: React.FC = () => {
                                         usersData={userQueries.map(q => ({ data: q.data as DailyStats | undefined }))}
                                     />
                                 )}
-                            </div>
-                        )}
-
-                        {/* Analytics Mode UI */}
-                        {viewMode === 'analytics' && (
-                            <div className="animate-fade-in">
-                                {analyticsSubTab === 'timeline' && (
-                                    <TimelineView
-                                        profiles={profiles}
-                                        usersData={userQueries.map(q => ({ data: q.data as DailyStats | undefined }))}
-                                    />
-                                )}
-                                {analyticsSubTab === 'correlation' && (
-                                    <CorrelationExplorer
-                                        profiles={profiles}
-                                        usersData={userQueries.map(q => ({ data: q.data as DailyStats | undefined }))}
-                                    />
-                                )}
-                            </div>
-                        )}
+                             </div>
+                         )}
 
                         {/* Versus Mode UI */}
                         {viewMode === 'versus' && leaderboardData.length >= 2 && (
@@ -829,48 +849,57 @@ const Dashboard: React.FC = () => {
                 {viewMode === 'daily' && (
                     <ParallaxSection parallaxSpeed={0.05}>
                         <div className="grid grid-cols-3 gap-4 md:gap-8">
-                            <Reveal delay={0}>
-                                <div className="glass-card p-6 md:p-8 flex flex-col items-center">
-                                    <ScoreRing
-                                        score={currentReadiness?.score}
-                                        label="Readiness"
-                                        color="#10B981"
-                                        size={120}
-                                    />
-                                    <div className="w-full mt-6 opacity-70 hover:opacity-100 transition-opacity">
-                                        <HistoryChart data={[...readinessHistory].reverse()} dataKey="score" color="#10B981" height={48} />
-                                    </div>
-                                </div>
-                            </Reveal>
+                             <Reveal delay={0}>
+                                 <button
+                                     onClick={() => setScoreBreakdownModal({ isOpen: true, scoreType: 'readiness' })}
+                                     className="glass-card p-6 md:p-8 flex flex-col items-center hover:border-accent-cyan/50 transition-all duration-300 cursor-pointer w-full"
+                                 >
+                                     <ScoreRing
+                                         score={currentReadiness?.score}
+                                         label="Readiness"
+                                         color="#10B981"
+                                         size={120}
+                                     />
+                                     <div className="w-full mt-6 opacity-70 hover:opacity-100 transition-opacity">
+                                         <HistoryChart data={[...readinessHistory].reverse()} dataKey="score" color="#10B981" height={48} />
+                                     </div>
+                                 </button>
+                             </Reveal>
 
-                            <Reveal delay={100}>
-                                <div className="glass-card p-6 md:p-8 flex flex-col items-center">
-                                    <ScoreRing
-                                        score={currentSleep?.score}
-                                        label="Sleep"
-                                        color="#3B82F6"
-                                        size={120}
-                                    />
-                                    <div className="w-full mt-6 opacity-70 hover:opacity-100 transition-opacity">
-                                        <HistoryChart data={[...sleepHistory].reverse()} dataKey="score" color="#3B82F6" height={48} />
-                                    </div>
-                                </div>
-                            </Reveal>
+                             <Reveal delay={100}>
+                                 <button
+                                     onClick={() => setScoreBreakdownModal({ isOpen: true, scoreType: 'sleep' })}
+                                     className="glass-card p-6 md:p-8 flex flex-col items-center hover:border-accent-cyan/50 transition-all duration-300 cursor-pointer w-full"
+                                 >
+                                     <ScoreRing
+                                         score={currentSleep?.score}
+                                         label="Sleep"
+                                         color="#3B82F6"
+                                         size={120}
+                                     />
+                                     <div className="w-full mt-6 opacity-70 hover:opacity-100 transition-opacity">
+                                         <HistoryChart data={[...sleepHistory].reverse()} dataKey="score" color="#3B82F6" height={48} />
+                                     </div>
+                                 </button>
+                             </Reveal>
 
-                            <Reveal delay={200}>
-                                <div className="glass-card p-6 md:p-8 flex flex-col items-center">
-                                    <ScoreRing
-                                        score={currentActivity?.score}
-                                        label="Activity"
-                                        color="#F59E0B"
-                                        size={120}
-                                    />
-                                    <div className="w-full mt-6 opacity-70 hover:opacity-100 transition-opacity">
-                                        <HistoryChart data={[...activityHistory].reverse()} dataKey="score" color="#F59E0B" height={48} />
-                                    </div>
-                                </div>
-                            </Reveal>
-                        </div>
+                             <Reveal delay={200}>
+                                 <button
+                                     onClick={() => setScoreBreakdownModal({ isOpen: true, scoreType: 'activity' })}
+                                     className="glass-card p-6 md:p-8 flex flex-col items-center hover:border-accent-cyan/50 transition-all duration-300 cursor-pointer w-full"
+                                 >
+                                     <ScoreRing
+                                         score={currentActivity?.score}
+                                         label="Activity"
+                                         color="#F59E0B"
+                                         size={120}
+                                     />
+                                     <div className="w-full mt-6 opacity-70 hover:opacity-100 transition-opacity">
+                                         <HistoryChart data={[...activityHistory].reverse()} dataKey="score" color="#F59E0B" height={48} />
+                                     </div>
+                                 </button>
+                             </Reveal>
+                         </div>
                     </ParallaxSection>
                 )}
 
@@ -1015,11 +1044,21 @@ const Dashboard: React.FC = () => {
                                 />
                             </Reveal>
                         </div>
-                    </ParallaxSection>
-                )}
+                     </ParallaxSection>
+                 )}
 
-            </div>
-        </div>
+                 {/* ========== DATA EXPORT SECTION ========== */}
+                 {viewMode === 'data-export' && (
+                     <ParallaxSection
+                         title="Data Export"
+                         subtitle="Download your Oura data for analysis."
+                     >
+                         <DataExport />
+                     </ParallaxSection>
+                 )}
+
+             </div>
+         </div>
     );
 };
 
