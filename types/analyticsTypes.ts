@@ -227,3 +227,33 @@ export interface UserAnalyticsProfile {
     milestones: Milestone[];
     pinnedSnapshots: string[];  // Snapshot IDs
 }
+
+// ============================================
+// CHALLENGES
+// ============================================
+
+export type ChallengeType = 'sleep_consistency' | 'readiness_streak' | 'step_goal' | 'early_bedtime';
+
+export interface ChallengeDefinition {
+    id: string;
+    type: ChallengeType;
+    name: string;
+    description: string;
+    icon: string;
+    durationDays: number;
+    threshold: number;
+    metric: 'sleep' | 'readiness' | 'activity' | 'steps' | 'bedtime';
+}
+
+export type ChallengeStatus = 'active' | 'completed' | 'failed';
+
+export interface UserChallenge {
+    id: string; // unique instance id
+    challengeId: string; // refers to ChallengeDefinition.id
+    userId: string;
+    startDate: string; // ISO date
+    endDate: string; // ISO date
+    status: ChallengeStatus;
+    progress: number; // days completed
+    history: Record<string, boolean>; // date -> success map
+}
