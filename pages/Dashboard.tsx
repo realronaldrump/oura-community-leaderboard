@@ -37,7 +37,8 @@ import {
     CorrelationExplorer,
     WhatIfSimulator,
     MilestoneTracker,
-    DailySnapshot
+    DailySnapshot,
+    ChallengeManager
 } from '../components/analytics';
 
 import { Lightbulb, ChevronLeft, ChevronRight, X, Database } from 'lucide-react';
@@ -47,7 +48,7 @@ const Dashboard: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [viewMode, setViewMode] = useState<'daily' | 'versus' | 'history' | 'insights' | 'analytics' | 'data-export'>('daily');
     const [analyticsSubTab, setAnalyticsSubTab] = useState<'timeline' | 'correlation'>('timeline');
-    const [insightsSubTab, setInsightsSubTab] = useState<'streaks' | 'patterns' | 'whatif' | 'milestones' | 'snapshot'>('streaks');
+    const [insightsSubTab, setInsightsSubTab] = useState<'streaks' | 'challenges' | 'patterns' | 'whatif' | 'milestones' | 'snapshot'>('streaks');
     const [isSyncing, setIsSyncing] = useState(false);
     const [showSyncModal, setShowSyncModal] = useState(false);
     const [syncProgress, setSyncProgress] = useState<SyncProgress>({
@@ -695,6 +696,7 @@ const Dashboard: React.FC = () => {
                             <div className="flex flex-wrap gap-2 mb-6">
                                 {[
                                     { key: 'streaks', label: 'Streaks & Badges' },
+                                    { key: 'challenges', label: 'Challenges' },
                                     { key: 'patterns', label: 'Patterns' },
                                     { key: 'whatif', label: 'What-If' },
                                     { key: 'milestones', label: 'Milestones' },
@@ -748,6 +750,9 @@ const Dashboard: React.FC = () => {
                                         profiles={profiles}
                                         usersData={userQueries.map(q => ({ data: q.data as DailyStats | undefined }))}
                                     />
+                                )}
+                                {insightsSubTab === 'challenges' && (
+                                    <ChallengeManager />
                                 )}
                                 {insightsSubTab === 'patterns' && (
                                     <PatternDetector

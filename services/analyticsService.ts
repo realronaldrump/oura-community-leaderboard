@@ -8,9 +8,209 @@ import {
     Pattern, PatternType, CorrelationResult, MetricOption,
     WhatIfScenario, WhatIfResult, Milestone, MilestoneType,
     DailySnapshotData, TimelineDataPoint, TimelineInsight,
-    CalendarHeatmapDay
+    CalendarHeatmapDay, UserChallenge, ChallengeDefinition, ChallengeStatus
 } from '../types/analyticsTypes';
 import * as ss from 'simple-statistics';
+
+// ============================================
+// CHALLENGE DEFINITIONS
+// ============================================
+
+export const CHALLENGE_DEFINITIONS: ChallengeDefinition[] = [
+    {
+        id: 'sleep_week',
+        type: 'sleep_consistency',
+        name: 'Sleep Week',
+        description: 'Get a Sleep Score above 85 for 7 consecutive days.',
+        icon: 'crown',
+        durationDays: 7,
+        threshold: 85,
+        metric: 'sleep'
+    },
+    {
+        id: 'activity_blitz',
+        type: 'step_goal',
+        name: 'Activity Blitz',
+        description: 'Hit 12,000 steps for 3 days in a row.',
+        icon: 'footprints',
+        durationDays: 3,
+        threshold: 12000,
+        metric: 'steps'
+    },
+    {
+        id: 'readiness_reboot',
+        type: 'readiness_streak',
+        name: 'Readiness Reboot',
+        description: 'Keep Readiness above 80 for 5 days.',
+        icon: 'zap',
+        durationDays: 5,
+        threshold: 80,
+        metric: 'readiness'
+    },
+    {
+        id: 'early_bird_challenge',
+        type: 'early_bedtime',
+        name: 'Early Bird Special',
+        description: 'Go to bed before 10 PM for 5 nights.',
+        icon: 'moon',
+        durationDays: 5,
+        threshold: 22,
+        metric: 'bedtime'
+    }
+];
+
+// ============================================
+// CHALLENGE LOGIC
+// ============================================
+
+export function checkChallengeProgress(
+    challenge: UserChallenge,
+    data: DailyStats
+): UserChallenge {
+    if (challenge.status !== 'active') return challenge;
+
+    const def = CHALLENGE_DEFINITIONS.find(d => d.id === challenge.challengeId);
+    if (!def) return challenge;
+
+    const updatedHistory = { ...challenge.history };
+    let consecutiveDays = 0;
+    let maxConsecutive = 0;
+    let isFailed = false;
+
+    // Iterate through dates from startDate to today (or endDate)
+    const start = new Date(challenge.startDate);
+    const end = new Date();
+    // Safety check to not go beyond duration
+    const maxEnd = new Date(challenge.startDate);
+    maxEnd.setDate(maxEnd.getDate() + def.durationDays - 1);
+
+    const checkUntil = end < maxEnd ? end : maxEnd;
+
+    for (let d = new Date(start); d <= checkUntil; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+
+        // Skip if already recorded (unless we want to re-verify, but for now trust history if present)
+        // Actually, we should re-verify if data might have synced late.
+
+        const metricValue = getMetricValueForDate(data, def.metric, dateStr);
+        let success = false;
+
+        if (metricValue !== null) {
+            if (def.type === 'early_bedtime') {
+                // Special case for bedtime: must be < threshold OR >= 22 (meaning 10PM, so technically > 22 if threshold is 22? No, < 22 is earlier) 
+                // Wait, 10 PM is 22:00. 
+                // "Before 10 PM" means hour < 22. But bedtime is usually late.
+                // 22:00, 23:00, 00:00, 01:00.
+                // If threshold is 22 (10 PM). 
+                // success if hour < 22 (e.g. 21) OR hour > 4 (next morning? No bedtime is usually evening).
+                // Let's assume standard logic: < threshold. But 01:00 is < 22.
+                // Usually bedtimes are 18:00 - 06:00.
+                // Let's use logic: if hour >= 18 and hour < threshold. Or hour < 4 (very late/early).
+                // Simple logic from `checkThreshold` earlier: `hour < threshold || hour >= 22` was for "Before 11 PM".
+                // If threshold is 22. We want < 22.
+                // What if bedtime is 23:00? > 22. Fail.
+                // What if bedtime is 01:00? < 22. But that's LATE.
+                // We need to handle the day wrap.
+                // Let's use the helper `checkThreshold` if possible, but we don't have the `item` here, just value.
+                // Let's replicate logic: < threshold means *earlier* than threshold?
+                // If threshold is 22 (10 PM). 
+                // 21:00 is OK. 23:00 is Bad. 01:00 is Bad.
+                // 01:00 is numerically < 22.
+                // We need to treat 0-4 as "High numbers" effectively.
+                // Adjusted hour: if hour < 12, hour += 24.
+                // 21 -> 21. 22 -> 22. 23 -> 23. 00 -> 24. 01 -> 25.
+                // Threshold 22.
+                // 21 < 22 (Pass). 23 > 22 (Fail). 24 > 22 (Fail).
+                const adjHour = metricValue < 12 ? metricValue + 24 : metricValue;
+                // Threshold also needs logic? If threshold is 22.
+                success = adjHour < def.threshold;
+            } else {
+                success = metricValue >= def.threshold;
+            }
+        }
+
+        updatedHistory[dateStr] = success;
+
+        if (success) {
+            consecutiveDays++;
+        } else {
+            // Include today in the failure check only if data exists. 
+            // If data is missing (null), is it a fail?
+            // Usually yes, for a "streak".
+            // But if it's "today" and data hasn't synced, we shouldn't fail yet.
+            if (dateStr === new Date().toISOString().split('T')[0] && metricValue === null) {
+                // Today, no data yet. Don't count as fail, but break streak calculation?
+                // Actually, just ignore for now.
+            } else {
+                // Past day or today with data that failed.
+                consecutiveDays = 0;
+            }
+        }
+
+        maxConsecutive = Math.max(maxConsecutive, consecutiveDays);
+    }
+
+    // Determine Status
+    // If we missed a day in the *past*, and it acts as a streak reset, can we still complete it?
+    // "7 consecutive days". If we are at day 4 and miss one, we reset to 0.
+    // Can we finish? Any 7 day window?
+    // "Get ... for 7 consecutive days".
+    // Usually challenges have a fixed duration e.g. "This Week".
+    // Or is it "Start a 7 day challenge"? 
+    // If I start today, I have 7 days to do it.
+    // If I miss day 2, I fail the challenge.
+    // Yes, let's go with "Strict Streak" for now.
+
+    // Check for failure: Any `false` in history *before* today?
+    // Or simpler: check if we have enough days left to finish?
+    // If I need 7 days. I am on day 3. I missed day 2.
+    // I can never get 7 consecutive days within a 7 day window.
+
+    // So: Status is completed if all days in duration are success.
+    // Failed if any day is failure (assuming strict consecutive).
+
+    // Let's refine: The user starts a challenge. The clock starts.
+    // They must maintain the streak for `durationDays`.
+    // Day 1: Success. Day 2: Fail. -> Challenge Failed.
+
+    const sortedDates = Object.keys(updatedHistory).sort();
+    let currentStreak = 0;
+
+    for (const d of sortedDates) {
+        if (updatedHistory[d]) {
+            currentStreak++;
+        } else {
+            // Failure!
+            if (d < new Date().toISOString().split('T')[0] || (d === new Date().toISOString().split('T')[0] && getMetricValueForDate(data, def.metric, d) !== null)) {
+                // Only fail if it's a confirmed failure (past or present with data)
+                isFailed = true;
+            }
+            // Reset logic if we allowed retries, but we don't.
+        }
+    }
+
+    let status: ChallengeStatus = 'active';
+    if (currentStreak >= def.durationDays) {
+        status = 'completed';
+    } else if (isFailed) {
+        status = 'failed';
+    }
+
+    return {
+        ...challenge,
+        progress: currentStreak,
+        history: updatedHistory,
+        status
+    };
+}
+
+function getMetricValueForDate(data: DailyStats, metric: string, date: string): number | null {
+    const array = getMetricArray(data, metric);
+    const item = array.find(i => i.day === date);
+    if (!item) return null;
+    return getMetricValue(item, metric);
+}
+
 
 // ============================================
 // STREAK DEFINITIONS

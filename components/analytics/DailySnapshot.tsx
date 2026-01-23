@@ -1,13 +1,13 @@
 import React, { useMemo, useState, useRef } from 'react';
 import { DailyStats, formatDuration } from '../../types';
 import { DailySnapshotData } from '../../types/analyticsTypes';
-import { generateDailySnapshot } from '../../services/analyticsService';
+import { generateDailySnapshot, CHALLENGE_DEFINITIONS } from '../../services/analyticsService';
 import html2canvas from 'html2canvas';
-import { Camera, ChevronLeft, ChevronRight, Image, Pin, BedDouble, Zap, Flame, Footprints, Clock, Trophy, BarChart2 } from 'lucide-react';
+import { Camera, ChevronLeft, ChevronRight, Image, Pin, BedDouble, Zap, Flame, Footprints, Clock, Trophy, BarChart2, Crown } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
 
 interface DailySnapshotProps {
-    profiles: Array<{ id: string; email?: string | null }>;
+    profiles: Array<{ id: string; email?: string | null; challenges?: any[] }>;
     usersData: Array<{ data: DailyStats | undefined }>;
 }
 
@@ -229,6 +229,30 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                                                     <Flame className="w-3 h-3" /> {user.activity}
                                                 </span>
                                             </div>
+
+                                            {/* Challenge Progress Badge */}
+                                            {(() => {
+                                                const profile = profiles.find(p => p.id === user.userId);
+                                                const activeChallenge = profile?.challenges?.find((c: any) => c.status === 'active');
+
+                                                if (activeChallenge) {
+                                                    const def = CHALLENGE_DEFINITIONS.find(d => d.id === activeChallenge.challengeId);
+                                                    if (def) {
+                                                        const successToday = activeChallenge.history?.[selectedDate];
+                                                        return (
+                                                            <div className="mt-2 text-xs flex items-center gap-1 text-[var(--text-muted)]">
+                                                                <Crown className="w-3 h-3 text-yellow-400" />
+                                                                <span className="text-[var(--text-primary)]">{def.name}:</span>
+                                                                {successToday
+                                                                    ? <span className="text-green-400">Target Hit!</span>
+                                                                    : <span>Day {activeChallenge.progress + 1}</span>
+                                                                }
+                                                            </div>
+                                                        );
+                                                    }
+                                                }
+                                                return null;
+                                            })()}
                                         </div>
                                         <div className="text-right">
                                             <p className="text-2xl font-bold font-mono text-[var(--text-primary)]">
