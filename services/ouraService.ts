@@ -13,11 +13,23 @@ import {
 } from '../types';
 
 class OuraService {
+  private unavailableEndpointsByToken = new Map<string, Set<string>>();
+
   private getHeaders(token: string) {
     return {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
     };
+  }
+
+  private isEndpointUnavailable(token: string, endpoint: string): boolean {
+    return this.unavailableEndpointsByToken.get(token)?.has(endpoint) ?? false;
+  }
+
+  private markEndpointUnavailable(token: string, endpoint: string): void {
+    const unavailable = this.unavailableEndpointsByToken.get(token) ?? new Set<string>();
+    unavailable.add(endpoint);
+    this.unavailableEndpointsByToken.set(token, unavailable);
   }
 
   private getDateRange(daysBackOrStart: number | string = 30, end?: string) {
@@ -140,6 +152,10 @@ class OuraService {
   }
 
   async getDailyStress(token: string, start?: string, end?: string): Promise<DailyStress[]> {
+    if (this.isEndpointUnavailable(token, 'daily_stress')) {
+      return [];
+    }
+
     const { start_date, end_date } = this.getDateRange(start || 30, end);
     const response = await fetch(
       `${API_BASE_URL}/daily_stress?start_date=${start_date}&end_date=${end_date}`,
@@ -148,6 +164,7 @@ class OuraService {
     if (!response.ok) {
       // Some accounts/rings may not have stress access even with valid tokens.
       if (response.status === 401 || response.status === 403 || response.status === 404) {
+        this.markEndpointUnavailable(token, 'daily_stress');
         console.warn('Stress data unavailable for this account/scope');
         return [];
       }
@@ -159,6 +176,10 @@ class OuraService {
   }
 
   async getDailyResilience(token: string, start?: string, end?: string): Promise<DailyResilience[]> {
+    if (this.isEndpointUnavailable(token, 'daily_resilience')) {
+      return [];
+    }
+
     const { start_date, end_date } = this.getDateRange(start || 30, end);
     const response = await fetch(
       `${API_BASE_URL}/daily_resilience?start_date=${start_date}&end_date=${end_date}`,
@@ -167,6 +188,7 @@ class OuraService {
     if (!response.ok) {
       // Resilience is not available for every account/device or scope combination.
       if (response.status === 401 || response.status === 403 || response.status === 404) {
+        this.markEndpointUnavailable(token, 'daily_resilience');
         console.warn('Resilience data unavailable for this account/scope');
         return [];
       }

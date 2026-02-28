@@ -28,11 +28,3 @@ export const getAuthUrl = () => {
 export const AUTH_URL = getAuthUrl();
 
 export const API_BASE_URL = '/api';
-
-export const MOCK_FRIENDS = [
-  { id: 'm1', name: 'Sarah J.', avatar: 'https://picsum.photos/40/40?random=1' },
-  { id: 'm2', name: 'Mike T.', avatar: 'https://picsum.photos/40/40?random=2' },
-  { id: 'm3', name: 'Jessica L.', avatar: 'https://picsum.photos/40/40?random=3' },
-  { id: 'm4', name: 'David B.', avatar: 'https://picsum.photos/40/40?random=4' },
-  { id: 'm5', name: 'Emma W.', avatar: 'https://picsum.photos/40/40?random=5' },
-];
