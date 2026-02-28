@@ -165,7 +165,7 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
         const awake = (session.awake_time || 0) / 3600;
         const totalSleep = deep + rem + light; // Total actual sleep (excluding awake)
         const totalWithAwake = deep + rem + light + awake;
-        
+
         return {
             day: session.day,
             Deep: deep,
@@ -235,7 +235,7 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
                     transition: opacity 0.2s ease-in-out;
                 }
             `}</style>
-            <ResponsiveContainer width="100%" height="100%" minHeight={100}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={100}>
                 <BarChart
                     data={chartData}
                     margin={{ top: 24, right: 10, left: 0, bottom: 0 }}
@@ -270,21 +270,21 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
                     <Bar dataKey="Deep" stackId="a" fill="#1e40af" name="Deep" radius={[0, 0, 4, 4]} onClick={handleBarClick} className="cursor-pointer" />
                     <Bar dataKey="Light" stackId="a" fill="#3b82f6" name="Light" onClick={handleBarClick} className="cursor-pointer" />
                     <Bar dataKey="REM" stackId="a" fill="#8b5cf6" name="REM" onClick={handleBarClick} className="cursor-pointer" />
-                    <Bar 
-                        dataKey="Awake" 
-                        stackId="a" 
-                        fill="#6b7280" 
-                        name="Awake" 
-                        radius={[4, 4, 0, 0]} 
-                        onClick={handleBarClick} 
+                    <Bar
+                        dataKey="Awake"
+                        stackId="a"
+                        fill="#6b7280"
+                        name="Awake"
+                        radius={[4, 4, 0, 0]}
+                        onClick={handleBarClick}
                         className="cursor-pointer"
                         label={(props: any) => {
                             const { x, y, width, payload } = props;
                             if (!payload || !payload.day) return null;
-                            
+
                             const isHovered = payload.day === hoveredDay;
                             const total = payload.totalSleep;
-                            
+
                             return (
                                 <text
                                     x={x + width / 2}
@@ -295,7 +295,7 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
                                     fontWeight={600}
                                     fontFamily="monospace"
                                     className="total-label"
-                                    style={{ 
+                                    style={{
                                         opacity: isHovered ? 1 : 0,
                                         pointerEvents: 'none'
                                     }}

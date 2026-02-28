@@ -62,7 +62,7 @@ const ComparisonHeartRateChart: React.FC<ComparisonHeartRateChartProps> = ({ use
 
     return (
         <div className="w-full h-64">
-            <ResponsiveContainer width="100%" height="100%" minHeight={200}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
                 <LineChart data={formattedData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis

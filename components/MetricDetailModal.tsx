@@ -404,7 +404,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                 {config.title} History
                             </h4>
                             <div style={{ height: 200 }}>
-                                <ResponsiveContainer width="100%" height="100%" minHeight={150}>
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={150}>
                                     <AreaChart data={filteredData}>
                                         <defs>
                                             <linearGradient id={`colorGradient-${metricType}`} x1="0" y1="0" x2="0" y2="1">
@@ -545,17 +545,15 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                         {getTopEntries(selectedStatistic, 10).map((entry, idx) => (
                                             <div
                                                 key={entry.date}
-                                                className={`flex items-center justify-between p-3 rounded-lg ${
-                                                    idx === 0 ? 'bg-[#10B981]/10' : 'bg-[#1A1A1A]'
-                                                }`}
+                                                className={`flex items-center justify-between p-3 rounded-lg ${idx === 0 ? 'bg-[#10B981]/10' : 'bg-[#1A1A1A]'
+                                                    }`}
                                             >
                                                 <div className="flex items-center gap-3">
-                                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                                                        idx === 0 ? 'bg-[#10B981] text-black' :
-                                                        idx === 1 ? 'bg-[#C0C0C0] text-black' :
-                                                        idx === 2 ? 'bg-[#CD7F32] text-black' :
-                                                        'bg-[#2A2A2A] text-[#666666]'
-                                                    }`}>
+                                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${idx === 0 ? 'bg-[#10B981] text-black' :
+                                                            idx === 1 ? 'bg-[#C0C0C0] text-black' :
+                                                                idx === 2 ? 'bg-[#CD7F32] text-black' :
+                                                                    'bg-[#2A2A2A] text-[#666666]'
+                                                        }`}>
                                                         {idx + 1}
                                                     </div>
                                                     <div>

@@ -322,9 +322,33 @@ const Dashboard: React.FC = () => {
     // ============================================
     // LOADING STATE
     // ============================================
+    const activeQueryError = userQueries.find((q, idx) => profiles[idx].id === activeProfile?.id && q.isError);
+
+    if (activeQueryError) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#0C0C0C]">
+                <div className="w-full max-w-sm text-center">
+                    <div className="w-16 h-16 bg-[#141414] border border-[#222] rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <Settings className="w-8 h-8 text-[#F87171]" />
+                    </div>
+                    <h2 className="text-xl font-bold tracking-tight text-[#FAFAFA] mb-2">Session Expired</h2>
+                    <p className="text-[#666] text-sm mb-8">
+                        Your Oura connection has expired. Please securely reconnect your ring to continue syncing your data.
+                    </p>
+                    <button onClick={login} className="w-full py-3.5 bg-[#00C896] text-[#0C0C0C] font-semibold rounded-lg hover:opacity-90 transition-opacity text-sm mb-4">
+                        Reconnect Oura Ring
+                    </button>
+                    <button onClick={() => { if (activeProfile) removeProfile(activeProfile.id); }} className="text-[#666] hover:text-[#FAFAFA] text-sm transition-colors">
+                        Remove Profile
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     if (!activeData && userQueries.some(q => q.isLoading)) {
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center">
+            <div className="min-h-screen flex flex-col items-center justify-center bg-[#0C0C0C]">
                 <div className="w-5 h-5 border-2 border-[#333] border-t-[#00C896] rounded-full animate-spin" />
                 <p className="text-[#666] mt-4 text-sm">Loading your data...</p>
             </div>
@@ -494,7 +518,7 @@ const Dashboard: React.FC = () => {
                             {sessionHistory.length > 0 && (
                                 <div className="bg-[#141414] border border-[#222] rounded-lg p-4" style={{ height: 180 }}>
                                     <h4 className="text-xs text-[#666] uppercase tracking-wider mb-3">HRV Trend (30 Days)</h4>
-                                    <ResponsiveContainer width="100%" height="100%" minHeight={100}>
+                                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={100}>
                                         <LineChart data={sessionHistory.slice(0, 30).reverse()}>
                                             <XAxis dataKey="day" tick={{ fill: '#444', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(val) => val.slice(5)} />
                                             <YAxis tick={{ fill: '#444', fontSize: 10 }} axisLine={false} tickLine={false} unit=" ms" />

@@ -127,7 +127,7 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                         </div>
                     </div>
                 )}
-                <ResponsiveContainer width="100%" height={showLabels ? "80%" : "100%"} minHeight={100}>
+                <ResponsiveContainer width="100%" height={showLabels ? "80%" : "100%"} minWidth={0} minHeight={100}>
                     <LineChart data={chartData}>
                         <XAxis
                             dataKey="timestamp"

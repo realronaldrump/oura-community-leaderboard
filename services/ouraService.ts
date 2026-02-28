@@ -47,7 +47,10 @@ class OuraService {
     const response = await fetch(`${API_BASE_URL}/personal_info`, {
       headers: this.getHeaders(token),
     });
-    if (!response.ok) throw new Error('Failed to fetch personal info');
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Unauthorized');
+      throw new Error('Failed to fetch personal info');
+    }
     return response.json();
   }
 
@@ -57,7 +60,10 @@ class OuraService {
       `${API_BASE_URL}/daily_sleep?start_date=${start_date}&end_date=${end_date}`,
       { headers: this.getHeaders(token) }
     );
-    if (!response.ok) throw new Error('Failed to fetch daily sleep data');
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Unauthorized');
+      throw new Error('Failed to fetch daily sleep data');
+    }
     const data = await response.json();
     return data.data || [];
   }
@@ -68,7 +74,10 @@ class OuraService {
       `${API_BASE_URL}/sleep?start_date=${start_date}&end_date=${end_date}`,
       { headers: this.getHeaders(token) }
     );
-    if (!response.ok) throw new Error('Failed to fetch sleep sessions');
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Unauthorized');
+      throw new Error('Failed to fetch sleep sessions');
+    }
     const data = await response.json();
     return data.data || [];
   }
@@ -79,7 +88,10 @@ class OuraService {
       `${API_BASE_URL}/daily_readiness?start_date=${start_date}&end_date=${end_date}`,
       { headers: this.getHeaders(token) }
     );
-    if (!response.ok) throw new Error('Failed to fetch readiness data');
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Unauthorized');
+      throw new Error('Failed to fetch readiness data');
+    }
     const data = await response.json();
     return data.data || [];
   }
@@ -90,7 +102,10 @@ class OuraService {
       `${API_BASE_URL}/daily_activity?start_date=${start_date}&end_date=${end_date}`,
       { headers: this.getHeaders(token) }
     );
-    if (!response.ok) throw new Error('Failed to fetch activity data');
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Unauthorized');
+      throw new Error('Failed to fetch activity data');
+    }
     const data = await response.json();
     return data.data || [];
   }
@@ -102,7 +117,10 @@ class OuraService {
       `${API_BASE_URL}/heartrate?start_datetime=${start_date}T00:00:00&end_datetime=${end_date}T23:59:59`,
       { headers: this.getHeaders(token) }
     );
-    if (!response.ok) throw new Error('Failed to fetch heart rate data');
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Unauthorized');
+      throw new Error('Failed to fetch heart rate data');
+    }
     const data = await response.json();
     return data.data || [];
   }
@@ -113,7 +131,10 @@ class OuraService {
       `${API_BASE_URL}/daily_spo2?start_date=${start_date}&end_date=${end_date}`,
       { headers: this.getHeaders(token) }
     );
-    if (!response.ok) throw new Error('Failed to fetch SpO2 data');
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Unauthorized');
+      throw new Error('Failed to fetch SpO2 data');
+    }
     const data = await response.json();
     return data.data || [];
   }
@@ -125,6 +146,7 @@ class OuraService {
       { headers: this.getHeaders(token) }
     );
     if (!response.ok) {
+      if (response.status === 401) throw new Error('Unauthorized');
       console.warn('Stress data not available');
       return [];
     }
@@ -139,6 +161,7 @@ class OuraService {
       { headers: this.getHeaders(token) }
     );
     if (!response.ok) {
+      if (response.status === 401) throw new Error('Unauthorized');
       console.warn('Resilience data not available');
       return [];
     }
@@ -152,7 +175,10 @@ class OuraService {
       `${API_BASE_URL}/workout?start_date=${start_date}&end_date=${end_date}`,
       { headers: this.getHeaders(token) }
     );
-    if (!response.ok) throw new Error('Failed to fetch workout data');
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Unauthorized');
+      throw new Error('Failed to fetch workout data');
+    }
     const data = await response.json();
     return data.data || [];
   }

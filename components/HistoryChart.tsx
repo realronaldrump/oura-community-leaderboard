@@ -2,11 +2,11 @@ import React from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Dot } from 'recharts';
 
 interface HistoryChartProps {
-   data: any[];
-   dataKey: string;
-   color: string;
-   height?: number;
-   onDataPointClick?: (dataPoint: any) => void;
+  data: any[];
+  dataKey: string;
+  color: string;
+  height?: number;
+  onDataPointClick?: (dataPoint: any) => void;
 }
 
 const HistoryChart: React.FC<HistoryChartProps> = ({ data, dataKey, color, height = 64, onDataPointClick }) => {
@@ -20,16 +20,16 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ data, dataKey, color, heigh
   const CustomDot = (props: any) => {
     const { cx, cy, payload } = props;
     return (
-        <Dot
-            cx={cx}
-            cy={cy}
-            r={4}
-            fill={color}
-            stroke={color}
-            strokeWidth={2}
-            className="cursor-pointer"
-            onClick={() => handleDataPointClick(payload)}
-        />
+      <Dot
+        cx={cx}
+        cy={cy}
+        r={4}
+        fill={color}
+        stroke={color}
+        strokeWidth={2}
+        className="cursor-pointer"
+        onClick={() => handleDataPointClick(payload)}
+      />
     );
   };
 
@@ -46,7 +46,7 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ data, dataKey, color, heigh
 
   return (
     <div style={{ height, width: '100%' }}>
-      <ResponsiveContainer width="100%" height="100%" minHeight={height}>
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={height}>
         <LineChart data={chartData}>
           <XAxis
             dataKey="day"
