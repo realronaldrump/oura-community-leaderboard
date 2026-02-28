@@ -11,7 +11,8 @@ const REQUESTED_SCOPES = [
   'tag',
   'workout',
   'session',
-  'spo2',
+  // Oura OAuth docs use spo2Daily for blood oxygen access.
+  'spo2Daily',
 ];
 
 // Dynamically determine the redirect URI based on the current environment.

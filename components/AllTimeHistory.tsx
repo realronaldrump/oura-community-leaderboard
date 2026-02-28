@@ -26,6 +26,10 @@ type SortDirection = 'asc' | 'desc';
 type DateRange = '7d' | '30d' | '90d' | '1y' | 'all';
 type Smoothing = 'raw' | '3d' | '7d' | '14d';
 
+const parseOuraDay = (day: string): Date => new Date(`${day}T12:00:00`);
+const compareNames = (a: string, b: string): number =>
+    a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
+
 const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }) => {
     const [sortField, setSortField] = useState<SortField>('date');
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -59,7 +63,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                     id: `${profile.id}-${dayStr}`,
                     userId: profile.id,
                     userName: (profile.email || 'User').split('@')[0],
-                    date: new Date(dayStr),
+                    date: parseOuraDay(dayStr),
                     dateStr: dayStr,
                     sleep: sScore,
                     readiness: rScore,
@@ -135,29 +139,51 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
     // 3. Sort Data (for Table)
     const tableData = useMemo(() => {
         return [...filteredData].sort((a, b) => {
-            let valA = a[sortField];
-            let valB = b[sortField];
+            let primary = 0;
 
-            // Handle date
-            if (valA instanceof Date && valB instanceof Date) {
-                return sortDirection === 'asc' ? valA.getTime() - valB.getTime() : valB.getTime() - valA.getTime();
+            if (sortField === 'date') {
+                // Oura day strings are YYYY-MM-DD; lexical compare is chronological and timezone-safe.
+                primary = a.dateStr.localeCompare(b.dateStr);
+            } else if (sortField === 'userName') {
+                primary = compareNames(a.userName, b.userName);
+            } else {
+                const numA = Number(a[sortField]);
+                const numB = Number(b[sortField]);
+                const safeA = Number.isFinite(numA) ? numA : Number.NEGATIVE_INFINITY;
+                const safeB = Number.isFinite(numB) ? numB : Number.NEGATIVE_INFINITY;
+                primary = safeA - safeB;
             }
 
-            if (typeof valA === 'string') valA = valA.toLowerCase();
-            if (typeof valB === 'string') valB = valB.toLowerCase();
+            if (primary !== 0) {
+                return sortDirection === 'asc' ? primary : -primary;
+            }
 
-            if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
-            if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+            // Deterministic tie-breakers prevent "random-looking" jumps on repeated sorts.
+            const tieDate = b.dateStr.localeCompare(a.dateStr);
+            if (tieDate !== 0) return tieDate;
+            const tieName = compareNames(a.userName, b.userName);
+            if (tieName !== 0) return tieName;
+            const tieSleep = b.sleep - a.sleep;
+            if (tieSleep !== 0) return tieSleep;
+            const tieReadiness = b.readiness - a.readiness;
+            if (tieReadiness !== 0) return tieReadiness;
+            const tieActivity = b.activity - a.activity;
+            if (tieActivity !== 0) return tieActivity;
+            const tieAverage = b.average - a.average;
+            if (tieAverage !== 0) return tieAverage;
             return 0;
         });
     }, [filteredData, sortField, sortDirection]);
+
+    const getInitialSortDirection = (field: SortField): SortDirection =>
+        field === 'userName' ? 'asc' : 'desc';
 
     const handleSort = (field: SortField) => {
         if (sortField === field) {
             setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
         } else {
             setSortField(field);
-            setSortDirection('desc');
+            setSortDirection(getInitialSortDirection(field));
         }
     };
 

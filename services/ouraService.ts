@@ -16,6 +16,11 @@ type QueryParams = Record<string, string | undefined>;
 
 class OuraService {
   private unavailableEndpointsByToken = new Map<string, Set<string>>();
+  private readonly unavailableCacheKey = 'oura_unavailable_endpoints_v1';
+
+  constructor() {
+    this.loadUnavailableCache();
+  }
 
   private getHeaders(token: string) {
     return {
@@ -46,14 +51,62 @@ class OuraService {
     };
   }
 
+  private getTokenKey(token: string): string {
+    return token.slice(0, 20);
+  }
+
+  private loadUnavailableCache(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(this.unavailableCacheKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Record<string, string[]>;
+      const map = new Map<string, Set<string>>();
+      Object.entries(parsed).forEach(([tokenKey, endpoints]) => {
+        map.set(tokenKey, new Set(endpoints));
+      });
+      this.unavailableEndpointsByToken = map;
+    } catch {
+      // Ignore malformed cache.
+    }
+  }
+
+  private persistUnavailableCache(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const payload: Record<string, string[]> = {};
+      this.unavailableEndpointsByToken.forEach((endpoints, tokenKey) => {
+        payload[tokenKey] = Array.from(endpoints);
+      });
+      window.localStorage.setItem(this.unavailableCacheKey, JSON.stringify(payload));
+    } catch {
+      // Ignore storage write failures.
+    }
+  }
+
   private isEndpointUnavailable(token: string, endpoint: string): boolean {
-    return this.unavailableEndpointsByToken.get(token)?.has(endpoint) ?? false;
+    const tokenKey = this.getTokenKey(token);
+    return this.unavailableEndpointsByToken.get(tokenKey)?.has(endpoint) ?? false;
   }
 
   private markEndpointUnavailable(token: string, endpoint: string): void {
-    const unavailable = this.unavailableEndpointsByToken.get(token) ?? new Set<string>();
+    const tokenKey = this.getTokenKey(token);
+    const unavailable = this.unavailableEndpointsByToken.get(tokenKey) ?? new Set<string>();
     unavailable.add(endpoint);
-    this.unavailableEndpointsByToken.set(token, unavailable);
+    this.unavailableEndpointsByToken.set(tokenKey, unavailable);
+    this.persistUnavailableCache();
+  }
+
+  private clampDateWindow(startDate: string, endDate: string, maxDays: number): string {
+    const start = new Date(`${startDate}T00:00:00`);
+    const endTs = new Date(`${endDate}T00:00:00`).getTime();
+    if (Number.isNaN(start.getTime()) || Number.isNaN(endTs)) return startDate;
+
+    const maxRangeMs = maxDays * 24 * 60 * 60 * 1000;
+    if (endTs - start.getTime() <= maxRangeMs) return startDate;
+
+    const clamped = new Date(endTs - maxRangeMs);
+    return clamped.toISOString().split('T')[0];
   }
 
   private buildUrl(endpoint: string, params: QueryParams = {}, nextToken?: string): string {
@@ -97,6 +150,10 @@ class OuraService {
 
         if (optional && (response.status === 403 || response.status === 404)) {
           this.markEndpointUnavailable(token, endpoint);
+          return [];
+        }
+
+        if (optional && response.status === 400) {
           return [];
         }
 
@@ -147,11 +204,13 @@ class OuraService {
 
   async getHeartRate(token: string, start?: string, end?: string): Promise<HeartRate[]> {
     const { start_date, end_date } = this.getDateRange(start || 2, end);
+    // Oura heartrate timeseries can reject very large windows; keep this to recent history.
+    const clampedStartDate = this.clampDateWindow(start_date, end_date, 30);
     return this.fetchPaginated<HeartRate>(
       token,
       'heartrate',
       {
-        start_datetime: `${start_date}T00:00:00`,
+        start_datetime: `${clampedStartDate}T00:00:00`,
         end_datetime: `${end_date}T23:59:59`,
       },
       { optional: true }

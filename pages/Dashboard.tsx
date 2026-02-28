@@ -150,13 +150,27 @@ const Dashboard: React.FC = () => {
     const stressHistory = activeData?.stress || [];
     const resilienceHistory = activeData?.resilience || [];
 
+    const getPreviousDay = (day?: string): string | undefined => {
+        if (!day) return undefined;
+        const d = new Date(`${day}T00:00:00`);
+        if (Number.isNaN(d.getTime())) return undefined;
+        d.setDate(d.getDate() - 1);
+        return d.toISOString().split('T')[0];
+    };
+
+    const findByDayOrPrevious = <T extends { day?: string }>(items: T[], day?: string): T | undefined => {
+        if (!day) return undefined;
+        return items.find(item => item.day === day) || items.find(item => item.day === getPreviousDay(day));
+    };
+
     const currentSleep = sleepHistory[dateIndex] || sleepHistory[0];
     const currentReadiness = readinessHistory[dateIndex] || readinessHistory[0];
     const currentActivity = activityHistory[dateIndex] || activityHistory[0];
-    const currentSession = currentSleep ? sessionHistory.find(s => s.day === currentSleep.day) : undefined;
-    const currentSpo2 = spo2History.find(s => s.day === currentSleep?.day) || spo2History[dateIndex] || spo2History[0];
-    const currentStress = stressHistory.find(s => s.day === currentSleep?.day) || stressHistory[dateIndex] || stressHistory[0];
-    const currentResilience = resilienceHistory.find(r => r.day === currentSleep?.day) || resilienceHistory[dateIndex] || resilienceHistory[0];
+    const referenceDay = currentSleep?.day || currentReadiness?.day || currentActivity?.day;
+    const currentSession = findByDayOrPrevious(sessionHistory, referenceDay) || sessionHistory[dateIndex] || sessionHistory[0];
+    const currentSpo2 = findByDayOrPrevious(spo2History, referenceDay) || spo2History[dateIndex] || spo2History[0];
+    const currentStress = findByDayOrPrevious(stressHistory, referenceDay) || stressHistory[dateIndex] || stressHistory[0];
+    const currentResilience = findByDayOrPrevious(resilienceHistory, referenceDay) || resilienceHistory[dateIndex] || resilienceHistory[0];
     const bodyTempDeviationF = currentReadiness?.temperature_deviation != null
         ? currentReadiness.temperature_deviation * CELSIUS_DELTA_TO_FAHRENHEIT_DELTA
         : null;
@@ -527,7 +541,7 @@ const Dashboard: React.FC = () => {
                             <div className="flex items-start justify-between gap-4">
                                 <div className="min-w-0">
                                     <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-1.5">
-                                        {formatDayLabel(currentSleep?.day)}
+                                        {formatDayLabel(referenceDay)}
                                     </h2>
                                     <p className="text-[#777] text-sm leading-relaxed">
                                         {getDailyInsight()}
@@ -537,7 +551,7 @@ const Dashboard: React.FC = () => {
                                     <button disabled={dateIndex >= sleepHistory.length - 1} onClick={() => setDateIndex(dateIndex + 1)} className="p-2.5 rounded-lg hover:bg-[#1C1C1C] disabled:opacity-20 transition-colors text-[#555]">
                                         <ChevronLeft className="w-4 h-4" />
                                     </button>
-                                    <span className="text-xs text-[#555] font-mono min-w-[72px] text-center tabular-nums">{currentSleep?.day || '--'}</span>
+                                    <span className="text-xs text-[#555] font-mono min-w-[72px] text-center tabular-nums">{referenceDay || '--'}</span>
                                     <button disabled={dateIndex === 0} onClick={() => setDateIndex(dateIndex - 1)} className="p-2.5 rounded-lg hover:bg-[#1C1C1C] disabled:opacity-20 transition-colors text-[#555]">
                                         <ChevronRight className="w-4 h-4" />
                                     </button>
