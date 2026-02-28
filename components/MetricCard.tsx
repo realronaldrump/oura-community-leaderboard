@@ -55,7 +55,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
   return (
     <div
       ref={cardRef}
-      className={`bg-[#141414] rounded-2xl border border-[#222] p-5 flex flex-col justify-between min-h-[120px] ${onClick ? 'cursor-pointer ios-card' : ''} relative`}
+      className={`bg-[#141414] rounded-xl border border-[#1E1E1E] p-4 flex flex-col justify-between min-h-[96px] ${onClick ? 'cursor-pointer ios-card' : ''} relative group/card transition-all duration-200 hover:border-[#2A2A2A] hover:bg-[#161616]`}
       style={tiltEnabled ? tiltStyle : undefined}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -63,14 +63,14 @@ const MetricCard: React.FC<MetricCardProps> = ({
     >
       {/* Drill Down Indicator */}
       {showDrillDownIndicator && onClick && (
-        <div className="absolute top-3 right-3 opacity-50 group-hover:opacity-100 transition-opacity">
-          <Info className="w-4 h-4 text-[#666666]" />
+        <div className="absolute top-3 right-3 opacity-0 group-hover/card:opacity-50 transition-opacity duration-200">
+          <Info className="w-3.5 h-3.5 text-[#666666]" />
         </div>
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-3 relative z-10 pr-6">
-        <h3 className="text-[#666666] text-sm font-medium">
+      <div className="flex items-center justify-between mb-2 relative z-10 pr-5">
+        <h3 className="text-[#666666] text-xs font-medium tracking-wide">
           {title}
         </h3>
         {icon && (
@@ -84,9 +84,9 @@ const MetricCard: React.FC<MetricCardProps> = ({
       </div>
 
       {/* Value */}
-      <div className="flex items-baseline gap-2 relative z-10">
+      <div className="flex items-baseline gap-1.5 relative z-10">
         <span
-          className="text-3xl font-mono font-bold transition-all duration-200"
+          className="text-2xl font-mono font-bold transition-all duration-200"
           style={{
             color,
             transform: isPressed ? 'scale(0.95)' : 'scale(1)',
@@ -95,21 +95,17 @@ const MetricCard: React.FC<MetricCardProps> = ({
           {value ?? '--'}
         </span>
         {unit && value != null && (
-          <span className="text-[#666666] text-sm font-medium">{unit}</span>
+          <span className="text-[#555] text-xs font-medium">{unit}</span>
         )}
       </div>
 
       {/* Subtext */}
       {subtext && (
-        <p className="text-xs text-[#666666] mt-3 relative z-10">
+        <p className="text-[11px] text-[#555] mt-2 relative z-10 leading-relaxed">
           {subtext}
         </p>
       )}
 
-      {/* Click hint overlay */}
-      {showDrillDownIndicator && onClick && (
-        <div className="absolute inset-0 bg-gradient-to-t from-black/0 via-black/0 to-black/0 hover:from-black/5 hover:via-black/0 hover:to-black/0 transition-all rounded-2xl pointer-events-none" />
-      )}
     </div>
   );
 };

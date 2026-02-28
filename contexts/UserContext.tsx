@@ -9,7 +9,7 @@ interface UserContextType {
     activeProfileId: string | null;
     activeProfile: UserProfile | null;
     setActiveProfileId: (id: string) => void;
-    addProfile: (token: string) => Promise<void>;
+    addProfile: (token: string, options?: { grantedScopes?: string[]; expiresInSeconds?: number | null }) => Promise<void>;
     removeProfile: (id: string) => void;
     updateProfile: (profile: Partial<UserProfile>) => Promise<void>;
     authStatus: AuthStatus;
@@ -78,24 +78,50 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         window.location.href = getAuthUrl();
     };
 
-    const addProfile = async (token: string) => {
+    const addProfile = async (
+        token: string,
+        options?: { grantedScopes?: string[]; expiresInSeconds?: number | null }
+    ) => {
         setAuthStatus(AuthStatus.LOADING);
         try {
             // Fetch user details to identify them
             const personalInfo = await ouraService.getPersonalInfo(token);
+            const ouraUserId =
+                (personalInfo as unknown as { id?: string | number })?.id != null
+                    ? String((personalInfo as unknown as { id?: string | number }).id)
+                    : null;
+            const normalizedEmail = personalInfo.email?.toLowerCase() || null;
 
-            // Check if profile already exists to get its ID, or create new one
-            const existingProfile = profiles.find(p => p.email === personalInfo.email);
+            // Match by stable Oura user id first, then email as fallback.
+            const existingProfile = profiles.find(
+                (p) =>
+                    (ouraUserId && p.ouraUserId === ouraUserId) ||
+                    (normalizedEmail && p.email?.toLowerCase() === normalizedEmail)
+            );
             const profileId = existingProfile ? existingProfile.id : crypto.randomUUID();
+            const expiresInSeconds =
+                typeof options?.expiresInSeconds === 'number' && Number.isFinite(options.expiresInSeconds)
+                    ? options.expiresInSeconds
+                    : null;
+            const tokenExpiresAt =
+                expiresInSeconds && expiresInSeconds > 0
+                    ? new Date(Date.now() + (expiresInSeconds * 1000)).toISOString()
+                    : null;
 
             const newProfile: UserProfile = {
+                ...existingProfile,
                 ...personalInfo,
                 id: profileId,
+                ouraUserId: ouraUserId || existingProfile?.ouraUserId || null,
+                email: normalizedEmail || existingProfile?.email || null,
                 token,
+                grantedScopes: options?.grantedScopes?.length ? options.grantedScopes : existingProfile?.grantedScopes,
+                tokenExpiresAt,
                 lastUpdated: new Date().toISOString(),
             };
 
             await firebaseService.saveProfile(newProfile);
+            setActiveProfileId(profileId);
             setAuthStatus(AuthStatus.AUTHENTICATED);
         } catch (error) {
             console.error("Failed to add profile", error);

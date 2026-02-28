@@ -11,6 +11,7 @@ import ContributorsBreakdown from '../components/ContributorsBreakdown';
 import ScoreBreakdownModal from '../components/ScoreBreakdownModal';
 import MetricDetailModal from '../components/MetricDetailModal';
 import LeaderboardUserDetailModal from '../components/LeaderboardUserDetailModal';
+import AppDialog from '../components/AppDialog';
 import DataExport from './DataExport';
 import {
     LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip
@@ -34,6 +35,9 @@ import {
 } from '../components/analytics';
 import { useAutoSync, formatLastSync } from '../hooks/useAutoSync';
 import { ChevronLeft, ChevronRight, X, RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain, ArrowUpDown } from 'lucide-react';
+
+const METERS_TO_MILES = 0.000621371;
+const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
 
 const Dashboard: React.FC = () => {
     const { activeProfile, profiles, setActiveProfileId, login, removeProfile, firebaseError, isLoadingProfiles, retryFirebaseConnection } = useUser();
@@ -63,6 +67,8 @@ const Dashboard: React.FC = () => {
         isOpen: boolean;
         user: LeaderboardEntry | null;
     }>({ isOpen: false, user: null });
+    const [profilePendingRemoval, setProfilePendingRemoval] = useState<{ id: string; name: string } | null>(null);
+    const [isRemovingProfile, setIsRemovingProfile] = useState(false);
 
     const queryClient = useQueryClient();
 
@@ -158,6 +164,10 @@ const Dashboard: React.FC = () => {
     const currentSpo2 = spo2History.find(s => s.day === currentSleep?.day) || spo2History[dateIndex] || spo2History[0];
     const currentStress = stressHistory.find(s => s.day === currentSleep?.day) || stressHistory[dateIndex] || stressHistory[0];
     const currentResilience = resilienceHistory.find(r => r.day === currentSleep?.day) || resilienceHistory[dateIndex] || resilienceHistory[0];
+    const bodyTempDeviationF = currentReadiness?.temperature_deviation != null
+        ? currentReadiness.temperature_deviation * CELSIUS_DELTA_TO_FAHRENHEIT_DELTA
+        : null;
+    const distanceMiles = ((currentActivity?.equivalent_walking_distance || 0) * METERS_TO_MILES).toFixed(1);
 
     const readinessContributors = currentReadiness?.contributors ? [
         { label: 'Previous Night', value: currentReadiness.contributors.previous_night, color: '#3b82f6', key: 'previous_night' },
@@ -256,15 +266,85 @@ const Dashboard: React.FC = () => {
         switch (level) { case 'exceptional': return '#34D399'; case 'strong': return '#6EE7B7'; case 'solid': return '#60A5FA'; case 'adequate': return '#FBBF24'; case 'limited': return '#F87171'; default: return '#666'; }
     };
 
+    const getScoreQuality = (score: number | null | undefined): string => {
+        if (!score) return '';
+        if (score >= 85) return 'Optimal';
+        if (score >= 70) return 'Good';
+        if (score >= 60) return 'Fair';
+        return 'Pay attention';
+    };
+
+    const getDailyInsight = (): string => {
+        const parts: string[] = [];
+        const rScore = currentReadiness?.score;
+        const sScore = currentSleep?.score;
+        const aScore = currentActivity?.score;
+        const hrv = currentSession?.average_hrv;
+
+        if (rScore && rScore >= 85) parts.push('Body well recovered');
+        else if (rScore && rScore < 60) parts.push('Recovery needs attention');
+
+        if (currentSession?.total_sleep_duration) {
+            const hours = currentSession.total_sleep_duration / 3600;
+            if (hours >= 7.5) parts.push(`${hours.toFixed(1)}h of solid sleep`);
+            else if (hours < 6) parts.push(`Only ${hours.toFixed(1)}h of sleep`);
+        }
+
+        if (hrv && hrv > 0) {
+            const recentHrvs = sessionHistory.slice(0, 7)
+                .map(s => s.average_hrv)
+                .filter((v): v is number => v != null && v > 0);
+            if (recentHrvs.length > 1) {
+                const avg = recentHrvs.reduce((a, b) => a + b, 0) / recentHrvs.length;
+                if (hrv > avg * 1.1) parts.push('HRV above your weekly average');
+            }
+        }
+
+        if (parts.length === 0) {
+            if (rScore && sScore && aScore) {
+                const avg = Math.round((rScore + sScore + aScore) / 3);
+                return avg >= 75 ? 'Looking like a good day ahead.' : 'Listen to your body today.';
+            }
+            return 'Your daily health overview.';
+        }
+        return parts.join(' · ');
+    };
+
+    const getProfileDisplayName = (profile: { firstName?: string | null; lastName?: string | null; email?: string | null; }) => {
+        return profile.firstName
+            ? `${profile.firstName} ${profile.lastName || ''}`.trim()
+            : (profile.email || 'User').split('@')[0];
+    };
+
+    const handleOpenRemoveProfileDialog = (profile: { id: string; firstName?: string | null; lastName?: string | null; email?: string | null; }) => {
+        setProfilePendingRemoval({ id: profile.id, name: getProfileDisplayName(profile) });
+    };
+
+    const handleConfirmRemoveProfile = async () => {
+        if (!profilePendingRemoval || isRemovingProfile) return;
+        setIsRemovingProfile(true);
+        try {
+            await removeProfile(profilePendingRemoval.id);
+        } catch (error) {
+            console.error('Failed to remove profile:', error);
+        } finally {
+            setIsRemovingProfile(false);
+            setProfilePendingRemoval(null);
+        }
+    };
+
     // ============================================
     // LOGIN / PROFILE SELECTION
     // ============================================
     if (!activeProfile) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center p-6">
-                <div className="w-full max-w-sm">
-                    <div className="text-center mb-10">
-                        <h1 className="text-3xl font-bold tracking-tight text-[#FAFAFA] mb-2">Health Dashboard</h1>
+                <div className="w-full max-w-sm animate-fade-in">
+                    <div className="text-center mb-12">
+                        <div className="w-12 h-12 rounded-full bg-[#141414] border border-[#1E1E1E] flex items-center justify-center mx-auto mb-5">
+                            <Heart className="w-5 h-5 text-[#00C896]" />
+                        </div>
+                        <h1 className="text-2xl font-semibold tracking-tight text-[#FAFAFA] mb-2">Health Dashboard</h1>
                         <p className="text-[#666] text-sm">Your Oura data, clearly presented</p>
                     </div>
 
@@ -284,23 +364,23 @@ const Dashboard: React.FC = () => {
 
                     {!isLoadingProfiles && profiles.length > 0 && (
                         <div className="mb-8">
-                            <p className="text-[#666] text-xs uppercase tracking-wider mb-3 px-1">Choose profile</p>
+                            <p className="text-[#555] text-xs font-medium tracking-wider mb-3 px-1">Choose profile</p>
                             <div className="space-y-2">
                                 {profiles.map(p => (
                                     <div key={p.id} className="flex gap-2">
                                         <button
                                             onClick={() => setActiveProfileId(p.id)}
-                                            className="flex-1 bg-[#141414] border border-[#222] rounded-lg p-4 text-left hover:border-[#444] transition-colors flex items-center justify-between"
+                                            className="flex-1 bg-[#141414] border border-[#1E1E1E] rounded-xl p-4 text-left hover:border-[#333] hover:bg-[#161616] transition-all duration-200 flex items-center justify-between"
                                         >
                                             <span className="text-[#FAFAFA] font-medium text-sm">
-                                                {p.firstName ? `${p.firstName} ${p.lastName || ''}`.trim() : (p.email || 'User').split('@')[0]}
+                                                {getProfileDisplayName(p)}
                                             </span>
                                             <span className="text-[#444] text-xs font-mono">
                                                 {p.lastUpdated ? new Date(p.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
                                             </span>
                                         </button>
                                         <button
-                                            onClick={(e) => { e.stopPropagation(); if (confirm('Remove this profile?')) removeProfile(p.id); }}
+                                            onClick={(e) => { e.stopPropagation(); handleOpenRemoveProfileDialog(p); }}
                                             className="px-3 bg-[#141414] border border-[#222] rounded-lg text-[#666] hover:text-[#F87171] hover:border-[#F87171]/30 transition-colors"
                                         >
                                             <X className="w-4 h-4" />
@@ -311,10 +391,22 @@ const Dashboard: React.FC = () => {
                         </div>
                     )}
 
-                    <button onClick={login} className="w-full py-3.5 bg-[#00C896] text-[#0C0C0C] font-semibold rounded-lg hover:opacity-90 transition-opacity text-sm">
+                    <button onClick={login} className="w-full py-3.5 bg-[#00C896] text-[#0C0C0C] font-semibold rounded-xl hover:bg-[#00B589] transition-colors text-sm">
                         {profiles.length > 0 ? 'Add Another Profile' : 'Connect Oura Ring'}
                     </button>
                 </div>
+
+                <AppDialog
+                    isOpen={Boolean(profilePendingRemoval)}
+                    title="Remove Profile"
+                    message={profilePendingRemoval ? `Remove ${profilePendingRemoval.name} from this device? You can reconnect this profile at any time.` : ''}
+                    intent="destructive"
+                    confirmText={isRemovingProfile ? 'Removing...' : 'Remove'}
+                    cancelText="Keep Profile"
+                    confirmDisabled={isRemovingProfile}
+                    onConfirm={handleConfirmRemoveProfile}
+                    onCancel={() => !isRemovingProfile && setProfilePendingRemoval(null)}
+                />
             </div>
         );
     }
@@ -348,9 +440,14 @@ const Dashboard: React.FC = () => {
 
     if (!activeData && userQueries.some(q => q.isLoading)) {
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center bg-[#0C0C0C]">
-                <div className="w-5 h-5 border-2 border-[#333] border-t-[#00C896] rounded-full animate-spin" />
-                <p className="text-[#666] mt-4 text-sm">Loading your data...</p>
+            <div className="min-h-screen flex flex-col items-center justify-center bg-[#0C0C0C] animate-fade-in">
+                <div className="relative w-10 h-10 mb-5">
+                    <svg viewBox="0 0 40 40" className="w-full h-full transform -rotate-90">
+                        <circle cx="20" cy="20" r="17" fill="none" stroke="#1C1C1C" strokeWidth="2.5" />
+                        <circle cx="20" cy="20" r="17" fill="none" stroke="#00C896" strokeWidth="2.5" strokeDasharray="107" strokeDashoffset="80" strokeLinecap="round" className="animate-spin origin-center" style={{ animationDuration: '1.2s' }} />
+                    </svg>
+                </div>
+                <p className="text-[#555] text-sm">Loading your data</p>
             </div>
         );
     }
@@ -406,7 +503,7 @@ const Dashboard: React.FC = () => {
                         </button>
                     </div>
                 </div>
-                <div className="max-w-5xl mx-auto px-4 flex gap-1 -mb-px overflow-x-auto">
+                <div className="max-w-5xl mx-auto px-4 flex gap-0.5 -mb-px overflow-x-auto">
                     {[
                         { key: 'today', label: 'Today' },
                         ...(profiles.length > 1 ? [{ key: 'compare', label: 'Compare' }] : []),
@@ -417,7 +514,7 @@ const Dashboard: React.FC = () => {
                         <button
                             key={tab.key}
                             onClick={() => setViewMode(tab.key as any)}
-                            className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${viewMode === tab.key ? 'border-[#00C896] text-[#FAFAFA]' : 'border-transparent text-[#666] hover:text-[#A0A0A0]'}`}
+                            className={`px-4 py-2.5 text-[13px] font-medium transition-all border-b-2 whitespace-nowrap ${viewMode === tab.key ? 'border-[#00C896] text-[#FAFAFA]' : 'border-transparent text-[#555] hover:text-[#999]'}`}
                         >
                             {tab.label}
                         </button>
@@ -428,101 +525,137 @@ const Dashboard: React.FC = () => {
             <main className="max-w-5xl mx-auto px-4 pb-16">
                 {/* ======== TODAY VIEW ======== */}
                 {viewMode === 'today' && (
-                    <div className="space-y-8 pt-6">
-                        {/* Date nav */}
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-semibold">{formatDayLabel(currentSleep?.day)}</h2>
-                            <div className="flex items-center gap-1">
-                                <button disabled={dateIndex >= sleepHistory.length - 1} onClick={() => setDateIndex(dateIndex + 1)} className="p-2 rounded-md hover:bg-[#1C1C1C] disabled:opacity-20 transition-colors text-[#666]">
-                                    <ChevronLeft className="w-4 h-4" />
-                                </button>
-                                <span className="text-xs text-[#666] font-mono min-w-[80px] text-center">{currentSleep?.day || '--'}</span>
-                                <button disabled={dateIndex === 0} onClick={() => setDateIndex(dateIndex - 1)} className="p-2 rounded-md hover:bg-[#1C1C1C] disabled:opacity-20 transition-colors text-[#666]">
-                                    <ChevronRight className="w-4 h-4" />
-                                </button>
+                    <div className="pt-8 animate-fade-in">
+                        {/* ── Greeting & Date Navigation ── */}
+                        <div className="mb-10">
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="min-w-0">
+                                    <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-1.5">
+                                        {formatDayLabel(currentSleep?.day)}
+                                    </h2>
+                                    <p className="text-[#777] text-sm leading-relaxed">
+                                        {getDailyInsight()}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-0.5 shrink-0 mt-1">
+                                    <button disabled={dateIndex >= sleepHistory.length - 1} onClick={() => setDateIndex(dateIndex + 1)} className="p-2.5 rounded-lg hover:bg-[#1C1C1C] disabled:opacity-20 transition-colors text-[#555]">
+                                        <ChevronLeft className="w-4 h-4" />
+                                    </button>
+                                    <span className="text-xs text-[#555] font-mono min-w-[72px] text-center tabular-nums">{currentSleep?.day || '--'}</span>
+                                    <button disabled={dateIndex === 0} onClick={() => setDateIndex(dateIndex - 1)} className="p-2.5 rounded-lg hover:bg-[#1C1C1C] disabled:opacity-20 transition-colors text-[#555]">
+                                        <ChevronRight className="w-4 h-4" />
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Oura Scores */}
-                        <section>
-                            <h3 className="section-label">Oura Scores</h3>
-                            <div className="grid grid-cols-3 gap-3">
-                                <button onClick={() => setScoreBreakdownModal({ isOpen: true, scoreType: 'readiness' })} className="score-card">
-                                    <span className="text-xs text-[#666] uppercase tracking-wider">Readiness</span>
-                                    <span className="text-2xl font-mono font-bold text-[#34D399] mt-1">{currentReadiness?.score ?? '--'}</span>
-                                </button>
-                                <button onClick={() => setScoreBreakdownModal({ isOpen: true, scoreType: 'sleep' })} className="score-card">
-                                    <span className="text-xs text-[#666] uppercase tracking-wider">Sleep</span>
-                                    <span className="text-2xl font-mono font-bold text-[#60A5FA] mt-1">{currentSleep?.score ?? '--'}</span>
-                                </button>
-                                <button onClick={() => setScoreBreakdownModal({ isOpen: true, scoreType: 'activity' })} className="score-card">
-                                    <span className="text-xs text-[#666] uppercase tracking-wider">Activity</span>
-                                    <span className="text-2xl font-mono font-bold text-[#FBBF24] mt-1">{currentActivity?.score ?? '--'}</span>
-                                </button>
-                            </div>
-                        </section>
+                        {/* ── Scores ── */}
+                        <div className="grid grid-cols-3 gap-3 sm:gap-5 mb-14">
+                            {([
+                                { type: 'readiness' as const, label: 'Readiness', score: currentReadiness?.score, color: '#34D399' },
+                                { type: 'sleep' as const, label: 'Sleep', score: currentSleep?.score, color: '#60A5FA' },
+                                { type: 'activity' as const, label: 'Activity', score: currentActivity?.score, color: '#FBBF24' },
+                            ]).map(({ type, label, score, color }) => {
+                                const s = score ?? 0;
+                                const radius = 34;
+                                const circumference = 2 * Math.PI * radius;
+                                const progress = (s / 100) * circumference;
+                                const quality = getScoreQuality(score);
+                                return (
+                                    <button
+                                        key={type}
+                                        onClick={() => setScoreBreakdownModal({ isOpen: true, scoreType: type })}
+                                        className="score-card-v2 group"
+                                    >
+                                        <div className="relative w-[76px] h-[76px] sm:w-[88px] sm:h-[88px] mx-auto mb-3">
+                                            <svg viewBox="0 0 76 76" className="w-full h-full transform -rotate-90">
+                                                <circle cx="38" cy="38" r={radius} fill="none" stroke="#1C1C1C" strokeWidth="3" />
+                                                <circle cx="38" cy="38" r={radius} fill="none" stroke={color} strokeWidth="3" strokeDasharray={circumference} strokeDashoffset={circumference - progress} strokeLinecap="round" className="transition-all duration-1000 ease-out" style={{ filter: `drop-shadow(0 0 4px ${color}22)` }} />
+                                            </svg>
+                                            <span className="absolute inset-0 flex items-center justify-center text-xl sm:text-2xl font-bold font-mono tabular-nums" style={{ color }}>
+                                                {score ?? '—'}
+                                            </span>
+                                        </div>
+                                        <span className="text-xs text-[#888] font-medium tracking-wide">{label}</span>
+                                        {quality && <span className="text-[10px] text-[#555] mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">{quality}</span>}
+                                    </button>
+                                );
+                            })}
+                        </div>
 
-                        {/* Sleep */}
-                        <section>
-                            <h3 className="section-label flex items-center gap-2"><Moon className="w-3.5 h-3.5" /> Sleep</h3>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                                <MetricCard title="Total Sleep" value={formatDuration(currentSession?.total_sleep_duration)} color="#60A5FA" showDrillDownIndicator onClick={() => handleMetricCardClick('sleep_duration', currentSession?.total_sleep_duration ?? null, 'hours', '#60A5FA')} />
-                                <MetricCard title="Time in Bed" value={formatDuration(currentSession?.time_in_bed)} color="#60A5FA" />
-                                <MetricCard title="Bedtime" value={formatTime(currentSession?.bedtime_start)} subtext="Fell asleep" />
-                                <MetricCard title="Wake Time" value={formatTime(currentSession?.bedtime_end)} subtext="Woke up" />
+                        {/* ── Sleep ── */}
+                        <section className="mb-14">
+                            <div className="section-header-v2">
+                                <Moon className="w-4 h-4 text-[#60A5FA]" />
+                                <h3>Sleep</h3>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                            {/* Featured */}
+                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                <MetricCard title="Total Sleep" value={formatDuration(currentSession?.total_sleep_duration)} color="#60A5FA" showDrillDownIndicator onClick={() => handleMetricCardClick('sleep_duration', currentSession?.total_sleep_duration ?? null, 'hours', '#60A5FA')} />
+                                <MetricCard title="Efficiency" value={currentSession?.efficiency} unit="%" color="#34D399" showDrillDownIndicator onClick={() => handleMetricCardClick('efficiency', currentSession?.efficiency ?? null, '%', '#34D399')} />
+                            </div>
+                            {/* Sleep stages */}
+                            <div className="grid grid-cols-3 gap-3 mb-3">
                                 <MetricCard title="Deep Sleep" value={formatDuration(currentSession?.deep_sleep_duration)} color="#1E40AF" showDrillDownIndicator onClick={() => handleMetricCardClick('deep_sleep', currentSession?.deep_sleep_duration ?? null, 'hours', '#1E40AF')} />
                                 <MetricCard title="REM Sleep" value={formatDuration(currentSession?.rem_sleep_duration)} color="#8B5CF6" showDrillDownIndicator onClick={() => handleMetricCardClick('rem_sleep', currentSession?.rem_sleep_duration ?? null, 'hours', '#8B5CF6')} />
                                 <MetricCard title="Light Sleep" value={formatDuration(currentSession?.light_sleep_duration)} color="#93C5FD" />
-                                <MetricCard title="Efficiency" value={currentSession?.efficiency} unit="%" color="#34D399" showDrillDownIndicator onClick={() => handleMetricCardClick('efficiency', currentSession?.efficiency ?? null, '%', '#34D399')} />
                             </div>
-                            <div className="grid grid-cols-2 gap-3 mb-4">
-                                <MetricCard title="Sleep Latency" value={currentSession?.latency ? `${Math.round(currentSession.latency / 60)}` : null} unit="min" subtext="Time to fall asleep" />
-                                <MetricCard title="Awake Time" value={formatDuration(currentSession?.awake_time)} subtext="During sleep period" />
+                            {/* Timing & details */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                                <MetricCard title="Bedtime" value={formatTime(currentSession?.bedtime_start)} subtext="Fell asleep" />
+                                <MetricCard title="Wake Time" value={formatTime(currentSession?.bedtime_end)} subtext="Woke up" />
+                                <MetricCard title="Latency" value={currentSession?.latency ? `${Math.round(currentSession.latency / 60)}` : null} unit="min" subtext="Time to fall asleep" />
+                                <MetricCard title="Awake Time" value={formatDuration(currentSession?.awake_time)} subtext="During sleep" />
                             </div>
                             {sessionHistory.length > 0 && (
-                                <div className="bg-[#141414] border border-[#222] rounded-lg p-4" style={{ height: 260 }}>
-                                    <h4 className="text-xs text-[#666] uppercase tracking-wider mb-3">Sleep Architecture (14 Days)</h4>
+                                <div className="chart-container" style={{ height: 260 }}>
+                                    <h4 className="chart-label">Sleep Architecture · 14 Days</h4>
                                     <SleepStagesChart data={sessionHistory.slice(0, 14).reverse()} />
                                 </div>
                             )}
                         </section>
 
-                        {/* Heart & Body */}
-                        <section>
-                            <h3 className="section-label flex items-center gap-2"><Heart className="w-3.5 h-3.5" /> Heart & Body</h3>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                                <MetricCard title="Lowest HR" value={currentSession?.lowest_heart_rate} unit="bpm" color="#F87171" subtext="During sleep" showDrillDownIndicator onClick={() => handleMetricCardClick('lowest_hr', currentSession?.lowest_heart_rate ?? null, 'bpm', '#F87171')} />
-                                <MetricCard title="Avg HR" value={currentSession?.average_heart_rate?.toFixed(0)} unit="bpm" color="#F87171" subtext="During sleep" showDrillDownIndicator onClick={() => handleMetricCardClick('heart_rate', currentSession?.average_heart_rate ?? null, 'bpm', '#F87171')} />
-                                <MetricCard title="HRV" value={currentSession?.average_hrv} unit="ms" color="#A855F7" subtext="Heart rate variability" showDrillDownIndicator onClick={() => handleMetricCardClick('hrv', currentSession?.average_hrv ?? null, 'ms', '#A855F7')} />
-                                <MetricCard title="SpO2" value={currentSpo2?.spo2_percentage?.average?.toFixed(1)} unit="%" color="#06B6D4" subtext="Oxygen saturation" showDrillDownIndicator onClick={() => handleMetricCardClick('spo2', currentSpo2?.spo2_percentage?.average ?? null, '%', '#06B6D4')} />
+                        {/* ── Heart & Body ── */}
+                        <section className="mb-14">
+                            <div className="section-header-v2">
+                                <Heart className="w-4 h-4 text-[#F87171]" />
+                                <h3>Heart & Body</h3>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                                <MetricCard title="Avg Breathing" value={currentSession?.average_breath?.toFixed(1)} unit="br/min" subtext="During sleep" />
-                                <MetricCard
-                                    title="Body Temp"
-                                    value={currentReadiness?.temperature_deviation != null ? `${currentReadiness.temperature_deviation > 0 ? '+' : ''}${currentReadiness.temperature_deviation.toFixed(1)}` : null}
-                                    unit="°C" subtext="From baseline"
-                                    color={currentReadiness?.temperature_deviation != null ? (Math.abs(currentReadiness.temperature_deviation) > 0.5 ? '#F87171' : '#34D399') : undefined}
-                                />
+                            {/* Hero vitals */}
+                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                <MetricCard title="HRV" value={currentSession?.average_hrv} unit="ms" color="#A855F7" subtext="Heart rate variability" showDrillDownIndicator onClick={() => handleMetricCardClick('hrv', currentSession?.average_hrv ?? null, 'ms', '#A855F7')} />
+                                <MetricCard title="Resting HR" value={currentSession?.lowest_heart_rate} unit="bpm" color="#F87171" subtext="Lowest during sleep" showDrillDownIndicator onClick={() => handleMetricCardClick('lowest_hr', currentSession?.lowest_heart_rate ?? null, 'bpm', '#F87171')} />
+                            </div>
+                            {/* Supporting vitals */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                                <MetricCard title="Avg HR" value={currentSession?.average_heart_rate?.toFixed(0)} unit="bpm" color="#F87171" showDrillDownIndicator onClick={() => handleMetricCardClick('heart_rate', currentSession?.average_heart_rate ?? null, 'bpm', '#F87171')} />
+                                <MetricCard title="SpO2" value={currentSpo2?.spo2_percentage?.average?.toFixed(1)} unit="%" color="#06B6D4" showDrillDownIndicator onClick={() => handleMetricCardClick('spo2', currentSpo2?.spo2_percentage?.average ?? null, '%', '#06B6D4')} />
                                 <MetricCard title="Stress" value={getStressLabel(currentStress?.day_summary)} color={getStressColor(currentStress?.day_summary)} />
                                 <MetricCard title="Resilience" value={currentResilience?.level ? currentResilience.level.charAt(0).toUpperCase() + currentResilience.level.slice(1) : null} color={getResilienceColor(currentResilience?.level)} />
                             </div>
+                            <div className="grid grid-cols-2 gap-3 mb-5">
+                                <MetricCard title="Breathing" value={currentSession?.average_breath?.toFixed(1)} unit="br/min" subtext="Average during sleep" />
+                                <MetricCard
+                                    title="Body Temp"
+                                    value={bodyTempDeviationF != null ? `${bodyTempDeviationF > 0 ? '+' : ''}${bodyTempDeviationF.toFixed(1)}` : null}
+                                    unit="°F" subtext="From baseline"
+                                    color={bodyTempDeviationF != null ? (Math.abs(bodyTempDeviationF) > 0.9 ? '#F87171' : '#34D399') : undefined}
+                                />
+                            </div>
 
                             {hrData && hrData.length > 0 && (
-                                <div className="bg-[#141414] border border-[#222] rounded-lg p-4 mb-4" style={{ height: 200 }}>
+                                <div className="chart-container mb-4" style={{ height: 200 }}>
                                     <HeartRateChart data={hrData} showLabels />
                                 </div>
                             )}
                             {sessionHistory.length > 0 && (
-                                <div className="bg-[#141414] border border-[#222] rounded-lg p-4" style={{ height: 180 }}>
-                                    <h4 className="text-xs text-[#666] uppercase tracking-wider mb-3">HRV Trend (30 Days)</h4>
+                                <div className="chart-container" style={{ height: 180 }}>
+                                    <h4 className="chart-label">HRV Trend · 30 Days</h4>
                                     <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={100}>
                                         <LineChart data={sessionHistory.slice(0, 30).reverse()}>
                                             <XAxis dataKey="day" tick={{ fill: '#444', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(val) => val.slice(5)} />
                                             <YAxis tick={{ fill: '#444', fontSize: 10 }} axisLine={false} tickLine={false} unit=" ms" />
-                                            <Tooltip contentStyle={{ backgroundColor: '#1C1C1C', border: '1px solid #333', borderRadius: '6px', fontSize: '12px' }} formatter={(value: number) => [`${value} ms`, 'HRV']} />
+                                            <Tooltip contentStyle={{ backgroundColor: '#1C1C1C', border: '1px solid #333', borderRadius: '8px', fontSize: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }} formatter={(value: number) => [`${value} ms`, 'HRV']} />
                                             <Line type="monotone" dataKey="average_hrv" stroke="#A855F7" dot={false} strokeWidth={1.5} />
                                         </LineChart>
                                     </ResponsiveContainer>
@@ -530,26 +663,35 @@ const Dashboard: React.FC = () => {
                             )}
                         </section>
 
-                        {/* Activity */}
-                        <section>
-                            <h3 className="section-label flex items-center gap-2"><Flame className="w-3.5 h-3.5" /> Activity</h3>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                        {/* ── Activity ── */}
+                        <section className="mb-14">
+                            <div className="section-header-v2">
+                                <Flame className="w-4 h-4 text-[#FBBF24]" />
+                                <h3>Activity</h3>
+                            </div>
+                            {/* Featured */}
+                            <div className="grid grid-cols-2 gap-3 mb-3">
                                 <MetricCard title="Steps" value={currentActivity?.steps?.toLocaleString()} color="#FBBF24" showDrillDownIndicator onClick={() => handleMetricCardClick('steps', currentActivity?.steps ?? null, 'steps', '#FBBF24')} />
                                 <MetricCard title="Active Calories" value={currentActivity?.active_calories?.toLocaleString()} unit="kcal" color="#FBBF24" showDrillDownIndicator onClick={() => handleMetricCardClick('calories', currentActivity?.active_calories ?? null, 'kcal', '#FBBF24')} />
-                                <MetricCard title="Total Calories" value={currentActivity?.total_calories?.toLocaleString()} unit="kcal" />
-                                <MetricCard title="Distance" value={((currentActivity?.equivalent_walking_distance || 0) / 1000).toFixed(1)} unit="km" />
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                                <MetricCard title="Total Calories" value={currentActivity?.total_calories?.toLocaleString()} unit="kcal" />
+                                <MetricCard title="Distance" value={distanceMiles} unit="mi" />
                                 <MetricCard title="High Activity" value={formatDuration(currentActivity?.high_activity_time)} color="#EF4444" />
                                 <MetricCard title="Medium Activity" value={formatDuration(currentActivity?.medium_activity_time)} color="#F59E0B" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
                                 <MetricCard title="Low Activity" value={formatDuration(currentActivity?.low_activity_time)} color="#22C55E" />
                                 <MetricCard title="Sedentary" value={formatDuration(currentActivity?.sedentary_time)} color="#64748B" />
                             </div>
                         </section>
 
-                        {/* Score Contributors */}
-                        <section>
-                            <h3 className="section-label flex items-center gap-2"><Brain className="w-3.5 h-3.5" /> Score Contributors</h3>
+                        {/* ── Score Contributors ── */}
+                        <section className="mb-8">
+                            <div className="section-header-v2">
+                                <Brain className="w-4 h-4 text-[#777]" />
+                                <h3>Score Contributors</h3>
+                            </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <ContributorsBreakdown title="Readiness" contributors={readinessContributors} />
                                 <ContributorsBreakdown title="Sleep" contributors={sleepContributors} />

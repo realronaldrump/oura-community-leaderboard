@@ -5,6 +5,15 @@ import { useUser } from '../contexts/UserContext';
 import { ouraService } from '../services/ouraService';
 import { DailyStats } from '../types';
 
+const METERS_TO_MILES = 0.000621371;
+const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
+
+const toMiles = (meters: number | null | undefined): number | '' =>
+    meters == null ? '' : Number((meters * METERS_TO_MILES).toFixed(3));
+
+const toFahrenheitDelta = (celsiusDelta: number | null | undefined): number | '' =>
+    celsiusDelta == null ? '' : Number((celsiusDelta * CELSIUS_DELTA_TO_FAHRENHEIT_DELTA).toFixed(2));
+
 const DataExport: React.FC = () => {
     const { activeProfile } = useUser();
     const [isLoading, setIsLoading] = useState(false);
@@ -79,8 +88,8 @@ const DataExport: React.FC = () => {
             body_temperature: item.contributors?.body_temperature || '',
             activity_balance: item.contributors?.activity_balance || '',
             previous_day_activity: item.contributors?.previous_day_activity || '',
-            temperature_deviation: item.temperature_deviation || '',
-            temperature_trend_deviation: item.temperature_trend_deviation || '',
+            temperature_deviation_f: toFahrenheitDelta(item.temperature_deviation),
+            temperature_trend_deviation_f: toFahrenheitDelta(item.temperature_trend_deviation),
             timestamp: item.timestamp || '',
         }));
 
@@ -103,10 +112,10 @@ const DataExport: React.FC = () => {
             steps: item.steps || '',
             active_calories: item.active_calories || '',
             total_calories: item.total_calories || '',
-            equivalent_walking_distance: item.equivalent_walking_distance || '',
+            equivalent_walking_distance_miles: toMiles(item.equivalent_walking_distance),
             target_calories: item.target_calories || '',
-            target_meters: item.target_meters || '',
-            meters_to_target: item.meters_to_target || '',
+            target_miles: toMiles(item.target_meters),
+            miles_to_target: toMiles(item.meters_to_target),
             timestamp: item.timestamp || '',
         }));
 
@@ -151,8 +160,8 @@ const DataExport: React.FC = () => {
                 readiness_body_temperature: readiness?.contributors?.body_temperature || '',
                 readiness_activity_balance: readiness?.contributors?.activity_balance || '',
                 readiness_previous_day_activity: readiness?.contributors?.previous_day_activity || '',
-                readiness_temperature_deviation: readiness?.temperature_deviation || '',
-                readiness_temperature_trend_deviation: readiness?.temperature_trend_deviation || '',
+                readiness_temperature_deviation_f: toFahrenheitDelta(readiness?.temperature_deviation),
+                readiness_temperature_trend_deviation_f: toFahrenheitDelta(readiness?.temperature_trend_deviation),
 
                 // Activity data
                 activity_score: activity?.score || '',
@@ -165,10 +174,10 @@ const DataExport: React.FC = () => {
                 activity_steps: activity?.steps || '',
                 activity_active_calories: activity?.active_calories || '',
                 activity_total_calories: activity?.total_calories || '',
-                activity_equivalent_walking_distance: activity?.equivalent_walking_distance || '',
+                activity_equivalent_walking_distance_miles: toMiles(activity?.equivalent_walking_distance),
                 activity_target_calories: activity?.target_calories || '',
-                activity_target_meters: activity?.target_meters || '',
-                activity_meters_to_target: activity?.meters_to_target || '',
+                activity_target_miles: toMiles(activity?.target_meters),
+                activity_miles_to_target: toMiles(activity?.meters_to_target),
             };
         });
 

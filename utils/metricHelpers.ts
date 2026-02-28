@@ -41,7 +41,7 @@ export const getMetricUnit = (metricType: MetricType): string => {
         steps: 'steps',
         active_calories: 'kcal',
         total_calories: 'kcal',
-        walking_distance: 'km',
+        walking_distance: 'mi',
         high_activity: 'hours',
         medium_activity: 'hours',
         low_activity: 'hours',

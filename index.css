@@ -577,6 +577,69 @@ select {
   margin-bottom: 0.75rem;
 }
 
+/* Section header v2 - cleaner, with icon */
+.section-header-v2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.section-header-v2 h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+/* Score card v2 - with ring visualization */
+.score-card-v2 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1rem 1.25rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 160px;
+}
+
+.score-card-v2:hover {
+  border-color: var(--border-default);
+  background: var(--bg-elevated);
+  transform: translateY(-2px);
+}
+
+.score-card-v2:active {
+  transform: scale(0.97);
+}
+
+/* Chart containers */
+.chart-container {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 1.25rem;
+  transition: border-color 0.15s ease;
+}
+
+.chart-container:hover {
+  border-color: var(--border-default);
+}
+
+.chart-label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
 .score-card {
   display: flex;
   flex-direction: column;

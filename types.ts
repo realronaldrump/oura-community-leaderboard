@@ -1,5 +1,6 @@
 export interface UserProfile {
   id: string;
+  ouraUserId?: string | null;
   firstName?: string | null;
   lastName?: string | null;
   age?: number | null;
@@ -8,6 +9,8 @@ export interface UserProfile {
   biological_sex?: string | null;
   email?: string | null;
   token: string; // Access Token
+  grantedScopes?: string[];
+  tokenExpiresAt?: string | null;
   lastUpdated?: string;
   activeChallenges?: any[]; // using any[] temporarilly to avoid circular dependency, or better yet, define a minimal type here or import if possible.
   // Actually, let's keep it simple and just use an array of objects that match the structure we know, 
