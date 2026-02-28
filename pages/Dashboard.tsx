@@ -171,24 +171,55 @@ const Dashboard: React.FC = () => {
         return items.find(item => item.day === day);
     };
 
+    const pickBestSession = (sessions: SleepSession[]): SleepSession | undefined => {
+        if (sessions.length === 0) return undefined;
+        return [...sessions]
+            .filter(s => s.type !== 'deleted')
+            .sort((a, b) => {
+                const bDuration = b.total_sleep_duration ?? b.time_in_bed ?? 0;
+                const aDuration = a.total_sleep_duration ?? a.time_in_bed ?? 0;
+                if (bDuration !== aDuration) return bDuration - aDuration;
+                return new Date(b.bedtime_end || 0).getTime() - new Date(a.bedtime_end || 0).getTime();
+            })[0];
+    };
+
     const getSessionDisplayDay = (session: { day?: string; bedtime_end?: string }): string | undefined => {
         if (session.bedtime_end) return session.bedtime_end.split('T')[0];
         return session.day;
     };
 
+    const shouldUseLegacySessionFallback = useMemo(() => {
+        const recentSleepDays = sleepHistory.slice(0, 10).map(s => s.day).filter(Boolean) as string[];
+        if (recentSleepDays.length < 3) return false;
+
+        const sessionDays = new Set(sessionHistory.map(s => s.day).filter(Boolean));
+        let directMatches = 0;
+        let previousDayMatches = 0;
+
+        for (const day of recentSleepDays) {
+            if (sessionDays.has(day)) directMatches += 1;
+            const prevDay = getPreviousDay(day);
+            if (prevDay && sessionDays.has(prevDay)) previousDayMatches += 1;
+        }
+
+        return previousDayMatches >= 3 && previousDayMatches > directMatches;
+    }, [sleepHistory, sessionHistory]);
+
     const findSessionForDay = (day?: string) => {
         if (!day) return undefined;
-        const direct = sessionHistory
-            .filter(s => getSessionDisplayDay(s) === day)
-            .sort((a, b) => new Date(b.bedtime_end || 0).getTime() - new Date(a.bedtime_end || 0).getTime())[0];
-        if (direct) return direct;
+
+        const dayMatch = pickBestSession(sessionHistory.filter(s => s.day === day));
+        if (dayMatch) return dayMatch;
+
+        const bedtimeDayMatch = pickBestSession(sessionHistory.filter(s => getSessionDisplayDay(s) === day));
+        if (bedtimeDayMatch) return bedtimeDayMatch;
+
+        if (!shouldUseLegacySessionFallback) return undefined;
 
         // Fallback only for legacy payloads where session "day" is previous-night anchored.
         const prevDay = getPreviousDay(day);
         if (!prevDay) return undefined;
-        return sessionHistory
-            .filter(s => s.day === prevDay)
-            .sort((a, b) => new Date(b.bedtime_end || 0).getTime() - new Date(a.bedtime_end || 0).getTime())[0];
+        return pickBestSession(sessionHistory.filter(s => s.day === prevDay));
     };
 
     const scoreAnchorDay =
