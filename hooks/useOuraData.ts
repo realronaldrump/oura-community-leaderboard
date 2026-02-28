@@ -16,7 +16,7 @@ export const fetchDailyStats = async (
     const canReadDaily = hasScope(grantedScopes, 'daily');
     const canReadSpO2 = hasScope(grantedScopes, 'spo2');
 
-    const [sleep, readiness, activity, sessions, spo2, stress, resilience] = await Promise.all([
+    const requests = [
         canReadDaily ? ouraService.getDailySleep(token, start, end) : Promise.resolve([]),
         canReadDaily ? ouraService.getDailyReadiness(token, start, end) : Promise.resolve([]),
         canReadDaily ? ouraService.getDailyActivity(token, start, end) : Promise.resolve([]),
@@ -24,7 +24,16 @@ export const fetchDailyStats = async (
         canReadSpO2 ? ouraService.getDailySpO2(token, start, end) : Promise.resolve([]),
         canReadDaily ? ouraService.getDailyStress(token, start, end) : Promise.resolve([]),
         canReadDaily ? ouraService.getDailyResilience(token, start, end) : Promise.resolve([])
-    ]);
+    ] as const;
+
+    const settled = await Promise.allSettled(requests);
+    const endpointNames = ['sleep', 'readiness', 'activity', 'sessions', 'spo2', 'stress', 'resilience'] as const;
+
+    const [sleep, readiness, activity, sessions, spo2, stress, resilience] = settled.map((result, idx) => {
+        if (result.status === 'fulfilled') return result.value as any[];
+        console.warn(`Failed to fetch ${endpointNames[idx]}:`, result.reason);
+        return [];
+    });
 
     // Sort descending by date
     const sortFn = (a: any, b: any) => new Date(b.day || b.summary_date || 0).getTime() - new Date(a.day || a.summary_date || 0).getTime();

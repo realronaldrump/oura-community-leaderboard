@@ -146,7 +146,11 @@ class OuraService {
       { headers: this.getHeaders(token) }
     );
     if (!response.ok) {
-      if (response.status === 401) throw new Error('Unauthorized');
+      // Some accounts/rings may not have stress access even with valid tokens.
+      if (response.status === 401 || response.status === 403 || response.status === 404) {
+        console.warn('Stress data unavailable for this account/scope');
+        return [];
+      }
       console.warn('Stress data not available');
       return [];
     }
@@ -161,7 +165,11 @@ class OuraService {
       { headers: this.getHeaders(token) }
     );
     if (!response.ok) {
-      if (response.status === 401) throw new Error('Unauthorized');
+      // Resilience is not available for every account/device or scope combination.
+      if (response.status === 401 || response.status === 403 || response.status === 404) {
+        console.warn('Resilience data unavailable for this account/scope');
+        return [];
+      }
       console.warn('Resilience data not available');
       return [];
     }
