@@ -2,34 +2,78 @@ import { useQuery } from '@tanstack/react-query';
 import { ouraService } from '../services/ouraService';
 import { DailyStats } from '../types';
 
-const hasScope = (grantedScopes: string[] | undefined, requiredScope: string): boolean => {
-    if (!grantedScopes || grantedScopes.length === 0) return true;
-    return grantedScopes.includes(requiredScope);
-};
+export const FULL_HISTORY_START_DATE = '2016-01-01';
 
 export const fetchDailyStats = async (
     token: string,
     dateRange?: { start: string, end?: string },
-    grantedScopes?: string[]
+    _grantedScopes?: string[]
 ): Promise<DailyStats> => {
-    const { start, end } = dateRange || {};
-    const canReadDaily = hasScope(grantedScopes, 'daily');
-    const canReadSpO2 = hasScope(grantedScopes, 'spo2');
+    // Single canonical history path for the app:
+    // default to complete history unless a specific range is requested.
+    const start = dateRange?.start || FULL_HISTORY_START_DATE;
+    const end = dateRange?.end;
 
     const requests = [
-        canReadDaily ? ouraService.getDailySleep(token, start, end) : Promise.resolve([]),
-        canReadDaily ? ouraService.getDailyReadiness(token, start, end) : Promise.resolve([]),
-        canReadDaily ? ouraService.getDailyActivity(token, start, end) : Promise.resolve([]),
-        canReadDaily ? ouraService.getSleepSessions(token, start, end) : Promise.resolve([]),
-        canReadSpO2 ? ouraService.getDailySpO2(token, start, end) : Promise.resolve([]),
-        canReadDaily ? ouraService.getDailyStress(token, start, end) : Promise.resolve([]),
-        canReadDaily ? ouraService.getDailyResilience(token, start, end) : Promise.resolve([])
+        ouraService.getDailySleep(token, start, end),
+        ouraService.getDailyReadiness(token, start, end),
+        ouraService.getDailyActivity(token, start, end),
+        ouraService.getSleepSessions(token, start, end),
+        ouraService.getDailySpO2(token, start, end),
+        ouraService.getDailyStress(token, start, end),
+        ouraService.getDailyResilience(token, start, end),
+        ouraService.getHeartRate(token, start, end),
+        ouraService.getWorkouts(token, start, end),
+        ouraService.getSessions(token, start, end),
+        ouraService.getSleepTime(token, start, end),
+        ouraService.getTags(token, start, end),
+        ouraService.getEnhancedTags(token, start, end),
+        ouraService.getRestModePeriods(token, start, end),
+        ouraService.getRingConfiguration(token),
+        ouraService.getDailyCardiovascularAge(token, start, end),
+        ouraService.getVO2Max(token, start, end)
     ] as const;
 
     const settled = await Promise.allSettled(requests);
-    const endpointNames = ['sleep', 'readiness', 'activity', 'sessions', 'spo2', 'stress', 'resilience'] as const;
+    const endpointNames = [
+        'sleep',
+        'readiness',
+        'activity',
+        'sessions',
+        'spo2',
+        'stress',
+        'resilience',
+        'heartrate',
+        'workout',
+        'guidedSession',
+        'sleepTime',
+        'tag',
+        'enhancedTag',
+        'restModePeriod',
+        'ringConfiguration',
+        'cardiovascularAge',
+        'vo2Max'
+    ] as const;
 
-    const [sleep, readiness, activity, sessions, spo2, stress, resilience] = settled.map((result, idx) => {
+    const [
+        sleep,
+        readiness,
+        activity,
+        sessions,
+        spo2,
+        stress,
+        resilience,
+        heartrate,
+        workout,
+        guidedSession,
+        sleepTime,
+        tag,
+        enhancedTag,
+        restModePeriod,
+        ringConfiguration,
+        cardiovascularAge,
+        vo2Max
+    ] = settled.map((result, idx) => {
         if (result.status === 'fulfilled') return result.value as any[];
         console.warn(`Failed to fetch ${endpointNames[idx]}:`, result.reason);
         return [];
@@ -53,7 +97,17 @@ export const fetchDailyStats = async (
         })).sort(sortFn),
         spo2: spo2.sort(sortFn),
         stress: stress.sort(sortFn),
-        resilience: resilience.sort(sortFn)
+        resilience: resilience.sort(sortFn),
+        heartrate: heartrate.sort((a: any, b: any) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()),
+        workout: workout.sort(sortFn),
+        guidedSession: guidedSession.sort(sortFn),
+        sleepTime: sleepTime.sort(sortFn),
+        tag: tag.sort(sortFn),
+        enhancedTag: enhancedTag.sort(sortFn),
+        restModePeriod: restModePeriod.sort(sortFn),
+        ringConfiguration,
+        cardiovascularAge: cardiovascularAge.sort(sortFn),
+        vo2Max: vo2Max.sort(sortFn),
     };
 };
 
@@ -63,14 +117,14 @@ export const useDailyStats = (token: string, enabled: boolean = true) => {
         queryFn: () => fetchDailyStats(token),
         enabled: !!token && enabled,
         staleTime: 1000 * 60 * 30, // 30 minutes
+        gcTime: 1000 * 60 * 60 * 24, // keep full history cached for the current app session
     });
 };
 
 export const useAllTimeStats = (token: string, enabled: boolean = true) => {
     return useQuery({
         queryKey: ['allTimeStats', token],
-        // Fetch from 2016 (Oura Gen 1 era) to now
-        queryFn: () => fetchDailyStats(token, { start: '2016-01-01' }),
+        queryFn: () => fetchDailyStats(token, { start: FULL_HISTORY_START_DATE }),
         enabled: !!token && enabled,
         staleTime: 1000 * 60 * 60 * 24, // 24 hours
         gcTime: 1000 * 60 * 60 * 24, // Keep in cache for 24 hours
@@ -80,14 +134,14 @@ export const useAllTimeStats = (token: string, enabled: boolean = true) => {
 export const useHeartRate = (
     token: string,
     enabled: boolean = true,
-    grantedScopes?: string[]
+    _grantedScopes?: string[]
 ) => {
     return useQuery({
         queryKey: ['heartRate', token],
         queryFn: async () => {
             return await ouraService.getHeartRate(token);
         },
-        enabled: !!token && enabled && hasScope(grantedScopes, 'heartrate'),
+        enabled: !!token && enabled,
         staleTime: 1000 * 60 * 5, // 5 minutes
     });
 };

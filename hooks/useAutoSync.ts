@@ -23,7 +23,7 @@ export const useAutoSync = (tokens: string[], enabled: boolean = true) => {
         // Invalidate all data queries so react-query refetches them
         await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['dailyStats'] }),
-            queryClient.invalidateQueries({ queryKey: ['heartRate'] }),
+            queryClient.invalidateQueries({ queryKey: ['allTimeStats'] }),
         ]);
         setLastSyncTime();
     }, [tokens, queryClient, setLastSyncTime]);

@@ -44,10 +44,9 @@ const Settings: React.FC = () => {
         if (!activeProfile) return;
         setShowSyncModal(true);
         try {
-            await fullSync(activeProfile.token, (progress) => { setSyncProgress(progress); }, activeProfile.grantedScopes);
-            await queryClient.invalidateQueries({ queryKey: ['dailyStats'] });
-            await queryClient.invalidateQueries({ queryKey: ['allTimeStats'] });
-            await queryClient.invalidateQueries({ queryKey: ['heartRate'] });
+            const syncedData = await fullSync(activeProfile.token, (progress) => { setSyncProgress(progress); });
+            queryClient.setQueryData(['dailyStats', activeProfile.token], syncedData);
+            queryClient.setQueryData(['allTimeStats', activeProfile.token], syncedData);
         } catch (err) {
             console.error('Full sync failed:', err);
             setSyncProgress(prev => ({ ...prev, status: 'error', error: 'Something went wrong. Please try again.' }));

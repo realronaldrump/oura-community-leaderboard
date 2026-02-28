@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { Download, FileText, Database, TrendingUp, AlertCircle } from 'lucide-react';
 import Papa from 'papaparse';
 import { useUser } from '../contexts/UserContext';
-import { ouraService } from '../services/ouraService';
-import { DailyStats } from '../types';
+import { fetchDailyStats, FULL_HISTORY_START_DATE } from '../hooks/useOuraData';
 
 const METERS_TO_MILES = 0.000621371;
 const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
@@ -31,20 +30,15 @@ const DataExport: React.FC = () => {
         setError(null);
 
         try {
-            // Fetch all historical data from 2016 to present
-            const startDate = '2016-01-01';
-            const endDate = new Date().toISOString().split('T')[0];
-
-            const [sleepData, readinessData, activityData] = await Promise.all([
-                ouraService.getDailySleep(activeProfile.token, startDate, endDate),
-                ouraService.getDailyReadiness(activeProfile.token, startDate, endDate),
-                ouraService.getDailyActivity(activeProfile.token, startDate, endDate),
-            ]);
+            const allHistory = await fetchDailyStats(activeProfile.token, {
+                start: FULL_HISTORY_START_DATE,
+                end: new Date().toISOString().split('T')[0]
+            });
 
             setExportData({
-                sleep: sleepData || [],
-                readiness: readinessData || [],
-                activity: activityData || [],
+                sleep: allHistory.sleep || [],
+                readiness: allHistory.readiness || [],
+                activity: allHistory.activity || [],
             });
         } catch (err) {
             console.error('Error fetching data:', err);

@@ -244,4 +244,14 @@ export interface DailyStats {
   spo2: DailySpO2[];
   stress: DailyStress[];
   resilience: DailyResilience[];
+  heartrate?: HeartRate[];
+  workout?: Workout[];
+  guidedSession?: any[];
+  sleepTime?: any[];
+  tag?: any[];
+  enhancedTag?: any[];
+  restModePeriod?: any[];
+  ringConfiguration?: any[];
+  cardiovascularAge?: any[];
+  vo2Max?: any[];
 }

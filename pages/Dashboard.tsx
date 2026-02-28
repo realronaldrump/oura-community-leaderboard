@@ -17,7 +17,7 @@ import {
     LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip
 } from 'recharts';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
-import { fetchDailyStats, useHeartRate } from '../hooks/useOuraData';
+import { fetchDailyStats, FULL_HISTORY_START_DATE } from '../hooks/useOuraData';
 import MetricComparisonGroup from '../components/MetricComparisonGroup';
 import ComparisonHeartRateChart from '../components/charts/ComparisonHeartRateChart';
 import AllTimeHistory from '../components/AllTimeHistory';
@@ -83,11 +83,11 @@ const Dashboard: React.FC = () => {
         setShowSyncModal(true);
         try {
             const existingData = queryClient.getQueryData(['dailyStats', activeProfile.token]) as any;
-            await smartSync(activeProfile.token, existingData, (progress) => {
+            const syncedData = await smartSync(activeProfile.token, existingData, (progress) => {
                 setSyncProgress(progress);
-            }, activeProfile.grantedScopes);
-            await queryClient.invalidateQueries({ queryKey: ['dailyStats'] });
-            await queryClient.invalidateQueries({ queryKey: ['heartRate'] });
+            });
+            queryClient.setQueryData(['dailyStats', activeProfile.token], syncedData);
+            queryClient.setQueryData(['allTimeStats', activeProfile.token], syncedData);
         } catch (err) {
             console.error('Sync failed:', err);
             setSyncProgress(prev => ({ ...prev, status: 'error', error: 'Something went wrong. Please try again.' }));
@@ -100,19 +100,13 @@ const Dashboard: React.FC = () => {
     const userQueries = useQueries({
         queries: profiles.map(p => ({
             queryKey: ['dailyStats', p.token],
-            queryFn: () => fetchDailyStats(p.token, undefined, p.grantedScopes),
+            queryFn: () => fetchDailyStats(p.token, { start: FULL_HISTORY_START_DATE }),
             staleTime: 1000 * 60 * 60,
         }))
     });
 
-    const allTimeQueries = useQueries({
-        queries: profiles.map(p => ({
-            queryKey: ['allTimeStats', p.token],
-            queryFn: () => fetchDailyStats(p.token, { start: '2016-01-01' }, p.grantedScopes),
-            staleTime: 1000 * 60 * 60 * 24,
-            enabled: viewMode === 'trends',
-        }))
-    });
+    // Canonical history source: dailyStats already contains complete history.
+    const allTimeQueries = userQueries;
 
     const leaderboardData = useMemo(() => {
         return profiles.map((p, idx) => {
@@ -142,10 +136,9 @@ const Dashboard: React.FC = () => {
         }).filter((e): e is LeaderboardEntry => e !== null).sort((a, b) => b.average - a.average);
     }, [profiles, userQueries, activeProfile?.id]);
 
-    const { data: hrData } = useHeartRate(activeProfile?.token || '', !!activeProfile, activeProfile?.grantedScopes);
-
     const activeUserQuery = userQueries.find((_, idx) => profiles[idx].id === activeProfile?.id);
     const activeData = activeUserQuery?.data as DailyStats | undefined;
+    const hrData = activeData?.heartrate || [];
 
     const [dateIndex, setDateIndex] = useState(0);
 
@@ -233,8 +226,7 @@ const Dashboard: React.FC = () => {
         if (!activeProfile?.token) return;
         const allTimeData = await fetchDailyStats(
             activeProfile.token,
-            { start: '2016-01-01' },
-            activeProfile.grantedScopes
+            { start: FULL_HISTORY_START_DATE }
         );
         const historyData = getMetricHistoryData(metricType, allTimeData.session?.length || 0, allTimeData);
         setMetricDetailModal({ isOpen: true, metricType, currentValue, historyData, unit, color, date: currentSleep?.day });
@@ -243,16 +235,8 @@ const Dashboard: React.FC = () => {
     // Versus data
     const p1Data = userQueries[0]?.data as DailyStats | undefined;
     const p2Data = userQueries[1]?.data as DailyStats | undefined;
-    const { data: p1Hr } = useHeartRate(
-        profiles[0]?.token || '',
-        viewMode === 'compare' && !!profiles[0],
-        profiles[0]?.grantedScopes
-    );
-    const { data: p2Hr } = useHeartRate(
-        profiles[1]?.token || '',
-        viewMode === 'compare' && !!profiles[1],
-        profiles[1]?.grantedScopes
-    );
+    const p1Hr = p1Data?.heartrate || [];
+    const p2Hr = p2Data?.heartrate || [];
     const p1Sleep = p1Data?.sleep[0]; const p1Readiness = p1Data?.readiness[0]; const p1Session = p1Data?.session[0];
     const p2Sleep = p2Data?.sleep[0]; const p2Readiness = p2Data?.readiness[0]; const p2Session = p2Data?.session[0];
 
