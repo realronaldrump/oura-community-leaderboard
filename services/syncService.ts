@@ -1,4 +1,4 @@
-import { fetchDailyStats, FULL_HISTORY_START_DATE } from '../hooks/useOuraData';
+import { FULL_HISTORY_START_DATE, syncDailyStats } from '../hooks/useOuraData';
 import { DailyStats } from '../types';
 
 export interface SyncProgress {
@@ -20,22 +20,22 @@ const getToday = () => new Date().toISOString().split('T')[0];
  */
 export const smartSync = async (
     token: string,
-    _existingData: DailyStats | undefined,
+    existingData: DailyStats | undefined,
     onProgress: SyncProgressCallback
 ): Promise<Partial<DailyStats>> => {
     const today = getToday();
 
     onProgress({
         status: 'syncing',
-        currentStep: 'Syncing complete history...',
+        currentStep: 'Syncing new data...',
         stepsCompleted: 0,
         totalSteps: 1,
-        details: `${FULL_HISTORY_START_DATE} → ${today}`,
+        details: `Recent changes up to ${today}`,
     });
 
-    const data = await fetchDailyStats(token, {
-        start: FULL_HISTORY_START_DATE,
-        end: today,
+    const data = await syncDailyStats(token, existingData, {
+        mode: 'incremental',
+        endDate: today,
     });
 
     onProgress({
@@ -43,7 +43,7 @@ export const smartSync = async (
         currentStep: 'Sync complete!',
         stepsCompleted: 1,
         totalSteps: 1,
-        details: `${FULL_HISTORY_START_DATE} → ${today}`,
+        details: `Updated through ${today}`,
     });
 
     return data;
@@ -66,9 +66,9 @@ export const fullSync = async (
         details: `${FULL_HISTORY_START_DATE} → ${today}`,
     });
 
-    const data = await fetchDailyStats(token, {
-        start: FULL_HISTORY_START_DATE,
-        end: today,
+    const data = await syncDailyStats(token, undefined, {
+        mode: 'full',
+        endDate: today,
     });
 
     onProgress({

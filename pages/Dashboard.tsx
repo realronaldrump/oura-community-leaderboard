@@ -17,7 +17,7 @@ import {
     LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip
 } from 'recharts';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
-import { fetchDailyStats, FULL_HISTORY_START_DATE } from '../hooks/useOuraData';
+import { fetchDailyStats, FULL_HISTORY_START_DATE, syncDailyStats } from '../hooks/useOuraData';
 import MetricComparisonGroup from '../components/MetricComparisonGroup';
 import ComparisonHeartRateChart from '../components/charts/ComparisonHeartRateChart';
 import AllTimeHistory from '../components/AllTimeHistory';
@@ -87,7 +87,6 @@ const Dashboard: React.FC = () => {
                 setSyncProgress(progress);
             });
             queryClient.setQueryData(['dailyStats', activeProfile.token], syncedData);
-            queryClient.setQueryData(['allTimeStats', activeProfile.token], syncedData);
         } catch (err) {
             console.error('Sync failed:', err);
             setSyncProgress(prev => ({ ...prev, status: 'error', error: 'Something went wrong. Please try again.' }));
@@ -100,13 +99,22 @@ const Dashboard: React.FC = () => {
     const userQueries = useQueries({
         queries: profiles.map(p => ({
             queryKey: ['dailyStats', p.token],
-            queryFn: () => fetchDailyStats(p.token, { start: FULL_HISTORY_START_DATE }),
+            queryFn: async () => {
+                const cached = queryClient.getQueryData(['dailyStats', p.token]) as DailyStats | undefined;
+                return syncDailyStats(p.token, cached, { mode: 'incremental' });
+            },
             staleTime: 1000 * 60 * 60,
         }))
     });
 
-    // Canonical history source: dailyStats already contains complete history.
-    const allTimeQueries = userQueries;
+    const allTimeQueries = useQueries({
+        queries: profiles.map(p => ({
+            queryKey: ['allTimeStats', p.token],
+            queryFn: () => fetchDailyStats(p.token, { start: FULL_HISTORY_START_DATE }),
+            staleTime: 1000 * 60 * 60 * 24,
+            enabled: viewMode === 'trends' || viewMode === 'insights',
+        }))
+    });
 
     const leaderboardData = useMemo(() => {
         return profiles.map((p, idx) => {
@@ -267,10 +275,12 @@ const Dashboard: React.FC = () => {
         color?: string
     ) => {
         if (!activeProfile?.token) return;
-        const allTimeData = await fetchDailyStats(
-            activeProfile.token,
-            { start: FULL_HISTORY_START_DATE }
-        );
+        const allTimeQueryKey = ['allTimeStats', activeProfile.token] as const;
+        let allTimeData = queryClient.getQueryData(allTimeQueryKey) as DailyStats | undefined;
+        if (!allTimeData) {
+            allTimeData = await fetchDailyStats(activeProfile.token, { start: FULL_HISTORY_START_DATE });
+            queryClient.setQueryData(allTimeQueryKey, allTimeData);
+        }
         const historyData = getMetricHistoryData(metricType, allTimeData.session?.length || 0, allTimeData);
         setMetricDetailModal({ isOpen: true, metricType, currentValue, historyData, unit, color, date: currentSleep?.day });
     };
