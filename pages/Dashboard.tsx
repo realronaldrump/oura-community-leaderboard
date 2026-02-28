@@ -1,30 +1,22 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
     DailyActivity, DailyReadiness, DailySleep, SleepSession, HeartRate,
     DailySpO2, DailyStress, DailyResilience, LeaderboardEntry, formatDuration, formatTime, DailyStats
 } from '../types';
-import { ouraService } from '../services/ouraService';
 import { useUser } from '../contexts/UserContext';
-import ScoreRing from '../components/ScoreRing';
 import MetricCard from '../components/MetricCard';
-import HistoryChart from '../components/HistoryChart';
 import SleepStagesChart from '../components/charts/SleepStagesChart';
 import HeartRateChart from '../components/charts/HeartRateChart';
 import ContributorsBreakdown from '../components/ContributorsBreakdown';
-import HeroSection from '../components/HeroSection';
-import ParallaxSection, { SectionDivider } from '../components/ParallaxSection';
-import FloatingOrb from '../components/FloatingOrb';
 import ScoreBreakdownModal from '../components/ScoreBreakdownModal';
 import MetricDetailModal from '../components/MetricDetailModal';
 import LeaderboardUserDetailModal from '../components/LeaderboardUserDetailModal';
 import DataExport from './DataExport';
-import { Reveal } from '../hooks/useScrollReveal';
 import {
     LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip
 } from 'recharts';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
-import { fetchDailyStats, useHeartRate, useAllTimeStats } from '../hooks/useOuraData';
-import ComparisonRow from '../components/ComparisonRow';
+import { fetchDailyStats, useHeartRate } from '../hooks/useOuraData';
 import MetricComparisonGroup from '../components/MetricComparisonGroup';
 import ComparisonHeartRateChart from '../components/charts/ComparisonHeartRateChart';
 import AllTimeHistory from '../components/AllTimeHistory';
@@ -40,35 +32,23 @@ import {
     DailySnapshot,
     ChallengeManager
 } from '../components/analytics';
-
-import { Lightbulb, ChevronLeft, ChevronRight, X, Database } from 'lucide-react';
+import { useAutoSync, formatLastSync } from '../hooks/useAutoSync';
+import { ChevronLeft, ChevronRight, X, RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain, ArrowUpDown } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
     const { activeProfile, profiles, setActiveProfileId, login, removeProfile, firebaseError, isLoadingProfiles, retryFirebaseConnection } = useUser();
-    const [loading, setLoading] = useState(false);
-    const [viewMode, setViewMode] = useState<'daily' | 'versus' | 'history' | 'insights' | 'analytics' | 'data-export'>('daily');
-    const [analyticsSubTab, setAnalyticsSubTab] = useState<'timeline' | 'correlation'>('timeline');
-    const [insightsSubTab, setInsightsSubTab] = useState<'streaks' | 'challenges' | 'patterns' | 'whatif' | 'milestones' | 'snapshot'>('streaks');
+    const [viewMode, setViewMode] = useState<'today' | 'compare' | 'trends' | 'insights' | 'export'>('today');
     const [isSyncing, setIsSyncing] = useState(false);
     const [showSyncModal, setShowSyncModal] = useState(false);
     const [syncProgress, setSyncProgress] = useState<SyncProgress>({
-        status: 'idle',
-        currentStep: '',
-        stepsCompleted: 0,
-        totalSteps: 0,
-        details: '',
+        status: 'idle', currentStep: '', stepsCompleted: 0, totalSteps: 0, details: '',
     });
 
-    // Score Breakdown Modal State
     const [scoreBreakdownModal, setScoreBreakdownModal] = useState<{
         isOpen: boolean;
         scoreType: 'readiness' | 'sleep' | 'activity' | null;
-    }>({
-        isOpen: false,
-        scoreType: null,
-    });
+    }>({ isOpen: false, scoreType: null });
 
-    // Metric Detail Modal State
     const [metricDetailModal, setMetricDetailModal] = useState<{
         isOpen: boolean;
         metricType: 'hrv' | 'heart_rate' | 'lowest_hr' | 'spo2' | 'stress' | 'resilience' | 'steps' | 'calories' | 'sleep_duration' | 'deep_sleep' | 'rem_sleep' | 'efficiency' | null;
@@ -77,72 +57,54 @@ const Dashboard: React.FC = () => {
         unit?: string;
         color?: string;
         date?: string;
-    }>({
-        isOpen: false,
-        metricType: null,
-        currentValue: null,
-        historyData: [],
-    });
+    }>({ isOpen: false, metricType: null, currentValue: null, historyData: [] });
 
-    // Leaderboard User Detail Modal State
     const [leaderboardUserDetail, setLeaderboardUserDetail] = useState<{
         isOpen: boolean;
         user: LeaderboardEntry | null;
-    }>({
-        isOpen: false,
-        user: null,
-    });
+    }>({ isOpen: false, user: null });
+
     const queryClient = useQueryClient();
 
-    // Smart sync - only fetches new data since last sync
+    // Auto-sync every hour
+    const tokens = useMemo(() => profiles.map(p => p.token), [profiles]);
+    const { lastSyncTime, refreshNow } = useAutoSync(tokens, !!activeProfile);
+
+    // Manual sync
     const handleSyncAllData = async () => {
         if (!activeProfile) return;
-
         setIsSyncing(true);
         setShowSyncModal(true);
-
         try {
-            // Get existing data from cache
             const existingData = queryClient.getQueryData(['dailyStats', activeProfile.token]) as any;
-
-            // Perform smart sync with progress updates
             await smartSync(activeProfile.token, existingData, (progress) => {
                 setSyncProgress(progress);
             });
-
-            // After sync, invalidate cache to refetch with merged data
             await queryClient.invalidateQueries({ queryKey: ['dailyStats'] });
             await queryClient.invalidateQueries({ queryKey: ['heartRate'] });
         } catch (err) {
             console.error('Sync failed:', err);
-            setSyncProgress(prev => ({
-                ...prev,
-                status: 'error',
-                error: 'Something went wrong. Please try again.',
-            }));
+            setSyncProgress(prev => ({ ...prev, status: 'error', error: 'Something went wrong. Please try again.' }));
         } finally {
             setIsSyncing(false);
         }
     };
 
-
-    // Fetch basic stats for ALL profiles (Leaderboard & Versus) - Default 30 days
+    // Data queries
     const userQueries = useQueries({
         queries: profiles.map(p => ({
             queryKey: ['dailyStats', p.token],
             queryFn: () => fetchDailyStats(p.token),
-            staleTime: 1000 * 60 * 60, // 1 hour
+            staleTime: 1000 * 60 * 60,
         }))
     });
 
-    // Fetch FULL stats for ALL profiles (History View) - All Time
-    // Only enabled when in history mode to save bandwidth
     const allTimeQueries = useQueries({
         queries: profiles.map(p => ({
             queryKey: ['allTimeStats', p.token],
             queryFn: () => fetchDailyStats(p.token, { start: '2016-01-01' }),
-            staleTime: 1000 * 60 * 60 * 24, // 24 hours
-            enabled: viewMode === 'history',
+            staleTime: 1000 * 60 * 60 * 24,
+            enabled: viewMode === 'trends',
         }))
     });
 
@@ -150,29 +112,19 @@ const Dashboard: React.FC = () => {
         return profiles.map((p, idx) => {
             const query = userQueries[idx];
             const data = query.data;
-
             if (!data) return null;
-
             const { sleep, readiness, activity, session } = data;
-
             const lastSleep = sleep[0];
             const lastReadiness = readiness[0];
             const lastActivity = activity[0];
-
-            // Fix: Find the session that matches the sleep day, or null if not found
-            // This prevents showing yesterday's sleep data with today's score
             const lastSession = lastSleep ? session.find(s => s.day === lastSleep.day) : null;
-
             const sScore = lastSleep?.score || 0;
             const rScore = lastReadiness?.score || 0;
             const aScore = lastActivity?.score || 0;
-
             return {
                 id: p.id,
                 name: p.firstName || (p.email || 'User').split('@')[0],
-                readiness: rScore,
-                sleep: sScore,
-                activity: aScore,
+                readiness: rScore, sleep: sScore, activity: aScore,
                 steps: lastActivity?.steps,
                 activeCalories: lastActivity?.active_calories,
                 sleepDuration: lastSession?.total_sleep_duration ?? lastSession?.time_in_bed ?? null,
@@ -184,13 +136,11 @@ const Dashboard: React.FC = () => {
         }).filter((e): e is LeaderboardEntry => e !== null).sort((a, b) => b.average - a.average);
     }, [profiles, userQueries, activeProfile?.id]);
 
-    // Active User deep data (Heart Rate, etc)
     const { data: hrData } = useHeartRate(activeProfile?.token || '', !!activeProfile);
 
     const activeUserQuery = userQueries.find((_, idx) => profiles[idx].id === activeProfile?.id);
     const activeData = activeUserQuery?.data as DailyStats | undefined;
 
-    // Derived Data for Active View
     const [dateIndex, setDateIndex] = useState(0);
 
     const sleepHistory = activeData?.sleep || [];
@@ -204,116 +154,64 @@ const Dashboard: React.FC = () => {
     const currentSleep = sleepHistory[dateIndex] || sleepHistory[0];
     const currentReadiness = readinessHistory[dateIndex] || readinessHistory[0];
     const currentActivity = activityHistory[dateIndex] || activityHistory[0];
-
-    // Fix: Strict matching for session data to avoid showing data from wrong day
     const currentSession = currentSleep ? sessionHistory.find(s => s.day === currentSleep.day) : undefined;
-
-
-
-    // Additional Derived Data
     const currentSpo2 = spo2History.find(s => s.day === currentSleep?.day) || spo2History[dateIndex] || spo2History[0];
     const currentStress = stressHistory.find(s => s.day === currentSleep?.day) || stressHistory[dateIndex] || stressHistory[0];
     const currentResilience = resilienceHistory.find(r => r.day === currentSleep?.day) || resilienceHistory[dateIndex] || resilienceHistory[0];
 
     const readinessContributors = currentReadiness?.contributors ? [
-        { label: 'Previous Night', value: currentReadiness.contributors.previous_night, color: '#3b82f6' },
-        { label: 'Sleep Balance', value: currentReadiness.contributors.sleep_balance, color: '#3b82f6' },
-        { label: 'HRV Balance', value: currentReadiness.contributors.hrv_balance, color: '#8b5cf6' },
-        { label: 'Resting HR', value: currentReadiness.contributors.resting_heart_rate, color: '#ef4444' },
-        { label: 'Recovery Index', value: currentReadiness.contributors.recovery_index, color: '#10b981' },
-        { label: 'Body Temperature', value: currentReadiness.contributors.body_temperature, color: '#f97316' },
-        { label: 'Activity Balance', value: currentReadiness.contributors.activity_balance, color: '#f59e0b' },
-        { label: 'Previous Day Activity', value: currentReadiness.contributors.previous_day_activity, color: '#f59e0b' },
+        { label: 'Previous Night', value: currentReadiness.contributors.previous_night, color: '#3b82f6', key: 'previous_night' },
+        { label: 'Sleep Balance', value: currentReadiness.contributors.sleep_balance, color: '#3b82f6', key: 'sleep_balance' },
+        { label: 'HRV Balance', value: currentReadiness.contributors.hrv_balance, color: '#8b5cf6', key: 'hrv_balance' },
+        { label: 'Resting HR', value: currentReadiness.contributors.resting_heart_rate, color: '#ef4444', key: 'resting_heart_rate' },
+        { label: 'Recovery Index', value: currentReadiness.contributors.recovery_index, color: '#10b981', key: 'recovery_index' },
+        { label: 'Body Temperature', value: currentReadiness.contributors.body_temperature, color: '#f97316', key: 'body_temperature' },
+        { label: 'Activity Balance', value: currentReadiness.contributors.activity_balance, color: '#f59e0b', key: 'activity_balance' },
+        { label: 'Previous Day Activity', value: currentReadiness.contributors.previous_day_activity, color: '#f59e0b', key: 'previous_day_activity' },
     ] : [];
 
     const sleepContributors = currentSleep?.contributors ? [
-        { label: 'Total Sleep', value: currentSleep.contributors.total_sleep, color: '#3b82f6' },
-        { label: 'Efficiency', value: currentSleep.contributors.efficiency, color: '#3b82f6' },
-        { label: 'Restfulness', value: currentSleep.contributors.restfulness, color: '#8b5cf6' },
-        { label: 'REM Sleep', value: currentSleep.contributors.rem_sleep, color: '#8b5cf6' },
-        { label: 'Deep Sleep', value: currentSleep.contributors.deep_sleep, color: '#1e40af' },
-        { label: 'Latency', value: currentSleep.contributors.latency, color: '#10b981' },
-        { label: 'Timing', value: currentSleep.contributors.timing, color: '#10b981' },
+        { label: 'Total Sleep', value: currentSleep.contributors.total_sleep, color: '#3b82f6', key: 'total_sleep' },
+        { label: 'Efficiency', value: currentSleep.contributors.efficiency, color: '#3b82f6', key: 'efficiency' },
+        { label: 'Restfulness', value: currentSleep.contributors.restfulness, color: '#8b5cf6', key: 'restfulness' },
+        { label: 'REM Sleep', value: currentSleep.contributors.rem_sleep, color: '#8b5cf6', key: 'rem_sleep' },
+        { label: 'Deep Sleep', value: currentSleep.contributors.deep_sleep, color: '#1e40af', key: 'deep_sleep' },
+        { label: 'Latency', value: currentSleep.contributors.latency, color: '#10b981', key: 'latency' },
+        { label: 'Timing', value: currentSleep.contributors.timing, color: '#10b981', key: 'timing' },
     ] : [];
 
     const getMetricHistoryData = (metricType: string, days: number = 30, data?: DailyStats) => {
         const dataSource = data || activeData;
         if (!dataSource) return [];
-
-        const { session: sessionHistory, activity: activityHistory, spo2: spo2History, stress: stressHistory, resilience: resilienceHistory, sleep: sleepHistory } = dataSource;
-
+        const { session: sh, activity: ah, spo2: sp, stress: st, resilience: rl } = dataSource;
         const dataPoints: { date: string; value: number }[] = [];
-
-        for (let i = 0; i < Math.min(days, sessionHistory?.length || 0); i++) {
-            const session = sessionHistory?.[i];
-            const activity = activityHistory?.[i];
-            const spo2 = spo2History?.[i];
-            const stress = stressHistory?.[i];
-            const resilience = resilienceHistory?.[i];
-            const sleep = sleepHistory?.[i];
-
+        for (let i = 0; i < Math.min(days, sh?.length || 0); i++) {
+            const session = sh?.[i]; const activity = ah?.[i]; const spo2 = sp?.[i]; const stress = st?.[i]; const resilience = rl?.[i];
             if (!session?.day) continue;
-
             let value: number | null = null;
-
             switch (metricType) {
-                case 'hrv':
-                    value = session.average_hrv ?? null;
-                    break;
-                case 'heart_rate':
-                    value = session.average_heart_rate ?? null;
-                    break;
-                case 'lowest_hr':
-                    value = session.lowest_heart_rate ?? null;
-                    break;
-                case 'spo2':
-                    value = spo2?.spo2_percentage?.average ?? null;
-                    break;
-                case 'stress':
-                    value = stress?.stress_high ?? null;
-                    break;
+                case 'hrv': value = session.average_hrv ?? null; break;
+                case 'heart_rate': value = session.average_heart_rate ?? null; break;
+                case 'lowest_hr': value = session.lowest_heart_rate ?? null; break;
+                case 'spo2': value = spo2?.spo2_percentage?.average ?? null; break;
+                case 'stress': value = stress?.stress_high ?? null; break;
                 case 'resilience':
                     if (resilience?.contributors) {
-                        const { sleep_recovery, daytime_recovery, stress } = resilience.contributors;
-                        value = sleep_recovery !== undefined && daytime_recovery !== undefined && stress !== undefined
-                            ? (sleep_recovery + daytime_recovery - stress) / 3
-                            : null;
-                    }
-                    break;
-                case 'steps':
-                    value = activity?.steps ?? null;
-                    break;
-                case 'calories':
-                    value = activity?.active_calories ?? null;
-                    break;
-                case 'sleep_duration':
-                    value = session.total_sleep_duration ? session.total_sleep_duration : null;
-                    break;
-                case 'deep_sleep':
-                    value = session.deep_sleep_duration ? session.deep_sleep_duration : null;
-                    break;
-                case 'rem_sleep':
-                    value = session.rem_sleep_duration ? session.rem_sleep_duration : null;
-                    break;
-                case 'efficiency':
-                    value = session.efficiency ?? null;
-                    break;
+                        const { sleep_recovery, daytime_recovery, stress: s } = resilience.contributors;
+                        value = sleep_recovery !== undefined && daytime_recovery !== undefined && s !== undefined
+                            ? (sleep_recovery + daytime_recovery - s) / 3 : null;
+                    } break;
+                case 'steps': value = activity?.steps ?? null; break;
+                case 'calories': value = activity?.active_calories ?? null; break;
+                case 'sleep_duration': value = session.total_sleep_duration ?? null; break;
+                case 'deep_sleep': value = session.deep_sleep_duration ?? null; break;
+                case 'rem_sleep': value = session.rem_sleep_duration ?? null; break;
+                case 'efficiency': value = session.efficiency ?? null; break;
             }
-
-            const isHeartRateMetric = metricType === 'hrv' || metricType === 'heart_rate' || metricType === 'lowest_hr';
-            if (value !== null && (!isHeartRateMetric || value > 0)) {
-                dataPoints.push({ date: session.day, value });
-            }
+            const isHR = metricType === 'hrv' || metricType === 'heart_rate' || metricType === 'lowest_hr';
+            if (value !== null && (!isHR || value > 0)) dataPoints.push({ date: session.day, value });
         }
-
         return dataPoints;
-    };
-
-    const handleLeaderboardUserClick = (user: LeaderboardEntry) => {
-        setLeaderboardUserDetail({
-            isOpen: true,
-            user,
-        });
     };
 
     const handleMetricCardClick = async (
@@ -323,161 +221,87 @@ const Dashboard: React.FC = () => {
         color?: string
     ) => {
         if (!activeProfile?.token) return;
-
-        // Fetch all-time data for the metric detail modal
         const allTimeData = await fetchDailyStats(activeProfile.token, { start: '2016-01-01' });
         const historyData = getMetricHistoryData(metricType, allTimeData.session?.length || 0, allTimeData);
-
-        setMetricDetailModal({
-            isOpen: true,
-            metricType,
-            currentValue,
-            historyData,
-            unit,
-            color,
-            date: currentSleep?.day,
-        });
+        setMetricDetailModal({ isOpen: true, metricType, currentValue, historyData, unit, color, date: currentSleep?.day });
     };
 
-    const comparisonMetrics = useMemo(() => [
-        { key: 'readiness', label: 'Readiness Score', formatter: (u: LeaderboardEntry) => u.readiness ?? '--', color: 'text-metric-readiness' },
-        { key: 'sleep', label: 'Sleep Score', formatter: (u: LeaderboardEntry) => u.sleep ?? '--', color: 'text-metric-sleep' },
-        { key: 'activity', label: 'Activity Score', formatter: (u: LeaderboardEntry) => u.activity ?? '--', color: 'text-metric-activity' },
-        { key: 'steps', label: 'Steps', formatter: (u: LeaderboardEntry) => u.steps?.toLocaleString() ?? '--', color: '' },
-        { key: 'activeCalories', label: 'Active Calories', formatter: (u: LeaderboardEntry) => u.activeCalories?.toLocaleString() ?? '--', color: '' },
-        { key: 'sleepDuration', label: 'Sleep Duration', formatter: (u: LeaderboardEntry) => formatDuration(u.sleepDuration), color: '' },
-        { key: 'restingHeartRate', label: 'Lowest HR (Sleep)', formatter: (u: LeaderboardEntry) => u.restingHeartRate ? `${u.restingHeartRate} bpm` : '--', color: '' },
-        { key: 'averageHrv', label: 'Avg HRV (Sleep)', formatter: (u: LeaderboardEntry) => u.averageHrv ? `${u.averageHrv} ms` : '--', color: '' },
-    ], [leaderboardData]);
-
-
-    // Versus Data Preparation
+    // Versus data
     const p1Data = userQueries[0]?.data as DailyStats | undefined;
     const p2Data = userQueries[1]?.data as DailyStats | undefined;
+    const { data: p1Hr } = useHeartRate(profiles[0]?.token || '', viewMode === 'compare' && !!profiles[0]);
+    const { data: p2Hr } = useHeartRate(profiles[1]?.token || '', viewMode === 'compare' && !!profiles[1]);
+    const p1Sleep = p1Data?.sleep[0]; const p1Readiness = p1Data?.readiness[0]; const p1Session = p1Data?.session[0];
+    const p2Sleep = p2Data?.sleep[0]; const p2Readiness = p2Data?.readiness[0]; const p2Session = p2Data?.session[0];
 
-    // Fetch HR for Versus Mode (only if versus mode is active and we have profiles)
-    const { data: p1Hr } = useHeartRate(profiles[0]?.token || '', viewMode === 'versus' && !!profiles[0]);
-    const { data: p2Hr } = useHeartRate(profiles[1]?.token || '', viewMode === 'versus' && !!profiles[1]);
-
-    // We compare index 0 (latest)
-    const p1Sleep = p1Data?.sleep[0];
-    const p1Readiness = p1Data?.readiness[0];
-    const p1Activity = p1Data?.activity[0];
-    const p1Session = p1Data?.session[0];
-    const p1Resilience = p1Data?.resilience[0];
-    const p1Stress = p1Data?.stress[0];
-    const p1Spo2 = p1Data?.spo2[0];
-
-    const p2Sleep = p2Data?.sleep[0];
-    const p2Readiness = p2Data?.readiness[0];
-    const p2Activity = p2Data?.activity[0];
-    const p2Session = p2Data?.session[0];
-    const p2Resilience = p2Data?.resilience[0];
-    const p2Stress = p2Data?.stress[0];
-    const p2Spo2 = p2Data?.spo2[0];
-
-    // Get user name for display
     const userName = activeProfile?.firstName || activeProfile?.email?.split('@')[0] || 'there';
 
+    const formatDayLabel = (day: string | undefined) => {
+        if (!day) return 'Today';
+        const d = new Date(day + 'T12:00:00');
+        const today = new Date(); today.setHours(12, 0, 0, 0);
+        const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+        if (d.toDateString() === today.toDateString()) return 'Today';
+        if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+        return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    };
+
+    const getStressLabel = (summary: string | null | undefined) => {
+        switch (summary) { case 'restored': return 'Restored'; case 'normal': return 'Normal'; case 'stressful': return 'Stressful'; default: return '--'; }
+    };
+    const getStressColor = (summary: string | null | undefined) => {
+        switch (summary) { case 'restored': return '#34D399'; case 'normal': return '#FBBF24'; case 'stressful': return '#F87171'; default: return '#666'; }
+    };
+    const getResilienceColor = (level: string | null | undefined) => {
+        switch (level) { case 'exceptional': return '#34D399'; case 'strong': return '#6EE7B7'; case 'solid': return '#60A5FA'; case 'adequate': return '#FBBF24'; case 'limited': return '#F87171'; default: return '#666'; }
+    };
+
     // ============================================
-    // LOGIN SCREEN - Redesigned with new aesthetic
+    // LOGIN / PROFILE SELECTION
     // ============================================
     if (!activeProfile) {
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center p-8 relative overflow-hidden">
-                {/* Background effects */}
-                <div className="absolute inset-0 bg-gradient-mesh opacity-50" />
+            <div className="min-h-screen flex flex-col items-center justify-center p-6">
+                <div className="w-full max-w-sm">
+                    <div className="text-center mb-10">
+                        <h1 className="text-3xl font-bold tracking-tight text-[#FAFAFA] mb-2">Health Dashboard</h1>
+                        <p className="text-[#666] text-sm">Your Oura data, clearly presented</p>
+                    </div>
 
-                {/* Floating orbs */}
-                <FloatingOrb
-                    size={200}
-                    color="rgba(0, 212, 255, 0.1)"
-                    glowColor="rgba(0, 212, 255, 0.2)"
-                    style={{ top: '10%', left: '5%' }}
-                    delay={0}
-                />
-                <FloatingOrb
-                    size={150}
-                    color="rgba(168, 85, 247, 0.1)"
-                    glowColor="rgba(168, 85, 247, 0.2)"
-                    style={{ top: '20%', right: '10%' }}
-                    delay={2}
-                />
-                <FloatingOrb
-                    size={100}
-                    color="rgba(16, 185, 129, 0.1)"
-                    glowColor="rgba(16, 185, 129, 0.2)"
-                    style={{ bottom: '20%', left: '15%' }}
-                    delay={4}
-                />
-
-                <div className="relative z-10 text-center max-w-md w-full">
-                    {/* Logo/Title */}
-                    <h1 className="text-5xl md:text-6xl font-bold mb-4 animate-fade-in-up">
-                        <span className="gradient-text">Davis Watches</span>
-                        <br />
-                        <span className="text-text-primary">You Sleep</span>
-                    </h1>
-
-                    <p className="text-text-secondary text-lg mb-10 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-                        Me sees you when you is sleeping.  Me sees when you's awake.  Me knows if you sleeps bad or good but mine will always be worse for goodness sake
-                    </p>
-
-                    {/* Friendly Error Alert */}
                     {firebaseError && (
-                        <div className="mb-6 p-4 glass-card border-accent-purple/30 bg-accent-purple/10 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
-                            <div className="flex items-center gap-3 text-left">
-                                <div className="flex-1">
-                                    <p className="text-accent-purple font-medium">Oops!</p>
-                                    <p className="text-text-muted text-sm">{firebaseError}</p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={retryFirebaseConnection}
-                                className="mt-3 w-full py-2 px-4 rounded-lg bg-accent-purple/20 text-accent-purple hover:bg-accent-purple/30 transition-colors text-sm font-medium"
-                            >
-                                Try Again
-                            </button>
-                        </div>
+                        <button onClick={retryFirebaseConnection} className="w-full mb-6 p-4 bg-[#1C1C1C] border border-[#333] rounded-lg text-left">
+                            <p className="text-[#F87171] text-sm font-medium">Connection issue</p>
+                            <p className="text-[#666] text-xs mt-1">{firebaseError}</p>
+                        </button>
                     )}
 
-                    {/* Loading profiles indicator */}
                     {isLoadingProfiles && !firebaseError && (
-                        <div className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-                            <div className="flex items-center justify-center gap-3 p-4 glass-card">
-                                <div className="w-5 h-5 border-2 border-accent-cyan/20 border-t-accent-cyan rounded-full animate-spin" />
-                                <span className="text-text-muted">Loading profiles...</span>
-                            </div>
+                        <div className="flex items-center justify-center gap-3 p-6 mb-6">
+                            <div className="w-4 h-4 border-2 border-[#333] border-t-[#00C896] rounded-full animate-spin" />
+                            <span className="text-[#666] text-sm">Loading profiles...</span>
                         </div>
                     )}
 
-                    {/* Existing profiles */}
                     {!isLoadingProfiles && profiles.length > 0 && (
-                        <div className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-                            <p className="text-text-muted text-sm mb-4 uppercase tracking-wider">Select a profile</p>
-                            <div className="space-y-3">
+                        <div className="mb-8">
+                            <p className="text-[#666] text-xs uppercase tracking-wider mb-3 px-1">Choose profile</p>
+                            <div className="space-y-2">
                                 {profiles.map(p => (
                                     <div key={p.id} className="flex gap-2">
                                         <button
                                             onClick={() => setActiveProfileId(p.id)}
-                                            className="flex-1 glass-card p-4 text-left hover:border-accent-cyan/50 transition-all duration-300 flex items-center justify-between group"
+                                            className="flex-1 bg-[#141414] border border-[#222] rounded-lg p-4 text-left hover:border-[#444] transition-colors flex items-center justify-between"
                                         >
-                                            <span className="text-text-primary font-medium group-hover:text-accent-cyan transition-colors">
-                                                {p.firstName ? `${p.firstName} ${p.lastName || ''}` : (p.email || 'User').split('@')[0]}
+                                            <span className="text-[#FAFAFA] font-medium text-sm">
+                                                {p.firstName ? `${p.firstName} ${p.lastName || ''}`.trim() : (p.email || 'User').split('@')[0]}
                                             </span>
-                                            <span className="text-xs text-text-dim group-hover:text-text-muted transition-colors">
-                                                {new Date(p.lastUpdated || '').toLocaleDateString()}
+                                            <span className="text-[#444] text-xs font-mono">
+                                                {p.lastUpdated ? new Date(p.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
                                             </span>
                                         </button>
                                         <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (confirm('Are you sure you want to delete this profile?')) {
-                                                    removeProfile(p.id);
-                                                }
-                                            }}
-                                            className="px-4 glass-card text-accent-rose hover:bg-accent-rose/10 hover:border-accent-rose/30 transition-all duration-300 flex items-center justify-center font-bold"
-                                            title="Remove Profile"
+                                            onClick={(e) => { e.stopPropagation(); if (confirm('Remove this profile?')) removeProfile(p.id); }}
+                                            className="px-3 bg-[#141414] border border-[#222] rounded-lg text-[#666] hover:text-[#F87171] hover:border-[#F87171]/30 transition-colors"
                                         >
                                             <X className="w-4 h-4" />
                                         </button>
@@ -487,12 +311,7 @@ const Dashboard: React.FC = () => {
                         </div>
                     )}
 
-                    {/* Connect button */}
-                    <button
-                        onClick={login}
-                        className="btn-primary w-full text-lg py-4 animate-fade-in-up"
-                        style={{ animationDelay: '0.3s' }}
-                    >
+                    <button onClick={login} className="w-full py-3.5 bg-[#00C896] text-[#0C0C0C] font-semibold rounded-lg hover:opacity-90 transition-opacity text-sm">
                         {profiles.length > 0 ? 'Add Another Profile' : 'Connect Oura Ring'}
                     </button>
                 </div>
@@ -505,15 +324,9 @@ const Dashboard: React.FC = () => {
     // ============================================
     if (!activeData && userQueries.some(q => q.isLoading)) {
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden ios-scroll">
-                <div className="absolute inset-0 bg-gradient-mesh opacity-30" />
-
-                {/* iOS-style loading spinner */}
-                <div className="relative ios-spring">
-                    <div className="ios-spinner ios-spinner-lg" />
-                </div>
-
-                <p className="text-[#A0A0A0] mt-6 animate-pulse">Loading your data...</p>
+            <div className="min-h-screen flex flex-col items-center justify-center">
+                <div className="w-5 h-5 border-2 border-[#333] border-t-[#00C896] rounded-full animate-spin" />
+                <p className="text-[#666] mt-4 text-sm">Loading your data...</p>
             </div>
         );
     }
@@ -522,783 +335,293 @@ const Dashboard: React.FC = () => {
     // MAIN DASHBOARD
     // ============================================
     return (
-        <div className="min-h-screen text-text-primary relative">
-            {/* Sync Progress Modal */}
-            <SyncModal
-                isOpen={showSyncModal}
-                progress={syncProgress}
-                onClose={() => setShowSyncModal(false)}
-            />
-
-            {/* Score Breakdown Modal */}
+        <div className="min-h-screen text-[#FAFAFA]">
+            <SyncModal isOpen={showSyncModal} progress={syncProgress} onClose={() => setShowSyncModal(false)} />
             <ScoreBreakdownModal
                 isOpen={scoreBreakdownModal.isOpen}
                 onClose={() => setScoreBreakdownModal({ isOpen: false, scoreType: null })}
                 scoreType={scoreBreakdownModal.scoreType || 'readiness'}
-                scoreData={
-                    scoreBreakdownModal.scoreType === 'readiness' ? currentReadiness :
-                        scoreBreakdownModal.scoreType === 'sleep' ? currentSleep :
-                            scoreBreakdownModal.scoreType === 'activity' ? currentActivity :
-                                null
-                }
+                scoreData={scoreBreakdownModal.scoreType === 'readiness' ? currentReadiness : scoreBreakdownModal.scoreType === 'sleep' ? currentSleep : scoreBreakdownModal.scoreType === 'activity' ? currentActivity : null}
                 sessionData={currentSession}
             />
-
-            {/* Metric Detail Modal */}
             <MetricDetailModal
                 isOpen={metricDetailModal.isOpen}
-                onClose={() => setMetricDetailModal({
-                    isOpen: false,
-                    metricType: null,
-                    currentValue: null,
-                    historyData: [],
-                })}
+                onClose={() => setMetricDetailModal({ isOpen: false, metricType: null, currentValue: null, historyData: [] })}
                 metricType={metricDetailModal.metricType || 'hrv'}
                 currentValue={metricDetailModal.currentValue}
                 historyData={metricDetailModal.historyData}
-                unit={metricDetailModal.unit}
-                color={metricDetailModal.color}
-                date={metricDetailModal.date}
+                unit={metricDetailModal.unit} color={metricDetailModal.color} date={metricDetailModal.date}
             />
-
-            {/* Leaderboard User Detail Modal */}
             <LeaderboardUserDetailModal
                 isOpen={leaderboardUserDetail.isOpen}
                 user={leaderboardUserDetail.user}
                 onClose={() => setLeaderboardUserDetail({ isOpen: false, user: null })}
             />
 
-            {/* Fixed Navigation */}
-            <nav className="fixed top-0 left-0 right-0 z-40 bg-void/80 backdrop-blur-xl border-b border-dashboard-border px-4 md:px-8 py-4">
-                <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <h1 className="text-lg font-bold">
-                        <span className="gradient-text">Davis Watches You Sleep</span>
-                    </h1>
+            {/* Top Bar */}
+            <nav className="sticky top-0 z-40 bg-[#0C0C0C]/90 backdrop-blur-md border-b border-[#1C1C1C]">
+                <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <button
-                            onClick={handleSyncAllData}
-                            disabled={isSyncing}
-                            className="text-sm text-text-muted hover:text-accent-cyan transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                            title="Refresh all your data"
-                        >
-                            <svg className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                            {isSyncing ? 'Syncing...' : 'Sync'}
+                        <h1 className="text-base font-semibold tracking-tight">{userName}</h1>
+                        <span className="text-[#444] text-xs font-mono hidden sm:inline">{formatLastSync(lastSyncTime)}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <button onClick={handleSyncAllData} disabled={isSyncing} className="p-2 rounded-md hover:bg-[#1C1C1C] text-[#666] hover:text-[#FAFAFA] transition-colors disabled:opacity-40" title="Refresh data">
+                            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
                         </button>
-                        <button
-                            onClick={() => setActiveProfileId('')}
-                            className="text-sm text-text-muted hover:text-text-primary transition-colors"
-                        >
-                            Switch Profile
+                        {profiles.length > 1 && (
+                            <button onClick={() => setActiveProfileId('')} className="p-2 rounded-md hover:bg-[#1C1C1C] text-[#666] hover:text-[#FAFAFA] transition-colors" title="Switch profile">
+                                <ArrowUpDown className="w-4 h-4" />
+                            </button>
+                        )}
+                        <button onClick={login} className="p-2 rounded-md hover:bg-[#1C1C1C] text-[#666] hover:text-[#FAFAFA] transition-colors" title="Add profile">
+                            <Plus className="w-4 h-4" />
                         </button>
-                        <button
-                            onClick={() => setViewMode('data-export')}
-                            className="text-text-muted hover:text-accent-purple transition-colors"
-                            title="Data Export"
-                        >
-                            <Database className="w-5 h-5" />
-                        </button>
-                        <button
-                            onClick={() => {
-                                window.history.pushState({}, '', '/settings');
-                                window.dispatchEvent(new PopStateEvent('popstate'));
-                            }}
-                            className="text-text-muted hover:text-text-primary transition-colors"
-                            title="Settings"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                        </button>
-                        <button
-                            onClick={login}
-                            className="btn-secondary text-sm px-4 py-2"
-                        >
-                            + Add User
+                        <button onClick={() => { window.history.pushState({}, '', '/settings'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="p-2 rounded-md hover:bg-[#1C1C1C] text-[#666] hover:text-[#FAFAFA] transition-colors" title="Settings">
+                            <Settings className="w-4 h-4" />
                         </button>
                     </div>
                 </div>
+                <div className="max-w-5xl mx-auto px-4 flex gap-1 -mb-px overflow-x-auto">
+                    {[
+                        { key: 'today', label: 'Today' },
+                        ...(profiles.length > 1 ? [{ key: 'compare', label: 'Compare' }] : []),
+                        { key: 'trends', label: 'Trends' },
+                        { key: 'insights', label: 'Insights' },
+                        { key: 'export', label: 'Export' },
+                    ].map(tab => (
+                        <button
+                            key={tab.key}
+                            onClick={() => setViewMode(tab.key as any)}
+                            className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${viewMode === tab.key ? 'border-[#00C896] text-[#FAFAFA]' : 'border-transparent text-[#666] hover:text-[#A0A0A0]'}`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
             </nav>
 
-            {/* Hero Section */}
-            <HeroSection
-                title="Your Health Today"
-                subtitle={`Here's how you're doing, ${userName}. Track your readiness, sleep quality, and activity levels.  Remember, Davis is always watching you.`}
-                userName={userName}
-                scores={{
-                    readiness: currentReadiness?.score,
-                    sleep: currentSleep?.score,
-                    activity: currentActivity?.score,
-                }}
-                onScrollDown={() => {
-                    document.getElementById('daily-standings')?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                onScoreClick={(scoreType) => {
-                    setScoreBreakdownModal({ isOpen: true, scoreType });
-                }}
-            />
-
-            {/* Main Content Container */}
-            <div className="relative z-10 max-w-7xl mx-auto px-4 md:px-8 pb-24">
-
-                {/* ========== LEADERBOARD SECTION ========== */}
-                {leaderboardData.length > 1 && (
-                    <ParallaxSection
-                        id="daily-standings"
-                        title="Daily Standings"
-                        subtitle="See how you compare against others."
-                    >
-                        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-6">
-                            <div className="flex flex-wrap bg-white/5 p-1 rounded-xl gap-1">
-                                <button
-                                    onClick={() => setViewMode('daily')}
-                                    className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${viewMode === 'daily' ? 'bg-accent-cyan/20 text-accent-cyan shadow-glow-cyan' : 'hover:text-white'}`}
-                                >
-                                    Daily
+            <main className="max-w-5xl mx-auto px-4 pb-16">
+                {/* ======== TODAY VIEW ======== */}
+                {viewMode === 'today' && (
+                    <div className="space-y-8 pt-6">
+                        {/* Date nav */}
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-semibold">{formatDayLabel(currentSleep?.day)}</h2>
+                            <div className="flex items-center gap-1">
+                                <button disabled={dateIndex >= sleepHistory.length - 1} onClick={() => setDateIndex(dateIndex + 1)} className="p-2 rounded-md hover:bg-[#1C1C1C] disabled:opacity-20 transition-colors text-[#666]">
+                                    <ChevronLeft className="w-4 h-4" />
                                 </button>
-                                <button
-                                    onClick={() => setViewMode('versus')}
-                                    className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${viewMode === 'versus' ? 'bg-accent-purple/20 text-accent-purple shadow-glow-purple' : 'hover:text-white'}`}
-                                >
-                                    Versus
-                                </button>
-                                <button
-                                    onClick={() => setViewMode('history')}
-                                    className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${viewMode === 'history' ? 'bg-accent-orange/20 text-accent-orange shadow-glow-orange' : 'hover:text-white'}`}
-                                >
-                                    History
-                                </button>
-                                <button
-                                    onClick={() => setViewMode('insights')}
-                                    className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${viewMode === 'insights' ? 'bg-green-500/20 text-green-400' : 'hover:text-white'}`}
-                                >
-                                    Insights
-                                </button>
-                                <button
-                                    onClick={() => setViewMode('analytics')}
-                                    className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${viewMode === 'analytics' ? 'bg-blue-500/20 text-blue-400' : 'hover:text-white'}`}
-                                >
-                                    Analytics
-                                </button>
-                                <button
-                                    onClick={() => setViewMode('data-export')}
-                                    className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${viewMode === 'data-export' ? 'bg-purple-500/20 text-purple-400' : 'hover:text-white'}`}
-                                >
-                                    Data Export
+                                <span className="text-xs text-[#666] font-mono min-w-[80px] text-center">{currentSleep?.day || '--'}</span>
+                                <button disabled={dateIndex === 0} onClick={() => setDateIndex(dateIndex - 1)} className="p-2 rounded-md hover:bg-[#1C1C1C] disabled:opacity-20 transition-colors text-[#666]">
+                                    <ChevronRight className="w-4 h-4" />
                                 </button>
                             </div>
                         </div>
 
-                        {/* Sub-tabs for Insights Mode */}
-                        {viewMode === 'insights' && (
-                            <div className="flex flex-wrap gap-2 mb-6">
-                                {[
-                                    { key: 'streaks', label: 'Streaks & Badges' },
-                                    { key: 'challenges', label: 'Challenges' },
-                                    { key: 'patterns', label: 'Patterns' },
-                                    { key: 'whatif', label: 'What-If' },
-                                    { key: 'milestones', label: 'Milestones' },
-                                    { key: 'snapshot', label: 'Snapshot' },
-                                ].map(tab => (
-                                    <button
-                                        key={tab.key}
-                                        onClick={() => setInsightsSubTab(tab.key as any)}
-                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${insightsSubTab === tab.key
-                                            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                                            : 'bg-white/5 text-text-muted hover:text-white'
-                                            }`}
-                                    >
-                                        {tab.label}
-                                    </button>
-                                ))}
+                        {/* Oura Scores */}
+                        <section>
+                            <h3 className="section-label">Oura Scores</h3>
+                            <div className="grid grid-cols-3 gap-3">
+                                <button onClick={() => setScoreBreakdownModal({ isOpen: true, scoreType: 'readiness' })} className="score-card">
+                                    <span className="text-xs text-[#666] uppercase tracking-wider">Readiness</span>
+                                    <span className="text-2xl font-mono font-bold text-[#34D399] mt-1">{currentReadiness?.score ?? '--'}</span>
+                                </button>
+                                <button onClick={() => setScoreBreakdownModal({ isOpen: true, scoreType: 'sleep' })} className="score-card">
+                                    <span className="text-xs text-[#666] uppercase tracking-wider">Sleep</span>
+                                    <span className="text-2xl font-mono font-bold text-[#60A5FA] mt-1">{currentSleep?.score ?? '--'}</span>
+                                </button>
+                                <button onClick={() => setScoreBreakdownModal({ isOpen: true, scoreType: 'activity' })} className="score-card">
+                                    <span className="text-xs text-[#666] uppercase tracking-wider">Activity</span>
+                                    <span className="text-2xl font-mono font-bold text-[#FBBF24] mt-1">{currentActivity?.score ?? '--'}</span>
+                                </button>
                             </div>
-                        )}
+                        </section>
 
-                        {/* Sub-tabs for Analytics Mode */}
-                        {viewMode === 'analytics' && (
-                            <div className="flex flex-wrap gap-2 mb-6">
-                                {[
-                                    { key: 'timeline', label: '24h Timeline' },
-                                    { key: 'correlation', label: 'Correlations' },
-                                ].map(tab => (
-                                    <button
-                                        key={tab.key}
-                                        onClick={() => setAnalyticsSubTab(tab.key as any)}
-                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${analyticsSubTab === tab.key
-                                            ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                                            : 'bg-white/5 text-text-muted hover:text-white'
-                                            }`}
-                                    >
-                                        {tab.label}
-                                    </button>
-                                ))}
+                        {/* Sleep */}
+                        <section>
+                            <h3 className="section-label flex items-center gap-2"><Moon className="w-3.5 h-3.5" /> Sleep</h3>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                                <MetricCard title="Total Sleep" value={formatDuration(currentSession?.total_sleep_duration)} color="#60A5FA" showDrillDownIndicator onClick={() => handleMetricCardClick('sleep_duration', currentSession?.total_sleep_duration ?? null, 'hours', '#60A5FA')} />
+                                <MetricCard title="Time in Bed" value={formatDuration(currentSession?.time_in_bed)} color="#60A5FA" />
+                                <MetricCard title="Bedtime" value={formatTime(currentSession?.bedtime_start)} subtext="Fell asleep" />
+                                <MetricCard title="Wake Time" value={formatTime(currentSession?.bedtime_end)} subtext="Woke up" />
                             </div>
-                        )}
-
-                        {/* History Mode UI */}
-                        {viewMode === 'history' && (
-                            <AllTimeHistory profiles={profiles} userQueries={allTimeQueries} />
-                        )}
-
-                        {/* Insights Mode UI */}
-                        {viewMode === 'insights' && (
-                            <div className="animate-fade-in">
-                                {insightsSubTab === 'streaks' && (
-                                    <StreakTracker
-                                        profiles={profiles}
-                                        usersData={userQueries.map(q => ({ data: q.data as DailyStats | undefined }))}
-                                    />
-                                )}
-                                {insightsSubTab === 'challenges' && (
-                                    <ChallengeManager />
-                                )}
-                                {insightsSubTab === 'patterns' && (
-                                    <PatternDetector
-                                        profiles={profiles}
-                                        usersData={userQueries.map(q => ({ data: q.data as DailyStats | undefined }))}
-                                    />
-                                )}
-                                {insightsSubTab === 'whatif' && (
-                                    <WhatIfSimulator
-                                        profiles={profiles}
-                                        usersData={userQueries.map(q => ({ data: q.data as DailyStats | undefined }))}
-                                    />
-                                )}
-                                {insightsSubTab === 'milestones' && (
-                                    <MilestoneTracker
-                                        profiles={profiles}
-                                        usersData={allTimeQueries.map(q => ({ data: q.data as DailyStats | undefined }))}
-                                    />
-                                )}
-                                {insightsSubTab === 'snapshot' && (
-                                    <DailySnapshot
-                                        profiles={profiles}
-                                        usersData={userQueries.map(q => ({ data: q.data as DailyStats | undefined }))}
-                                    />
-                                )}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                                <MetricCard title="Deep Sleep" value={formatDuration(currentSession?.deep_sleep_duration)} color="#1E40AF" showDrillDownIndicator onClick={() => handleMetricCardClick('deep_sleep', currentSession?.deep_sleep_duration ?? null, 'hours', '#1E40AF')} />
+                                <MetricCard title="REM Sleep" value={formatDuration(currentSession?.rem_sleep_duration)} color="#8B5CF6" showDrillDownIndicator onClick={() => handleMetricCardClick('rem_sleep', currentSession?.rem_sleep_duration ?? null, 'hours', '#8B5CF6')} />
+                                <MetricCard title="Light Sleep" value={formatDuration(currentSession?.light_sleep_duration)} color="#93C5FD" />
+                                <MetricCard title="Efficiency" value={currentSession?.efficiency} unit="%" color="#34D399" showDrillDownIndicator onClick={() => handleMetricCardClick('efficiency', currentSession?.efficiency ?? null, '%', '#34D399')} />
                             </div>
-                        )}
-
-                        {/* Versus Mode UI */}
-                        {viewMode === 'versus' && leaderboardData.length >= 2 && (
-                            <div className="space-y-6 animate-fade-in">
-                                {/* Header */}
-                                <div className="glass-card p-6 flex flex-col md:flex-row items-center justify-between gap-6">
-                                    <div className="flex items-center gap-8">
-                                        <div className="text-center">
-                                            <h3 className="text-xl font-bold text-accent-cyan">{leaderboardData[0].name.split('@')[0]}</h3>
-                                            <p className="font-mono text-2xl text-text-primary">{leaderboardData[0].average}</p>
-                                        </div>
-                                        <div className="text-3xl font-bold text-text-dim">VS</div>
-                                        <div className="text-center">
-                                            <h3 className="text-xl font-bold text-accent-purple">{leaderboardData[1].name.split('@')[0]}</h3>
-                                            <p className="font-mono text-2xl text-text-primary">{leaderboardData[1].average}</p>
-                                        </div>
-                                    </div>
-
-                                </div>
-
-
-                                {/* Comparison Groups */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <MetricComparisonGroup
-                                        title="Readiness"
-                                        scoreA={p1Readiness?.score}
-                                        scoreB={p2Readiness?.score}
-                                        userAName={profiles[0]?.firstName || profiles[0]?.email?.split('@')[0]}
-                                        userBName={profiles[1]?.firstName || profiles[1]?.email?.split('@')[0]}
-                                        defaultOpen={true}
-                                        metrics={[
-                                            {
-                                                label: "Resting HR",
-                                                valA: p1Readiness?.contributors.resting_heart_rate,
-                                                valB: p2Readiness?.contributors.resting_heart_rate,
-                                                displayA: p1Session?.lowest_heart_rate ? `${p1Session.lowest_heart_rate}` : undefined,
-                                                displayB: p2Session?.lowest_heart_rate ? `${p2Session.lowest_heart_rate}` : undefined,
-                                                unit: "bpm",
-                                                inverse: true,
-                                                max: 100
-                                            },
-                                            {
-                                                label: "HRV Balance",
-                                                valA: p1Readiness?.contributors.hrv_balance,
-                                                valB: p2Readiness?.contributors.hrv_balance,
-                                                displayA: p1Session?.average_hrv ? `${p1Session.average_hrv}` : undefined,
-                                                displayB: p2Session?.average_hrv ? `${p2Session.average_hrv}` : undefined,
-                                                unit: "ms",
-                                                max: 100
-                                            },
-                                            { label: "Sleep Balance", valA: p1Readiness?.contributors.sleep_balance, valB: p2Readiness?.contributors.sleep_balance, max: 100 },
-                                            { label: "Recovery Index", valA: p1Readiness?.contributors.recovery_index, valB: p2Readiness?.contributors.recovery_index, max: 100 },
-                                        ]}
-                                    />
-                                    <MetricComparisonGroup
-                                        title="Sleep"
-                                        scoreA={p1Sleep?.score}
-                                        scoreB={p2Sleep?.score}
-                                        userAName={profiles[0]?.firstName || profiles[0]?.email?.split('@')[0]}
-                                        userBName={profiles[1]?.firstName || profiles[1]?.email?.split('@')[0]}
-                                        defaultOpen={true}
-                                        metrics={[
-                                            {
-                                                label: "Total Sleep",
-                                                valA: p1Sleep?.contributors.total_sleep,
-                                                valB: p2Sleep?.contributors.total_sleep,
-                                                displayA: p1Session?.total_sleep_duration ? `${formatDuration(p1Session.total_sleep_duration)}` : undefined,
-                                                displayB: p2Session?.total_sleep_duration ? `${formatDuration(p2Session.total_sleep_duration)}` : undefined,
-                                                max: 100
-                                            },
-                                            {
-                                                label: "Efficiency",
-                                                valA: p1Sleep?.contributors.efficiency,
-                                                valB: p2Sleep?.contributors.efficiency,
-                                                displayA: p1Session?.efficiency ? `${p1Session.efficiency}` : undefined,
-                                                displayB: p2Session?.efficiency ? `${p2Session.efficiency}` : undefined,
-                                                unit: "%",
-                                                max: 100
-                                            },
-                                            {
-                                                label: "Deep Sleep",
-                                                valA: p1Sleep?.contributors.deep_sleep,
-                                                valB: p2Sleep?.contributors.deep_sleep,
-                                                displayA: p1Session?.deep_sleep_duration ? `${formatDuration(p1Session.deep_sleep_duration)}` : undefined,
-                                                displayB: p2Session?.deep_sleep_duration ? `${formatDuration(p2Session.deep_sleep_duration)}` : undefined,
-                                                max: 100
-                                            },
-                                            {
-                                                label: "REM Sleep",
-                                                valA: p1Sleep?.contributors.rem_sleep,
-                                                valB: p2Sleep?.contributors.rem_sleep,
-                                                displayA: p1Session?.rem_sleep_duration ? `${formatDuration(p1Session.rem_sleep_duration)}` : undefined,
-                                                displayB: p2Session?.rem_sleep_duration ? `${formatDuration(p2Session.rem_sleep_duration)}` : undefined,
-                                                max: 100
-                                            },
-                                        ]}
-                                    />
-                                </div>
-
-                                {/* Heart Rate Comparison */}
-                                <div className="glass-card p-6 h-72">
-                                    <h3 className="text-sm text-text-muted uppercase tracking-wider mb-4">Heart Rate Comparison (Last 48h)</h3>
-                                    <ComparisonHeartRateChart
-                                        userAData={p1Hr || []}
-                                        userBData={p2Hr || []}
-                                        userAName={leaderboardData[0].name}
-                                        userBName={leaderboardData[1].name}
-                                    />
-                                </div>
+                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                <MetricCard title="Sleep Latency" value={currentSession?.latency ? `${Math.round(currentSession.latency / 60)}` : null} unit="min" subtext="Time to fall asleep" />
+                                <MetricCard title="Awake Time" value={formatDuration(currentSession?.awake_time)} subtext="During sleep period" />
                             </div>
-                        )}
-
-                        {/* Standard Leaderboard */}
-                        {viewMode === 'daily' && (
-                            <Reveal>
-                                <div className="glass-card overflow-hidden">
-                                    <div className="grid grid-cols-6 text-xs text-text-muted uppercase tracking-wider p-4 border-b border-dashboard-border font-medium">
-                                        <div className="col-span-2">User</div>
-                                        <div className="text-center">Readiness</div>
-                                        <div className="text-center">Sleep</div>
-                                        <div className="text-center">Activity</div>
-                                        <div className="text-center">Avg</div>
-                                    </div>
-                                    {leaderboardData.map((user, idx) => (
-                                        <div
-                                            key={user.id}
-                                            onClick={() => handleLeaderboardUserClick(user)}
-                                            className={`grid grid-cols-6 p-4 items-center hover:bg-white/5 transition-colors cursor-pointer ${user.isCurrentUser ? 'bg-accent-cyan/5 border-l-2 border-accent-cyan' : ''
-                                                }`}
-                                        >
-                                            <div className="col-span-2 flex items-center gap-3">
-                                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${idx === 0 ? 'bg-yellow-500 text-black' :
-                                                    idx === 1 ? 'bg-gray-400 text-black' :
-                                                        idx === 2 ? 'bg-orange-600 text-black' : 'bg-dashboard-border text-text-muted'
-                                                    }`}>
-                                                    {idx + 1}
-                                                </span>
-                                                <span className={user.isCurrentUser ? 'font-semibold text-accent-cyan' : 'text-text-secondary'}>
-                                                    {user.name.split('@')[0]}
-                                                </span>
-                                            </div>
-                                            <div className="text-center font-mono text-metric-readiness">{user.readiness}</div>
-                                            <div className="text-center font-mono text-metric-sleep">{user.sleep}</div>
-                                            <div className="text-center font-mono text-metric-activity">{user.activity}</div>
-                                            <div className="text-center font-mono font-bold text-text-primary">{user.average}</div>
-                                        </div>
-                                    ))}
+                            {sessionHistory.length > 0 && (
+                                <div className="bg-[#141414] border border-[#222] rounded-lg p-4" style={{ height: 260 }}>
+                                    <h4 className="text-xs text-[#666] uppercase tracking-wider mb-3">Sleep Architecture (14 Days)</h4>
+                                    <SleepStagesChart data={sessionHistory.slice(0, 14).reverse()} />
                                 </div>
-                            </Reveal>
-                        )}
-                    </ParallaxSection>
-                )}
+                            )}
+                        </section>
 
-                <SectionDivider />
+                        {/* Heart & Body */}
+                        <section>
+                            <h3 className="section-label flex items-center gap-2"><Heart className="w-3.5 h-3.5" /> Heart & Body</h3>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                                <MetricCard title="Lowest HR" value={currentSession?.lowest_heart_rate} unit="bpm" color="#F87171" subtext="During sleep" showDrillDownIndicator onClick={() => handleMetricCardClick('lowest_hr', currentSession?.lowest_heart_rate ?? null, 'bpm', '#F87171')} />
+                                <MetricCard title="Avg HR" value={currentSession?.average_heart_rate?.toFixed(0)} unit="bpm" color="#F87171" subtext="During sleep" showDrillDownIndicator onClick={() => handleMetricCardClick('heart_rate', currentSession?.average_heart_rate ?? null, 'bpm', '#F87171')} />
+                                <MetricCard title="HRV" value={currentSession?.average_hrv} unit="ms" color="#A855F7" subtext="Heart rate variability" showDrillDownIndicator onClick={() => handleMetricCardClick('hrv', currentSession?.average_hrv ?? null, 'ms', '#A855F7')} />
+                                <MetricCard title="SpO2" value={currentSpo2?.spo2_percentage?.average?.toFixed(1)} unit="%" color="#06B6D4" subtext="Oxygen saturation" showDrillDownIndicator onClick={() => handleMetricCardClick('spo2', currentSpo2?.spo2_percentage?.average ?? null, '%', '#06B6D4')} />
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                                <MetricCard title="Avg Breathing" value={currentSession?.average_breath?.toFixed(1)} unit="br/min" subtext="During sleep" />
+                                <MetricCard
+                                    title="Body Temp"
+                                    value={currentReadiness?.temperature_deviation != null ? `${currentReadiness.temperature_deviation > 0 ? '+' : ''}${currentReadiness.temperature_deviation.toFixed(1)}` : null}
+                                    unit="°C" subtext="From baseline"
+                                    color={currentReadiness?.temperature_deviation != null ? (Math.abs(currentReadiness.temperature_deviation) > 0.5 ? '#F87171' : '#34D399') : undefined}
+                                />
+                                <MetricCard title="Stress" value={getStressLabel(currentStress?.day_summary)} color={getStressColor(currentStress?.day_summary)} />
+                                <MetricCard title="Resilience" value={currentResilience?.level ? currentResilience.level.charAt(0).toUpperCase() + currentResilience.level.slice(1) : null} color={getResilienceColor(currentResilience?.level)} />
+                            </div>
 
-                {/* ========== DATE NAVIGATION ========== */}
-                {viewMode === 'daily' && (
-                    <div className="flex items-center justify-between mb-8">
-                        <h2 className="text-2xl md:text-3xl font-bold">Your Metrics</h2>
-                        <div className="flex items-center gap-2">
-                            <button
-                                disabled={dateIndex >= sleepHistory.length - 1}
-                                onClick={() => setDateIndex(dateIndex + 1)}
-                                className="p-3 rounded-xl hover:bg-white/5 disabled:opacity-30 transition-all"
-                            >
-                                <ChevronLeft className="w-5 h-5" />
-                            </button>
-                            <span className="px-4 py-2 glass-card font-mono text-sm">
-                                {currentSleep?.day || 'Today'}
-                            </span>
-                            <button
-                                disabled={dateIndex === 0}
-                                onClick={() => setDateIndex(dateIndex - 1)}
-                                className="p-3 rounded-xl hover:bg-white/5 disabled:opacity-30 transition-all"
-                            >
-                                <ChevronRight className="w-5 h-5" />
-                            </button>
-                        </div>
+                            {hrData && hrData.length > 0 && (
+                                <div className="bg-[#141414] border border-[#222] rounded-lg p-4 mb-4" style={{ height: 200 }}>
+                                    <HeartRateChart data={hrData} showLabels />
+                                </div>
+                            )}
+                            {sessionHistory.length > 0 && (
+                                <div className="bg-[#141414] border border-[#222] rounded-lg p-4" style={{ height: 180 }}>
+                                    <h4 className="text-xs text-[#666] uppercase tracking-wider mb-3">HRV Trend (30 Days)</h4>
+                                    <ResponsiveContainer width="100%" height="100%" minHeight={100}>
+                                        <LineChart data={sessionHistory.slice(0, 30).reverse()}>
+                                            <XAxis dataKey="day" tick={{ fill: '#444', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(val) => val.slice(5)} />
+                                            <YAxis tick={{ fill: '#444', fontSize: 10 }} axisLine={false} tickLine={false} unit=" ms" />
+                                            <Tooltip contentStyle={{ backgroundColor: '#1C1C1C', border: '1px solid #333', borderRadius: '6px', fontSize: '12px' }} formatter={(value: number) => [`${value} ms`, 'HRV']} />
+                                            <Line type="monotone" dataKey="average_hrv" stroke="#A855F7" dot={false} strokeWidth={1.5} />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            )}
+                        </section>
+
+                        {/* Activity */}
+                        <section>
+                            <h3 className="section-label flex items-center gap-2"><Flame className="w-3.5 h-3.5" /> Activity</h3>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                                <MetricCard title="Steps" value={currentActivity?.steps?.toLocaleString()} color="#FBBF24" showDrillDownIndicator onClick={() => handleMetricCardClick('steps', currentActivity?.steps ?? null, 'steps', '#FBBF24')} />
+                                <MetricCard title="Active Calories" value={currentActivity?.active_calories?.toLocaleString()} unit="kcal" color="#FBBF24" showDrillDownIndicator onClick={() => handleMetricCardClick('calories', currentActivity?.active_calories ?? null, 'kcal', '#FBBF24')} />
+                                <MetricCard title="Total Calories" value={currentActivity?.total_calories?.toLocaleString()} unit="kcal" />
+                                <MetricCard title="Distance" value={((currentActivity?.equivalent_walking_distance || 0) / 1000).toFixed(1)} unit="km" />
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <MetricCard title="High Activity" value={formatDuration(currentActivity?.high_activity_time)} color="#EF4444" />
+                                <MetricCard title="Medium Activity" value={formatDuration(currentActivity?.medium_activity_time)} color="#F59E0B" />
+                                <MetricCard title="Low Activity" value={formatDuration(currentActivity?.low_activity_time)} color="#22C55E" />
+                                <MetricCard title="Sedentary" value={formatDuration(currentActivity?.sedentary_time)} color="#64748B" />
+                            </div>
+                        </section>
+
+                        {/* Score Contributors */}
+                        <section>
+                            <h3 className="section-label flex items-center gap-2"><Brain className="w-3.5 h-3.5" /> Score Contributors</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <ContributorsBreakdown title="Readiness" contributors={readinessContributors} />
+                                <ContributorsBreakdown title="Sleep" contributors={sleepContributors} />
+                            </div>
+                        </section>
                     </div>
                 )}
 
-                {/* ========== MAIN SCORES ========== */}
-                {viewMode === 'daily' && (
-                    <ParallaxSection parallaxSpeed={0.05}>
-                        <div className="grid grid-cols-3 gap-4 md:gap-8">
-                            <Reveal delay={0}>
-                                <button
-                                    onClick={() => setScoreBreakdownModal({ isOpen: true, scoreType: 'readiness' })}
-                                    className="glass-card p-6 md:p-8 flex flex-col items-center hover:border-accent-cyan/50 transition-all duration-300 cursor-pointer w-full"
-                                >
-                                    <ScoreRing
-                                        score={currentReadiness?.score}
-                                        label="Readiness"
-                                        color="#10B981"
-                                        size={120}
-                                    />
-                                    <div className="w-full mt-6 opacity-70 hover:opacity-100 transition-opacity">
-                                        <HistoryChart
-                                            data={[...readinessHistory].reverse()}
-                                            dataKey="score"
-                                            color="#10B981"
-                                            height={48}
-                                            onDataPointClick={(dataPoint) => {
-                                                const index = readinessHistory.findIndex(r => r.day === dataPoint.day);
-                                                if (index >= 0) {
-                                                    setDateIndex(index);
-                                                    setScoreBreakdownModal({ isOpen: true, scoreType: 'readiness' });
-                                                }
-                                            }}
-                                        />
-                                    </div>
-                                </button>
-                            </Reveal>
-
-                            <Reveal delay={100}>
-                                <button
-                                    onClick={() => setScoreBreakdownModal({ isOpen: true, scoreType: 'sleep' })}
-                                    className="glass-card p-6 md:p-8 flex flex-col items-center hover:border-accent-cyan/50 transition-all duration-300 cursor-pointer w-full"
-                                >
-                                    <ScoreRing
-                                        score={currentSleep?.score}
-                                        label="Sleep"
-                                        color="#3B82F6"
-                                        size={120}
-                                    />
-                                    <div className="w-full mt-6 opacity-70 hover:opacity-100 transition-opacity">
-                                        <HistoryChart
-                                            data={[...sleepHistory].reverse()}
-                                            dataKey="score"
-                                            color="#3B82F6"
-                                            height={48}
-                                            onDataPointClick={(dataPoint) => {
-                                                const index = sleepHistory.findIndex(s => s.day === dataPoint.day);
-                                                if (index >= 0) {
-                                                    setDateIndex(index);
-                                                    setScoreBreakdownModal({ isOpen: true, scoreType: 'sleep' });
-                                                }
-                                            }}
-                                        />
-                                    </div>
-                                </button>
-                            </Reveal>
-
-                            <Reveal delay={200}>
-                                <button
-                                    onClick={() => setScoreBreakdownModal({ isOpen: true, scoreType: 'activity' })}
-                                    className="glass-card p-6 md:p-8 flex flex-col items-center hover:border-accent-cyan/50 transition-all duration-300 cursor-pointer w-full"
-                                >
-                                    <ScoreRing
-                                        score={currentActivity?.score}
-                                        label="Activity"
-                                        color="#F59E0B"
-                                        size={120}
-                                    />
-                                    <div className="w-full mt-6 opacity-70 hover:opacity-100 transition-opacity">
-                                        <HistoryChart
-                                            data={[...activityHistory].reverse()}
-                                            dataKey="score"
-                                            color="#F59E0B"
-                                            height={48}
-                                            onDataPointClick={(dataPoint) => {
-                                                const index = activityHistory.findIndex(a => a.day === dataPoint.day);
-                                                if (index >= 0) {
-                                                    setDateIndex(index);
-                                                    setScoreBreakdownModal({ isOpen: true, scoreType: 'activity' });
-                                                }
-                                            }}
-                                        />
-                                    </div>
-                                </button>
-                            </Reveal>
-                        </div>
-                    </ParallaxSection>
-                )}
-
-                <SectionDivider />
-
-                {/* ========== SLEEP DETAILS ========== */}
-                {viewMode === 'daily' && (
-                    <ParallaxSection
-                        title="Sleep Details"
-                        subtitle="Deep dive into your sleep architecture and quality."
-                        parallaxSpeed={0.03}
-                    >
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-                            <MetricCard
-                                title="Total Sleep"
-                                value={formatDuration(currentSession?.total_sleep_duration)}
-                                color="#3B82F6"
-                                metricType="sleep_duration"
-                                showDrillDownIndicator={true}
-                                onClick={() => handleMetricCardClick('sleep_duration', currentSession?.total_sleep_duration ?? null, 'hours', '#3B82F6')}
-                            />
-                            <MetricCard title="Time in Bed" value={formatDuration(currentSession?.time_in_bed)} color="#3B82F6" />
-                            <MetricCard title="Bedtime" value={formatTime(currentSession?.bedtime_start)} subtext="Fell asleep" />
-                            <MetricCard title="Wake Time" value={formatTime(currentSession?.bedtime_end)} subtext="Woke up" />
-                            <MetricCard
-                                title="Deep Sleep"
-                                value={formatDuration(currentSession?.deep_sleep_duration)}
-                                color="#1E40AF"
-                                metricType="deep_sleep"
-                                showDrillDownIndicator={true}
-                                onClick={() => handleMetricCardClick('deep_sleep', currentSession?.deep_sleep_duration ?? null, 'hours', '#1E40AF')}
-                            />
-                            <MetricCard
-                                title="REM Sleep"
-                                value={formatDuration(currentSession?.rem_sleep_duration)}
-                                color="#8B5CF6"
-                                metricType="rem_sleep"
-                                showDrillDownIndicator={true}
-                                onClick={() => handleMetricCardClick('rem_sleep', currentSession?.rem_sleep_duration ?? null, 'hours', '#8B5CF6')}
-                            />
-                            <MetricCard title="Light Sleep" value={formatDuration(currentSession?.light_sleep_duration)} color="#60A5FA" />
-                            <MetricCard
-                                title="Efficiency"
-                                value={currentSession?.efficiency}
-                                unit="%"
-                                color="#10B981"
-                                metricType="efficiency"
-                                showDrillDownIndicator={true}
-                                onClick={() => handleMetricCardClick('efficiency', currentSession?.efficiency, '%', '#10B981')}
-                            />
-                        </div>
-
-                        {/* Sleep Stages Chart */}
-                        <Reveal>
-                            <div className="glass-card p-6" style={{ height: 300 }}>
-                                <h3 className="text-sm text-text-muted uppercase tracking-wider mb-4">Sleep Architecture (14 Days)</h3>
-                                <SleepStagesChart data={sessionHistory.slice(0, 14).reverse()} />
+                {/* ======== COMPARE VIEW ======== */}
+                {viewMode === 'compare' && profiles.length >= 2 && leaderboardData.length >= 2 && (
+                    <div className="space-y-6 pt-6">
+                        <div className="bg-[#141414] border border-[#222] rounded-lg p-5 flex items-center justify-between">
+                            <div className="text-center flex-1">
+                                <p className="text-sm font-semibold text-[#60A5FA]">{leaderboardData[0].name.split('@')[0]}</p>
+                                <p className="font-mono text-xl font-bold">{leaderboardData[0].average}</p>
                             </div>
-                        </Reveal>
-                    </ParallaxSection>
-                )}
-
-                <SectionDivider />
-
-                {/* ========== HEART RATE & HRV ========== */}
-                {viewMode === 'daily' && (
-                    <ParallaxSection
-                        title="Heart Rate & HRV"
-                        subtitle="Track your cardiovascular health and recovery."
-                        parallaxSpeed={0.03}
-                    >
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-                            <MetricCard
-                                title="Lowest HR"
-                                value={currentSession?.lowest_heart_rate}
-                                unit="bpm"
-                                color="#EF4444"
-                                subtext="During sleep"
-                                metricType="lowest_hr"
-                                showDrillDownIndicator={true}
-                                onClick={() => handleMetricCardClick('lowest_hr', currentSession?.lowest_heart_rate, 'bpm', '#EF4444')}
-                            />
-                            <MetricCard
-                                title="Avg HR"
-                                value={currentSession?.average_heart_rate?.toFixed(0)}
-                                unit="bpm"
-                                color="#EF4444"
-                                subtext="During sleep"
-                                metricType="heart_rate"
-                                showDrillDownIndicator={true}
-                                onClick={() => handleMetricCardClick('heart_rate', currentSession?.average_heart_rate, 'bpm', '#EF4444')}
-                            />
-                            <MetricCard
-                                title="HRV"
-                                value={currentSession?.average_hrv}
-                                unit="ms"
-                                color="#A855F7"
-                                subtext="Heart rate variability"
-                                metricType="hrv"
-                                showDrillDownIndicator={true}
-                                onClick={() => handleMetricCardClick('hrv', currentSession?.average_hrv, 'ms', '#A855F7')}
-                            />
-                            <MetricCard
-                                title="SpO2"
-                                value={currentSpo2?.spo2_percentage?.average?.toFixed(1)}
-                                unit="%"
-                                color="#06B6D4"
-                                subtext="Oxygen saturation"
-                                metricType="spo2"
-                                showDrillDownIndicator={true}
-                                onClick={() => handleMetricCardClick('spo2', currentSpo2?.spo2_percentage?.average, '%', '#06B6D4')}
-                            />
-                        </div>
-
-                        {hrData && hrData.length > 0 && (
-                            <Reveal>
-                                <div className="glass-card p-6" style={{ height: 220 }}>
-                                    <HeartRateChart data={hrData} showLabels />
-                                </div>
-                            </Reveal>
-                        )}
-
-                        {/* HRV Trend */}
-                        <Reveal delay={100}>
-                            <div className="glass-card p-6 mt-4" style={{ height: 200 }}>
-                                <h3 className="text-sm text-text-muted uppercase tracking-wider mb-4">HRV Trend (30 Days)</h3>
-                                <ResponsiveContainer width="100%" height="100%" minHeight={100}>
-                                    <LineChart data={sessionHistory.slice(0, 30).reverse()}>
-                                        <XAxis
-                                            dataKey="day"
-                                            tick={{ fill: '#64748B', fontSize: 10 }}
-                                            axisLine={false}
-                                            tickLine={false}
-                                            tickFormatter={(val) => val.slice(5)}
-                                        />
-                                        <YAxis
-                                            tick={{ fill: '#64748B', fontSize: 10 }}
-                                            axisLine={false}
-                                            tickLine={false}
-                                            unit=" ms"
-                                        />
-                                        <Tooltip
-                                            contentStyle={{
-                                                backgroundColor: 'rgba(22, 22, 35, 0.9)',
-                                                border: '1px solid rgba(255,255,255,0.1)',
-                                                borderRadius: '12px',
-                                                backdropFilter: 'blur(10px)',
-                                            }}
-                                            formatter={(value: number) => [`${value} ms`, 'HRV']}
-                                        />
-                                        <Line
-                                            type="monotone"
-                                            dataKey="average_hrv"
-                                            stroke="#A855F7"
-                                            dot={false}
-                                            strokeWidth={2}
-                                        />
-                                    </LineChart>
-                                </ResponsiveContainer>
+                            <div className="text-[#444] text-sm font-medium px-4">vs</div>
+                            <div className="text-center flex-1">
+                                <p className="text-sm font-semibold text-[#A855F7]">{leaderboardData[1].name.split('@')[0]}</p>
+                                <p className="font-mono text-xl font-bold">{leaderboardData[1].average}</p>
                             </div>
-                        </Reveal>
-                    </ParallaxSection>
-                )}
-
-                <SectionDivider />
-
-                {/* ========== ACTIVITY DETAILS ========== */}
-                {viewMode === 'daily' && (
-                    <ParallaxSection
-                        title="Activity Details"
-                        subtitle="Your movement and energy expenditure."
-                        parallaxSpeed={0.03}
-                    >
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <MetricCard
-                                title="Steps"
-                                value={currentActivity?.steps?.toLocaleString()}
-                                color="#F59E0B"
-                                metricType="steps"
-                                showDrillDownIndicator={true}
-                                onClick={() => handleMetricCardClick('steps', currentActivity?.steps, 'steps', '#F59E0B')}
-                            />
-                            <MetricCard
-                                title="Active Calories"
-                                value={currentActivity?.active_calories?.toLocaleString()}
-                                unit="kcal"
-                                color="#F59E0B"
-                                metricType="active_calories"
-                                showDrillDownIndicator={true}
-                                onClick={() => handleMetricCardClick('calories', currentActivity?.active_calories, 'kcal', '#F59E0B')}
-                            />
-                            <MetricCard
-                                title="Total Calories"
-                                value={currentActivity?.total_calories?.toLocaleString()}
-                                unit="kcal"
-                                color="#F59E0B"
-                                subtext="All calories burned"
-                                metricType="total_calories"
-                                showDrillDownIndicator={true}
-                                onClick={() => handleMetricCardClick('calories', currentActivity?.total_calories, 'kcal', '#F59E0B')}
-                            />
-                            <MetricCard title="Walking Distance" value={((currentActivity?.equivalent_walking_distance || 0) / 1000).toFixed(1)} unit="km" />
-                            <MetricCard title="High Activity" value={formatDuration(currentActivity?.high_activity_time)} color="#DC2626" />
-                            <MetricCard title="Medium Activity" value={formatDuration(currentActivity?.medium_activity_time)} color="#F59E0B" />
-                            <MetricCard title="Low Activity" value={formatDuration(currentActivity?.low_activity_time)} color="#22C55E" />
-                            <MetricCard title="Sedentary Time" value={formatDuration(currentActivity?.sedentary_time)} color="#64748B" />
                         </div>
-                    </ParallaxSection>
-                )}
-
-                <SectionDivider />
-
-                {/* ========== SCORE CONTRIBUTORS ========== */}
-                {viewMode === 'daily' && (
-                    <ParallaxSection
-                        title="Score Contributors"
-                        subtitle="What's impacting your scores today."
-                        parallaxSpeed={0.02}
-                    >
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <Reveal>
-                                <ContributorsBreakdown
-                                    title="Readiness Contributors"
-                                    contributors={readinessContributors}
-                                />
-                            </Reveal>
-                            <Reveal delay={100}>
-                                <ContributorsBreakdown
-                                    title="Sleep Contributors"
-                                    contributors={sleepContributors}
-                                />
-                            </Reveal>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <MetricComparisonGroup
+                                title="Readiness" scoreA={p1Readiness?.score} scoreB={p2Readiness?.score}
+                                userAName={profiles[0]?.firstName || profiles[0]?.email?.split('@')[0]}
+                                userBName={profiles[1]?.firstName || profiles[1]?.email?.split('@')[0]}
+                                defaultOpen={true}
+                                metrics={[
+                                    { label: "Resting HR", valA: p1Readiness?.contributors.resting_heart_rate, valB: p2Readiness?.contributors.resting_heart_rate, displayA: p1Session?.lowest_heart_rate ? `${p1Session.lowest_heart_rate}` : undefined, displayB: p2Session?.lowest_heart_rate ? `${p2Session.lowest_heart_rate}` : undefined, unit: "bpm", inverse: true, max: 100 },
+                                    { label: "HRV Balance", valA: p1Readiness?.contributors.hrv_balance, valB: p2Readiness?.contributors.hrv_balance, displayA: p1Session?.average_hrv ? `${p1Session.average_hrv}` : undefined, displayB: p2Session?.average_hrv ? `${p2Session.average_hrv}` : undefined, unit: "ms", max: 100 },
+                                    { label: "Sleep Balance", valA: p1Readiness?.contributors.sleep_balance, valB: p2Readiness?.contributors.sleep_balance, max: 100 },
+                                    { label: "Recovery Index", valA: p1Readiness?.contributors.recovery_index, valB: p2Readiness?.contributors.recovery_index, max: 100 },
+                                ]}
+                            />
+                            <MetricComparisonGroup
+                                title="Sleep" scoreA={p1Sleep?.score} scoreB={p2Sleep?.score}
+                                userAName={profiles[0]?.firstName || profiles[0]?.email?.split('@')[0]}
+                                userBName={profiles[1]?.firstName || profiles[1]?.email?.split('@')[0]}
+                                defaultOpen={true}
+                                metrics={[
+                                    { label: "Total Sleep", valA: p1Sleep?.contributors.total_sleep, valB: p2Sleep?.contributors.total_sleep, displayA: p1Session?.total_sleep_duration ? formatDuration(p1Session.total_sleep_duration) : undefined, displayB: p2Session?.total_sleep_duration ? formatDuration(p2Session.total_sleep_duration) : undefined, max: 100 },
+                                    { label: "Efficiency", valA: p1Sleep?.contributors.efficiency, valB: p2Sleep?.contributors.efficiency, displayA: p1Session?.efficiency ? `${p1Session.efficiency}` : undefined, displayB: p2Session?.efficiency ? `${p2Session.efficiency}` : undefined, unit: "%", max: 100 },
+                                    { label: "Deep Sleep", valA: p1Sleep?.contributors.deep_sleep, valB: p2Sleep?.contributors.deep_sleep, displayA: p1Session?.deep_sleep_duration ? formatDuration(p1Session.deep_sleep_duration) : undefined, displayB: p2Session?.deep_sleep_duration ? formatDuration(p2Session.deep_sleep_duration) : undefined, max: 100 },
+                                    { label: "REM Sleep", valA: p1Sleep?.contributors.rem_sleep, valB: p2Sleep?.contributors.rem_sleep, displayA: p1Session?.rem_sleep_duration ? formatDuration(p1Session.rem_sleep_duration) : undefined, displayB: p2Session?.rem_sleep_duration ? formatDuration(p2Session.rem_sleep_duration) : undefined, max: 100 },
+                                ]}
+                            />
                         </div>
-                    </ParallaxSection>
+                        {(p1Hr?.length || p2Hr?.length) ? (
+                            <div className="bg-[#141414] border border-[#222] rounded-lg p-4 h-64">
+                                <h4 className="text-xs text-[#666] uppercase tracking-wider mb-3">Heart Rate (48h)</h4>
+                                <ComparisonHeartRateChart userAData={p1Hr || []} userBData={p2Hr || []} userAName={leaderboardData[0].name} userBName={leaderboardData[1].name} />
+                            </div>
+                        ) : null}
+                    </div>
+                )}
+                {viewMode === 'compare' && profiles.length < 2 && (
+                    <div className="pt-16 text-center">
+                        <p className="text-[#666] mb-4">Add a second profile to compare metrics</p>
+                        <button onClick={login} className="px-4 py-2 bg-[#00C896] text-[#0C0C0C] font-medium rounded-md text-sm hover:opacity-90 transition-opacity">Add Profile</button>
+                    </div>
                 )}
 
-                {/* ========== DATA EXPORT SECTION ========== */}
-                {viewMode === 'data-export' && (
-                    <ParallaxSection
-                        title="Data Export"
-                        subtitle="Download your Oura data for analysis."
-                    >
-                        <DataExport />
-                    </ParallaxSection>
-                )}
+                {/* ======== TRENDS VIEW ======== */}
+                {viewMode === 'trends' && <div className="pt-6"><AllTimeHistory profiles={profiles} userQueries={allTimeQueries} /></div>}
 
+                {/* ======== INSIGHTS VIEW ======== */}
+                {viewMode === 'insights' && <InsightsView profiles={profiles} userQueries={userQueries} allTimeQueries={allTimeQueries} />}
+
+                {/* ======== EXPORT VIEW ======== */}
+                {viewMode === 'export' && <div className="pt-6"><DataExport /></div>}
+            </main>
+        </div>
+    );
+};
+
+// Insights sub-view
+const InsightsView: React.FC<{ profiles: any[]; userQueries: any[]; allTimeQueries: any[] }> = ({ profiles, userQueries, allTimeQueries }) => {
+    const [tab, setTab] = useState<'timeline' | 'correlation' | 'streaks' | 'patterns' | 'milestones' | 'snapshot'>('timeline');
+    return (
+        <div className="pt-6 space-y-6">
+            <div className="flex flex-wrap gap-1.5">
+                {([
+                    { key: 'timeline', label: '24h Timeline' }, { key: 'correlation', label: 'Correlations' },
+                    { key: 'streaks', label: 'Streaks' }, { key: 'patterns', label: 'Patterns' },
+                    { key: 'milestones', label: 'Milestones' }, { key: 'snapshot', label: 'Snapshot' },
+                ] as const).map(t => (
+                    <button key={t.key} onClick={() => setTab(t.key)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${tab === t.key ? 'bg-[#222] text-[#FAFAFA]' : 'text-[#666] hover:text-[#A0A0A0] hover:bg-[#1C1C1C]'}`}>{t.label}</button>
+                ))}
             </div>
+            {tab === 'timeline' && <TimelineView profiles={profiles} usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
+            {tab === 'correlation' && <CorrelationExplorer profiles={profiles} usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
+            {tab === 'streaks' && <StreakTracker profiles={profiles} usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
+            {tab === 'patterns' && <PatternDetector profiles={profiles} usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
+            {tab === 'milestones' && <MilestoneTracker profiles={profiles} usersData={allTimeQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
+            {tab === 'snapshot' && <DailySnapshot profiles={profiles} usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
         </div>
     );
 };
