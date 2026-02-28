@@ -158,19 +158,48 @@ const Dashboard: React.FC = () => {
         return d.toISOString().split('T')[0];
     };
 
-    const findByDayOrPrevious = <T extends { day?: string }>(items: T[], day?: string): T | undefined => {
+    const findByDay = <T extends { day?: string }>(items: T[], day?: string): T | undefined => {
         if (!day) return undefined;
-        return items.find(item => item.day === day) || items.find(item => item.day === getPreviousDay(day));
+        return items.find(item => item.day === day);
     };
 
-    const currentSleep = sleepHistory[dateIndex] || sleepHistory[0];
-    const currentReadiness = readinessHistory[dateIndex] || readinessHistory[0];
-    const currentActivity = activityHistory[dateIndex] || activityHistory[0];
-    const referenceDay = currentSleep?.day || currentReadiness?.day || currentActivity?.day;
-    const currentSession = findByDayOrPrevious(sessionHistory, referenceDay) || sessionHistory[dateIndex] || sessionHistory[0];
-    const currentSpo2 = findByDayOrPrevious(spo2History, referenceDay) || spo2History[dateIndex] || spo2History[0];
-    const currentStress = findByDayOrPrevious(stressHistory, referenceDay) || stressHistory[dateIndex] || stressHistory[0];
-    const currentResilience = findByDayOrPrevious(resilienceHistory, referenceDay) || resilienceHistory[dateIndex] || resilienceHistory[0];
+    const getSessionDisplayDay = (session: { day?: string; bedtime_end?: string }): string | undefined => {
+        if (session.bedtime_end) return session.bedtime_end.split('T')[0];
+        return session.day;
+    };
+
+    const findSessionForDay = (day?: string) => {
+        if (!day) return undefined;
+        const direct = sessionHistory
+            .filter(s => getSessionDisplayDay(s) === day)
+            .sort((a, b) => new Date(b.bedtime_end || 0).getTime() - new Date(a.bedtime_end || 0).getTime())[0];
+        if (direct) return direct;
+
+        // Fallback only for legacy payloads where session "day" is previous-night anchored.
+        const prevDay = getPreviousDay(day);
+        if (!prevDay) return undefined;
+        return sessionHistory
+            .filter(s => s.day === prevDay)
+            .sort((a, b) => new Date(b.bedtime_end || 0).getTime() - new Date(a.bedtime_end || 0).getTime())[0];
+    };
+
+    const scoreAnchorDay =
+        sleepHistory[dateIndex]?.day ||
+        readinessHistory[dateIndex]?.day ||
+        activityHistory[dateIndex]?.day;
+    const referenceDay =
+        scoreAnchorDay ||
+        sleepHistory[0]?.day ||
+        readinessHistory[0]?.day ||
+        activityHistory[0]?.day;
+
+    const currentSleep = findByDay(sleepHistory, referenceDay) || sleepHistory[dateIndex] || sleepHistory[0];
+    const currentReadiness = findByDay(readinessHistory, referenceDay) || readinessHistory[dateIndex] || readinessHistory[0];
+    const currentActivity = findByDay(activityHistory, referenceDay) || activityHistory[dateIndex] || activityHistory[0];
+    const currentSession = findSessionForDay(referenceDay);
+    const currentSpo2 = findByDay(spo2History, referenceDay);
+    const currentStress = findByDay(stressHistory, referenceDay);
+    const currentResilience = findByDay(resilienceHistory, referenceDay);
     const bodyTempDeviationF = currentReadiness?.temperature_deviation != null
         ? currentReadiness.temperature_deviation * CELSIUS_DELTA_TO_FAHRENHEIT_DELTA
         : null;
