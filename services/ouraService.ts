@@ -109,6 +109,14 @@ class OuraService {
     return clamped.toISOString().split('T')[0];
   }
 
+  private getClampedDailyRange(start?: string, end?: string, maxDays: number = 29) {
+    const { start_date, end_date } = this.getDateRange(start || 30, end);
+    return {
+      start_date: this.clampDateWindow(start_date, end_date, maxDays),
+      end_date,
+    };
+  }
+
   private buildUrl(endpoint: string, params: QueryParams = {}, nextToken?: string): string {
     const search = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -183,22 +191,22 @@ class OuraService {
   }
 
   async getDailySleep(token: string, start?: string, end?: string): Promise<DailySleep[]> {
-    const { start_date, end_date } = this.getDateRange(start || 30, end);
+    const { start_date, end_date } = this.getClampedDailyRange(start, end);
     return this.fetchPaginated<DailySleep>(token, 'daily_sleep', { start_date, end_date });
   }
 
   async getSleepSessions(token: string, start?: string, end?: string): Promise<SleepSession[]> {
-    const { start_date, end_date } = this.getDateRange(start || 30, end);
+    const { start_date, end_date } = this.getClampedDailyRange(start, end);
     return this.fetchPaginated<SleepSession>(token, 'sleep', { start_date, end_date });
   }
 
   async getDailyReadiness(token: string, start?: string, end?: string): Promise<DailyReadiness[]> {
-    const { start_date, end_date } = this.getDateRange(start || 30, end);
+    const { start_date, end_date } = this.getClampedDailyRange(start, end);
     return this.fetchPaginated<DailyReadiness>(token, 'daily_readiness', { start_date, end_date });
   }
 
   async getDailyActivity(token: string, start?: string, end?: string): Promise<DailyActivity[]> {
-    const { start_date, end_date } = this.getDateRange(start || 30, end);
+    const { start_date, end_date } = this.getClampedDailyRange(start, end);
     return this.fetchPaginated<DailyActivity>(token, 'daily_activity', { start_date, end_date });
   }
 
