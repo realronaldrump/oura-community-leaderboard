@@ -100,7 +100,7 @@ const Dashboard: React.FC = () => {
     const userQueries = useQueries({
         queries: profiles.map(p => ({
             queryKey: ['dailyStats', p.token],
-            queryFn: () => fetchDailyStats(p.token),
+            queryFn: () => fetchDailyStats(p.token, undefined, p.grantedScopes),
             staleTime: 1000 * 60 * 60,
         }))
     });
@@ -108,7 +108,7 @@ const Dashboard: React.FC = () => {
     const allTimeQueries = useQueries({
         queries: profiles.map(p => ({
             queryKey: ['allTimeStats', p.token],
-            queryFn: () => fetchDailyStats(p.token, { start: '2016-01-01' }),
+            queryFn: () => fetchDailyStats(p.token, { start: '2016-01-01' }, p.grantedScopes),
             staleTime: 1000 * 60 * 60 * 24,
             enabled: viewMode === 'trends',
         }))
@@ -142,7 +142,7 @@ const Dashboard: React.FC = () => {
         }).filter((e): e is LeaderboardEntry => e !== null).sort((a, b) => b.average - a.average);
     }, [profiles, userQueries, activeProfile?.id]);
 
-    const { data: hrData } = useHeartRate(activeProfile?.token || '', !!activeProfile);
+    const { data: hrData } = useHeartRate(activeProfile?.token || '', !!activeProfile, activeProfile?.grantedScopes);
 
     const activeUserQuery = userQueries.find((_, idx) => profiles[idx].id === activeProfile?.id);
     const activeData = activeUserQuery?.data as DailyStats | undefined;
@@ -231,7 +231,11 @@ const Dashboard: React.FC = () => {
         color?: string
     ) => {
         if (!activeProfile?.token) return;
-        const allTimeData = await fetchDailyStats(activeProfile.token, { start: '2016-01-01' });
+        const allTimeData = await fetchDailyStats(
+            activeProfile.token,
+            { start: '2016-01-01' },
+            activeProfile.grantedScopes
+        );
         const historyData = getMetricHistoryData(metricType, allTimeData.session?.length || 0, allTimeData);
         setMetricDetailModal({ isOpen: true, metricType, currentValue, historyData, unit, color, date: currentSleep?.day });
     };
@@ -239,8 +243,16 @@ const Dashboard: React.FC = () => {
     // Versus data
     const p1Data = userQueries[0]?.data as DailyStats | undefined;
     const p2Data = userQueries[1]?.data as DailyStats | undefined;
-    const { data: p1Hr } = useHeartRate(profiles[0]?.token || '', viewMode === 'compare' && !!profiles[0]);
-    const { data: p2Hr } = useHeartRate(profiles[1]?.token || '', viewMode === 'compare' && !!profiles[1]);
+    const { data: p1Hr } = useHeartRate(
+        profiles[0]?.token || '',
+        viewMode === 'compare' && !!profiles[0],
+        profiles[0]?.grantedScopes
+    );
+    const { data: p2Hr } = useHeartRate(
+        profiles[1]?.token || '',
+        viewMode === 'compare' && !!profiles[1],
+        profiles[1]?.grantedScopes
+    );
     const p1Sleep = p1Data?.sleep[0]; const p1Readiness = p1Data?.readiness[0]; const p1Session = p1Data?.session[0];
     const p2Sleep = p2Data?.sleep[0]; const p2Readiness = p2Data?.readiness[0]; const p2Session = p2Data?.session[0];
 
@@ -344,7 +356,7 @@ const Dashboard: React.FC = () => {
                         <div className="w-12 h-12 rounded-full bg-[#141414] border border-[#1E1E1E] flex items-center justify-center mx-auto mb-5">
                             <Heart className="w-5 h-5 text-[#00C896]" />
                         </div>
-                        <h1 className="text-2xl font-semibold tracking-tight text-[#FAFAFA] mb-2">Davis Watches You Sleep</h1>
+                        <h1 className="text-2xl font-semibold tracking-tight text-[#FAFAFA] mb-2">Davis Watches You Sleep!</h1>
                         <p className="text-[#666] text-sm">Your Oura data, clearly presented</p>
                     </div>
 

@@ -2,16 +2,28 @@ import { useQuery } from '@tanstack/react-query';
 import { ouraService } from '../services/ouraService';
 import { DailyStats } from '../types';
 
-export const fetchDailyStats = async (token: string, dateRange?: { start: string, end?: string }): Promise<DailyStats> => {
+const hasScope = (grantedScopes: string[] | undefined, requiredScope: string): boolean => {
+    if (!grantedScopes || grantedScopes.length === 0) return true;
+    return grantedScopes.includes(requiredScope);
+};
+
+export const fetchDailyStats = async (
+    token: string,
+    dateRange?: { start: string, end?: string },
+    grantedScopes?: string[]
+): Promise<DailyStats> => {
     const { start, end } = dateRange || {};
+    const canReadDaily = hasScope(grantedScopes, 'daily');
+    const canReadSpO2 = hasScope(grantedScopes, 'spo2');
+
     const [sleep, readiness, activity, sessions, spo2, stress, resilience] = await Promise.all([
-        ouraService.getDailySleep(token, start, end),
-        ouraService.getDailyReadiness(token, start, end),
-        ouraService.getDailyActivity(token, start, end),
-        ouraService.getSleepSessions(token, start, end),
-        ouraService.getDailySpO2(token, start, end),
-        ouraService.getDailyStress(token, start, end),
-        ouraService.getDailyResilience(token, start, end)
+        canReadDaily ? ouraService.getDailySleep(token, start, end) : Promise.resolve([]),
+        canReadDaily ? ouraService.getDailyReadiness(token, start, end) : Promise.resolve([]),
+        canReadDaily ? ouraService.getDailyActivity(token, start, end) : Promise.resolve([]),
+        canReadDaily ? ouraService.getSleepSessions(token, start, end) : Promise.resolve([]),
+        canReadSpO2 ? ouraService.getDailySpO2(token, start, end) : Promise.resolve([]),
+        canReadDaily ? ouraService.getDailyStress(token, start, end) : Promise.resolve([]),
+        canReadDaily ? ouraService.getDailyResilience(token, start, end) : Promise.resolve([])
     ]);
 
     // Sort descending by date
@@ -56,13 +68,17 @@ export const useAllTimeStats = (token: string, enabled: boolean = true) => {
     });
 };
 
-export const useHeartRate = (token: string, enabled: boolean = true) => {
+export const useHeartRate = (
+    token: string,
+    enabled: boolean = true,
+    grantedScopes?: string[]
+) => {
     return useQuery({
         queryKey: ['heartRate', token],
         queryFn: async () => {
             return await ouraService.getHeartRate(token);
         },
-        enabled: !!token && enabled,
+        enabled: !!token && enabled && hasScope(grantedScopes, 'heartrate'),
         staleTime: 1000 * 60 * 5, // 5 minutes
     });
 };
