@@ -89,7 +89,7 @@ export interface Pattern {
 }
 
 // ============================================
-// CORRELATIONS
+// CORRELATIONS & INSIGHTS
 // ============================================
 
 export interface MetricOption {
@@ -109,6 +109,22 @@ export interface CorrelationResult {
     dataPoints: Array<{ x: number; y: number; date: string }>;
     insight: string;            // Natural language description
     sampleSize: number;
+}
+
+export interface AutomatedInsight {
+    id: string;
+    title: string;
+    description: string;
+    metricXLabel: string;
+    metricYLabel: string;
+    metricXKey: string;
+    metricYKey: string;
+    strength: 'moderate' | 'strong';
+    direction: 'positive' | 'negative';
+    coefficient: number;
+    sampleSize: number;
+    type: 'positive_habit' | 'negative_habit' | 'neutral_observation';
+    correlationData: CorrelationResult;
 }
 
 // ============================================
@@ -257,3 +273,4 @@ export interface UserChallenge {
     progress: number; // days completed
     history: Record<string, boolean>; // date -> success map
 }
+

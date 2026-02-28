@@ -18,10 +18,18 @@ export const fetchDailyStats = async (token: string, dateRange?: { start: string
     const sortFn = (a: any, b: any) => new Date(b.day || b.summary_date || 0).getTime() - new Date(a.day || a.summary_date || 0).getTime();
 
     return {
-        sleep: sleep.sort(sortFn),
-        readiness: readiness.sort(sortFn),
-        activity: activity.sort(sortFn),
-        session: sessions.sort(sortFn),
+        sleep: sleep.map(s => ({ ...s, score: s.score != null ? Number(s.score) : null })).sort(sortFn),
+        readiness: readiness.map(r => ({ ...r, score: r.score != null ? Number(r.score) : null })).sort(sortFn),
+        activity: activity.map(a => ({
+            ...a,
+            score: a.score != null ? Number(a.score) : null,
+            steps: a.steps != null ? Number(a.steps) : 0,
+            active_calories: a.active_calories != null ? Number(a.active_calories) : 0
+        })).sort(sortFn),
+        session: sessions.map(s => ({
+            ...s,
+            average_hrv: s.average_hrv != null ? Number(s.average_hrv) : null
+        })).sort(sortFn),
         spo2: spo2.sort(sortFn),
         stress: stress.sort(sortFn),
         resilience: resilience.sort(sortFn)

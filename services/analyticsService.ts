@@ -8,7 +8,7 @@ import {
     Pattern, PatternType, CorrelationResult, MetricOption,
     WhatIfScenario, WhatIfResult, Milestone, MilestoneType,
     DailySnapshotData, TimelineDataPoint, TimelineInsight,
-    CalendarHeatmapDay, UserChallenge, ChallengeDefinition, ChallengeStatus
+    CalendarHeatmapDay, UserChallenge, ChallengeDefinition, ChallengeStatus, AutomatedInsight
 } from '../types/analyticsTypes';
 import * as ss from 'simple-statistics';
 
@@ -862,9 +862,141 @@ function extractMetricValues(
                 }
             }
             break;
+        case 'rem_sleep':
+            for (const s of data.session || []) {
+                if (s.rem_sleep_duration != null && filterByDate(s.day)) {
+                    results.push({ date: s.day, value: s.rem_sleep_duration / 60 }); // Convert to minutes
+                }
+            }
+            break;
+        case 'active_calories':
+            for (const a of data.activity || []) {
+                if (a.active_calories != null && filterByDate(a.day)) {
+                    results.push({ date: a.day, value: a.active_calories });
+                }
+            }
+            break;
+        case 'bedtime':
+            for (const s of data.session || []) {
+                if (s.bedtime_start && filterByDate(s.day)) {
+                    const hr = new Date(s.bedtime_start).getHours();
+                    // Adjust hour so 0-4 AM are treated as 24-28 (late bedtimes)
+                    const adjHr = hr < 12 ? hr + 24 : hr;
+                    results.push({ date: s.day, value: adjHr });
+                }
+            }
+            break;
+        case 'body_temp':
+            for (const r of data.readiness || []) {
+                if (r.temperature_deviation != null && filterByDate(r.day)) {
+                    results.push({ date: r.day, value: r.temperature_deviation });
+                }
+            }
+            break;
     }
 
     return results;
+}
+
+export function generateAutomatedInsights(data: DailyStats, userId: string, userName: string): AutomatedInsight[] {
+    const insights: AutomatedInsight[] = [];
+
+    // Define a comprehensive list of metrics we want to test
+    const availableMetrics: MetricOption[] = [
+        { userId, userName, metric: 'sleep_score', label: 'Sleep Score' },
+        { userId, userName, metric: 'readiness_score', label: 'Readiness Score' },
+        { userId, userName, metric: 'activity_score', label: 'Activity Score' },
+        { userId, userName, metric: 'steps', label: 'Steps' },
+        { userId, userName, metric: 'hrv', label: 'HRV' },
+        { userId, userName, metric: 'resting_hr', label: 'Resting HR' },
+        { userId, userName, metric: 'deep_sleep', label: 'Deep Sleep (min)' },
+        { userId, userName, metric: 'rem_sleep', label: 'REM Sleep (min)' },
+        { userId, userName, metric: 'bedtime', label: 'Bedtime Hour' },
+        { userId, userName, metric: 'active_calories', label: 'Active Calories' },
+        { userId, userName, metric: 'body_temp', label: 'Body Temp Deviation' }
+    ];
+
+    // Filter out obvious/trivial correlations (e.g., Active Calories vs Steps = basically the same thing)
+    const trivialPairs = [
+        'steps-active_calories',
+        'steps-activity_score',
+        'active_calories-activity_score',
+        'sleep_score-deep_sleep',
+        'sleep_score-rem_sleep',
+        'deep_sleep-rem_sleep'
+    ];
+
+    // Calculate correlation for every unique pair
+    for (let i = 0; i < availableMetrics.length; i++) {
+        for (let j = i + 1; j < availableMetrics.length; j++) {
+            const metricX = availableMetrics[i];
+            const metricY = availableMetrics[j];
+
+            const pairKey1 = `${metricX.metric}-${metricY.metric}`;
+            const pairKey2 = `${metricY.metric}-${metricX.metric}`;
+
+            if (trivialPairs.includes(pairKey1) || trivialPairs.includes(pairKey2)) continue;
+
+            const correlation = calculateCorrelation(metricX, metricY, data, data);
+
+            // Only keep moderate or strong correlations
+            if (correlation.strength === 'moderate' || correlation.strength === 'strong') {
+
+                // Determine insight type based on the metrics and direction
+                let insightType: 'positive_habit' | 'negative_habit' | 'neutral_observation' = 'neutral_observation';
+
+                const isGoodX = isMetricPositive(metricX.metric);
+                const isGoodY = isMetricPositive(metricY.metric);
+
+                if (correlation.direction === 'positive') {
+                    if (isGoodX && isGoodY) insightType = 'positive_habit';
+                    else if (!isGoodX && !isGoodY) insightType = 'negative_habit';
+                } else if (correlation.direction === 'negative') {
+                    if (isGoodX && !isGoodY) insightType = 'positive_habit'; // Good goes up, bad goes down
+                    else if (!isGoodX && isGoodY) insightType = 'negative_habit'; // Bad goes up, good goes down
+                }
+
+                const yValues = correlation.dataPoints.map(p => p.y);
+                const percentEffect = (correlation.coefficient * ss.standardDeviation(yValues) / ss.mean(yValues) * 100).toFixed(1);
+
+                let title = '';
+                let description = '';
+
+                if (correlation.direction === 'positive') {
+                    title = `Higher ${metricX.label} = Higher ${metricY.label}`;
+                    description = `When you push your ${metricX.label} higher, your ${metricY.label} sees a typical boost of ${Math.abs(parseFloat(percentEffect))}%.`;
+                } else {
+                    title = `Higher ${metricX.label} = Lower ${metricY.label}`;
+                    description = `When your ${metricX.label} goes up, your ${metricY.label} tends to drop by about ${Math.abs(parseFloat(percentEffect))}%.`;
+                }
+
+                insights.push({
+                    id: `insight-${metricX.metric}-${metricY.metric}`,
+                    title,
+                    description,
+                    metricXLabel: metricX.label,
+                    metricYLabel: metricY.label,
+                    metricXKey: metricX.metric,
+                    metricYKey: metricY.metric,
+                    strength: correlation.strength as 'moderate' | 'strong',
+                    direction: correlation.direction as 'positive' | 'negative',
+                    coefficient: correlation.coefficient,
+                    sampleSize: correlation.sampleSize,
+                    type: insightType,
+                    correlationData: correlation
+                });
+            }
+        }
+    }
+
+    // Sort by absolute correlation strength (strongest first)
+    return insights.sort((a, b) => Math.abs(b.coefficient) - Math.abs(a.coefficient));
+}
+
+// Helper to determine if a higher value for a metric is generally "good"
+function isMetricPositive(metricKey: string): boolean {
+    const positiveMetrics = ['sleep_score', 'readiness_score', 'activity_score', 'steps', 'hrv', 'deep_sleep', 'rem_sleep', 'active_calories'];
+    return positiveMetrics.includes(metricKey);
 }
 
 // ============================================

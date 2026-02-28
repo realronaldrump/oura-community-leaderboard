@@ -118,9 +118,9 @@ const Dashboard: React.FC = () => {
             const lastReadiness = readiness[0];
             const lastActivity = activity[0];
             const lastSession = lastSleep ? session.find(s => s.day === lastSleep.day) : null;
-            const sScore = lastSleep?.score || 0;
-            const rScore = lastReadiness?.score || 0;
-            const aScore = lastActivity?.score || 0;
+            const sScore = Number(lastSleep?.score) || 0;
+            const rScore = Number(lastReadiness?.score) || 0;
+            const aScore = Number(lastActivity?.score) || 0;
             return {
                 id: p.id,
                 name: p.firstName || (p.email || 'User').split('@')[0],

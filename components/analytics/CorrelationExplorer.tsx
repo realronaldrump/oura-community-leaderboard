@@ -4,8 +4,10 @@ import { CorrelationResult, MetricOption } from '../../types/analyticsTypes';
 import { calculateCorrelation } from '../../services/analyticsService';
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import html2canvas from 'html2canvas';
-import { BarChart3, Image, Lightbulb } from 'lucide-react';
+import { BarChart3, Image, Lightbulb, Sparkles, Filter, ChevronDown } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
+import InsightCard from './InsightCard';
+import { generateAutomatedInsights } from '../../services/analyticsService';
 
 interface CorrelationExplorerProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -23,42 +25,30 @@ const METRIC_OPTIONS = [
 ];
 
 const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, usersData }) => {
-    const [xUser, setXUser] = useState(0);
-    const [yUser, setYUser] = useState(profiles.length > 1 ? 1 : 0);
-    const [xMetric, setXMetric] = useState('hrv');
-    const [yMetric, setYMetric] = useState('readiness_score');
+    // Determine the active user (default to first profile)
+    const [selectedUserIdx, setSelectedUserIdx] = useState(0);
+    const [filterType, setFilterType] = useState<'all' | 'positive_habit' | 'negative_habit'>('all');
+
+    // We only show insights for one user at a time to keep it focused
+    const activeUserId = profiles[selectedUserIdx]?.id;
+    const activeUserName = (profiles[selectedUserIdx]?.email || 'User').split('@')[0];
+    const activeData = usersData[selectedUserIdx]?.data;
+
+    const insights = useMemo(() => {
+        if (!activeData || !activeUserId) return [];
+        return generateAutomatedInsights(activeData, activeUserId, activeUserName);
+    }, [activeData, activeUserId, activeUserName]);
+
+    const filteredInsights = useMemo(() => {
+        if (filterType === 'all') return insights;
+        return insights.filter(i => i.type === filterType);
+    }, [insights, filterType]);
+
+    // Export functionality (simplified to just take a screenshot of the feed)
     const [isExporting, setIsExporting] = useState(false);
 
-    const userOptions = profiles.map((p, idx) => ({
-        idx,
-        name: (p.email || 'User').split('@')[0]
-    }));
-
-    const correlation = useMemo((): CorrelationResult | null => {
-        const xData = usersData[xUser]?.data;
-        const yData = usersData[yUser]?.data;
-
-        if (!xData || !yData) return null;
-
-        const xMetricOption: MetricOption = {
-            userId: profiles[xUser].id,
-            userName: userOptions[xUser].name,
-            metric: xMetric,
-            label: METRIC_OPTIONS.find(m => m.key === xMetric)?.label || xMetric
-        };
-
-        const yMetricOption: MetricOption = {
-            userId: profiles[yUser].id,
-            userName: userOptions[yUser].name,
-            metric: yMetric,
-            label: METRIC_OPTIONS.find(m => m.key === yMetric)?.label || yMetric
-        };
-
-        return calculateCorrelation(xMetricOption, yMetricOption, xData, yData);
-    }, [profiles, usersData, xUser, yUser, xMetric, yMetric, userOptions]);
-
     const handleExport = async () => {
-        const element = document.getElementById('correlation-chart');
+        const element = document.getElementById('insights-feed');
         if (!element) return;
 
         setIsExporting(true);
@@ -69,7 +59,7 @@ const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, use
             });
 
             const link = document.createElement('a');
-            link.download = `correlation-${xMetric}-vs-${yMetric}.png`;
+            link.download = `my-oura-insights.png`;
             link.href = canvas.toDataURL('image/png');
             link.click();
         } catch (err) {
@@ -77,23 +67,6 @@ const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, use
         } finally {
             setIsExporting(false);
         }
-    };
-
-    const getStrengthColor = (strength: string) => {
-        switch (strength) {
-            case 'strong': return 'text-green-400';
-            case 'moderate': return 'text-yellow-400';
-            case 'weak': return 'text-gray-400';
-            default: return 'text-gray-500';
-        }
-    };
-
-    const getCorrelationBadge = (coef: number) => {
-        const absCoef = Math.abs(coef);
-        if (absCoef >= 0.6) return { text: 'Strong', class: 'bg-green-500/20 text-green-400' };
-        if (absCoef >= 0.3) return { text: 'Moderate', class: 'bg-yellow-500/20 text-yellow-400' };
-        if (absCoef >= 0.1) return { text: 'Weak', class: 'bg-gray-500/20 text-gray-400' };
-        return { text: 'None', class: 'bg-gray-700/20 text-gray-500' };
     };
 
     if (usersData.every(u => !u.data)) {
@@ -114,242 +87,100 @@ const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, use
         <div className="space-y-6">
             {/* Header */}
             <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <h3 className="section-header mb-0">Trend Correlation Explorer</h3>
-                    <InfoTooltip
-                        title="Correlation Analysis"
-                        description="Explore statistical relationships between any two metrics. Find out which behaviors most impact your scores."
-                        calculation="Uses Pearson correlation coefficient (r) ranging from -1 to +1. Positive values mean metrics move together; negative means they move opposite. Strength: |r| > 0.6 = strong, 0.3-0.6 = moderate, < 0.3 = weak."
-                    />
+                <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-indigo-500/20 text-indigo-400 rounded-xl">
+                        <Sparkles className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <h3 className="text-xl font-bold tracking-tight text-[var(--text-primary)] flex items-center gap-2">
+                            Personalized Insights
+                            <InfoTooltip
+                                title="Correlation AI Engine"
+                                description="Our engine continuously scans thousands of data points across your Oura history. It identifies hidden habits, both positive and negative, by discovering statistically significant correlations."
+                                calculation="Only medium-to-strong relationships (|r| > 0.3) are displayed. Trivial or obvious combinations are filtered out automatically."
+                            />
+                        </h3>
+                        <p className="text-sm text-[var(--text-muted)] mt-0.5">
+                            Discover the hidden habits driving your health
+                        </p>
+                    </div>
                 </div>
-                <p className="text-sm text-[var(--text-muted)] mt-1">
-                    Discover how different metrics relate to each other
-                </p>
 
-                <button
-                    onClick={handleExport}
-                    disabled={isExporting || !correlation}
-                    className="btn-secondary px-4 py-2 text-sm disabled:opacity-50 flex items-center gap-2"
-                >
-                    {isExporting ? (
-                        <>
-                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                            Exporting...
-                        </>
-                    ) : (
-                        <>
-                            <Image className="w-4 h-4" />
-                            Export PNG
-                        </>
+                <div className="flex items-center gap-3">
+                    {profiles.length > 1 && (
+                        <div className="relative">
+                            <select
+                                value={selectedUserIdx}
+                                onChange={(e) => setSelectedUserIdx(Number(e.target.value))}
+                                className="appearance-none pl-3 pr-8 py-2 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] hover:bg-white/5 cursor-pointer max-w-[150px] truncate"
+                            >
+                                {profiles.map((p, idx) => (
+                                    <option key={idx} value={idx}>
+                                        Viewing: {(p.email || 'User').split('@')[0]}
+                                    </option>
+                                ))}
+                            </select>
+                            <ChevronDown className="w-4 h-4 text-[var(--text-muted)] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
                     )}
-                </button>
-            </div>
-
-            {/* Metric Selectors */}
-            <div className="card p-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* X-Axis */}
-                    <div>
-                        <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2 block">
-                            X-Axis
-                        </label>
-                        <div className="flex gap-2">
-                            <select
-                                value={xUser}
-                                onChange={(e) => setXUser(Number(e.target.value))}
-                                className="flex-1 px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--accent)]"
-                            >
-                                {userOptions.map(u => (
-                                    <option key={u.idx} value={u.idx}>{u.name}</option>
-                                ))}
-                            </select>
-                            <select
-                                value={xMetric}
-                                onChange={(e) => setXMetric(e.target.value)}
-                                className="flex-1 px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--accent)]"
-                            >
-                                {METRIC_OPTIONS.map(m => (
-                                    <option key={m.key} value={m.key}>{m.label}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-
-                    {/* Y-Axis */}
-                    <div>
-                        <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2 block">
-                            Y-Axis
-                        </label>
-                        <div className="flex gap-2">
-                            <select
-                                value={yUser}
-                                onChange={(e) => setYUser(Number(e.target.value))}
-                                className="flex-1 px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--accent)]"
-                            >
-                                {userOptions.map(u => (
-                                    <option key={u.idx} value={u.idx}>{u.name}</option>
-                                ))}
-                            </select>
-                            <select
-                                value={yMetric}
-                                onChange={(e) => setYMetric(e.target.value)}
-                                className="flex-1 px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--accent)]"
-                            >
-                                {METRIC_OPTIONS.map(m => (
-                                    <option key={m.key} value={m.key}>{m.label}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
                 </div>
             </div>
 
-            {/* Chart and Stats */}
-            {correlation && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Chart */}
-                    <div id="correlation-chart" className="lg:col-span-2 card p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h4 className="text-sm font-medium text-[var(--text-primary)]">
-                                {correlation.metricX.userName}'s {correlation.metricX.label} vs {correlation.metricY.userName}'s {correlation.metricY.label}
-                            </h4>
-                            <span className={`text-xs px-2 py-1 rounded-full ${getCorrelationBadge(correlation.coefficient).class}`}>
-                                {getCorrelationBadge(correlation.coefficient).text} Correlation
-                            </span>
-                        </div>
-
-                        <div style={{ height: 350 }}>
-                            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
-                                <ScatterChart margin={{ top: 20, right: 20, bottom: 40, left: 40 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-                                    <XAxis
-                                        type="number"
-                                        dataKey="x"
-                                        name={correlation.metricX.label}
-                                        tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-                                        axisLine={{ stroke: 'var(--border-default)' }}
-                                        tickLine={{ stroke: 'var(--border-default)' }}
-                                        label={{
-                                            value: `${correlation.metricX.userName}'s ${correlation.metricX.label}`,
-                                            position: 'bottom',
-                                            fill: 'var(--text-muted)',
-                                            fontSize: 12,
-                                            offset: 0
-                                        }}
-                                    />
-                                    <YAxis
-                                        type="number"
-                                        dataKey="y"
-                                        name={correlation.metricY.label}
-                                        tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-                                        axisLine={{ stroke: 'var(--border-default)' }}
-                                        tickLine={{ stroke: 'var(--border-default)' }}
-                                        label={{
-                                            value: `${correlation.metricY.userName}'s ${correlation.metricY.label}`,
-                                            angle: -90,
-                                            position: 'insideLeft',
-                                            fill: 'var(--text-muted)',
-                                            fontSize: 12,
-                                            offset: 10
-                                        }}
-                                    />
-                                    <Tooltip
-                                        contentStyle={{
-                                            backgroundColor: 'var(--bg-base)',
-                                            border: '1px solid var(--border-default)',
-                                            borderRadius: '8px'
-                                        }}
-                                        formatter={(value: number, name: string) => [value.toFixed(1), name]}
-                                        labelFormatter={(label) => `Date: ${correlation.dataPoints[label as number]?.date || ''}`}
-                                    />
-                                    <Scatter
-                                        data={correlation.dataPoints}
-                                        fill="var(--accent)"
-                                        fillOpacity={0.7}
-                                    />
-                                </ScatterChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-
-                    {/* Stats Panel */}
-                    <div className="space-y-4">
-                        {/* Correlation Coefficient */}
-                        <div className="card p-4">
-                            <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2">
-                                Pearson Correlation (r)
-                            </p>
-                            <div className="flex items-baseline gap-2">
-                                <span className={`text-4xl font-bold font-mono ${getStrengthColor(correlation.strength)}`}>
-                                    {correlation.coefficient >= 0 ? '+' : ''}{correlation.coefficient.toFixed(3)}
-                                </span>
-                            </div>
-                            <div className="mt-3 pt-3 border-t border-[var(--border-subtle)]">
-                                <div className="flex items-center gap-2">
-                                    <span className={`w-2 h-2 rounded-full ${correlation.direction === 'positive' ? 'bg-green-400' :
-                                        correlation.direction === 'negative' ? 'bg-red-400' : 'bg-gray-400'
-                                        }`} />
-                                    <span className="text-sm text-[var(--text-secondary)]">
-                                        {correlation.direction === 'positive' ? 'Positive' :
-                                            correlation.direction === 'negative' ? 'Negative' : 'No'} relationship
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Insight */}
-                        <div className="card p-4">
-                            <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2 flex items-center gap-1">
-                                <Lightbulb className="w-3 h-3" /> Insight
-                            </p>
-                            <p className="text-sm text-[var(--text-secondary)]">
-                                {correlation.insight}
-                            </p>
-                        </div>
-
-                        {/* Sample Size */}
-                        <div className="card p-4">
-                            <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2">
-                                Sample Size
-                            </p>
-                            <p className="text-2xl font-bold font-mono text-[var(--text-primary)]">
-                                {correlation.sampleSize} <span className="text-sm font-normal text-[var(--text-muted)]">days</span>
-                            </p>
-                        </div>
-
-                        {/* Interpretation Guide */}
-                        <div className="card p-4">
-                            <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-3">
-                                How to read
-                            </p>
-                            <div className="space-y-2 text-xs">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-green-400" />
-                                    <span className="text-[var(--text-secondary)]">±0.6 to ±1.0 = Strong</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-yellow-400" />
-                                    <span className="text-[var(--text-secondary)]">±0.3 to ±0.6 = Moderate</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-gray-400" />
-                                    <span className="text-[var(--text-secondary)]">±0.1 to ±0.3 = Weak</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-gray-600" />
-                                    <span className="text-[var(--text-secondary)]">0 to ±0.1 = None</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+            {/* Filters */}
+            {insights.length > 0 && (
+                <div className="flex items-center gap-2 pb-2 overflow-x-auto hide-scrollbar">
+                    <Filter className="w-4 h-4 text-[var(--text-muted)] mr-1" />
+                    <button
+                        onClick={() => setFilterType('all')}
+                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${filterType === 'all' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-white/10'}`}
+                    >
+                        All Insights
+                    </button>
+                    <button
+                        onClick={() => setFilterType('positive_habit')}
+                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${filterType === 'positive_habit' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-white/10'}`}
+                    >
+                        Positive Habits
+                    </button>
+                    <button
+                        onClick={() => setFilterType('negative_habit')}
+                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${filterType === 'negative_habit' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-white/10'}`}
+                    >
+                        Negative Habits
+                    </button>
                 </div>
             )}
 
-            {!correlation && (
-                <div className="card p-8 text-center">
-                    <p className="text-[var(--text-muted)]">
-                        Select metrics to explore correlations
+            {/* Insights Feed */}
+            {filteredInsights.length > 0 ? (
+                <div id="insights-feed" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {filteredInsights.map(insight => (
+                        <InsightCard key={insight.id} insight={insight} />
+                    ))}
+                </div>
+            ) : (
+                <div className="card p-12 text-center bg-[var(--bg-elevated)] border border-dashed border-[var(--border-subtle)]">
+                    <div className="flex justify-center mb-4">
+                        <div className="p-3 bg-white/5 rounded-full">
+                            <Sparkles className="w-8 h-8 text-[var(--text-muted)] opacity-50" />
+                        </div>
+                    </div>
+                    <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">
+                        {filterType !== 'all' ? `No ${filterType.replace('_', ' ')}s found` : 'Need More Data'}
+                    </h3>
+                    <p className="text-[var(--text-muted)] text-sm max-w-md mx-auto leading-relaxed">
+                        {filterType !== 'all'
+                            ? "Try changing your filter to see other statistically significant patterns we've discovered."
+                            : "We haven't found any strong correlations in your data yet. Keep wearing your ring and check back in a few days!"}
                     </p>
+                    {filterType !== 'all' && (
+                        <button
+                            onClick={() => setFilterType('all')}
+                            className="mt-6 text-sm text-[var(--accent)] hover:opacity-80 transition-opacity"
+                        >
+                            View All Insights
+                        </button>
+                    )}
                 </div>
             )}
         </div>
