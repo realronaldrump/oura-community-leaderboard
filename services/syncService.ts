@@ -108,7 +108,7 @@ export const smartSync = async (
                 end?: string
             ) => Promise<any[]>;
 
-            const data = await fetchMethod(token, startDate, today);
+            const data = await fetchMethod.call(ouraService, token, startDate, today);
             (result as any)[dataType.key] = data;
         } catch (err) {
             console.warn(`Failed to sync ${dataType.label}:`, err);
@@ -165,7 +165,7 @@ export const fullSync = async (
                 end?: string
             ) => Promise<any[]>;
 
-            const data = await fetchMethod(token, startDate, today);
+            const data = await fetchMethod.call(ouraService, token, startDate, today);
             (result as any)[dataType.key] = data;
         } catch (err) {
             console.warn(`Failed to sync ${dataType.label}:`, err);
