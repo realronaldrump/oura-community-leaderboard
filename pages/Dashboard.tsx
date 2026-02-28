@@ -158,14 +158,6 @@ const Dashboard: React.FC = () => {
     const stressHistory = activeData?.stress || [];
     const resilienceHistory = activeData?.resilience || [];
 
-    const getPreviousDay = (day?: string): string | undefined => {
-        if (!day) return undefined;
-        const d = new Date(`${day}T00:00:00`);
-        if (Number.isNaN(d.getTime())) return undefined;
-        d.setDate(d.getDate() - 1);
-        return d.toISOString().split('T')[0];
-    };
-
     const findByDay = <T extends { day?: string }>(items: T[], day?: string): T | undefined => {
         if (!day) return undefined;
         return items.find(item => item.day === day);
@@ -183,58 +175,21 @@ const Dashboard: React.FC = () => {
             })[0];
     };
 
-    const getSessionDisplayDay = (session: { day?: string; bedtime_end?: string }): string | undefined => {
-        if (session.bedtime_end) return session.bedtime_end.split('T')[0];
-        return session.day;
-    };
-
-    const shouldUseLegacySessionFallback = useMemo(() => {
-        const recentSleepDays = sleepHistory.slice(0, 10).map(s => s.day).filter(Boolean) as string[];
-        if (recentSleepDays.length < 3) return false;
-
-        const sessionDays = new Set(sessionHistory.map(s => s.day).filter(Boolean));
-        let directMatches = 0;
-        let previousDayMatches = 0;
-
-        for (const day of recentSleepDays) {
-            if (sessionDays.has(day)) directMatches += 1;
-            const prevDay = getPreviousDay(day);
-            if (prevDay && sessionDays.has(prevDay)) previousDayMatches += 1;
-        }
-
-        return previousDayMatches >= 3 && previousDayMatches > directMatches;
-    }, [sleepHistory, sessionHistory]);
-
     const findSessionForDay = (day?: string) => {
         if (!day) return undefined;
-
-        const dayMatch = pickBestSession(sessionHistory.filter(s => s.day === day));
-        if (dayMatch) return dayMatch;
-
-        const bedtimeDayMatch = pickBestSession(sessionHistory.filter(s => getSessionDisplayDay(s) === day));
-        if (bedtimeDayMatch) return bedtimeDayMatch;
-
-        if (!shouldUseLegacySessionFallback) return undefined;
-
-        // Fallback only for legacy payloads where session "day" is previous-night anchored.
-        const prevDay = getPreviousDay(day);
-        if (!prevDay) return undefined;
-        return pickBestSession(sessionHistory.filter(s => s.day === prevDay));
+        // Use Oura's canonical `day` field directly for date alignment.
+        return pickBestSession(sessionHistory.filter(s => s.day === day));
     };
 
     const scoreAnchorDay =
         sleepHistory[dateIndex]?.day ||
         readinessHistory[dateIndex]?.day ||
         activityHistory[dateIndex]?.day;
-    const referenceDay =
-        scoreAnchorDay ||
-        sleepHistory[0]?.day ||
-        readinessHistory[0]?.day ||
-        activityHistory[0]?.day;
+    const referenceDay = scoreAnchorDay;
 
-    const currentSleep = findByDay(sleepHistory, referenceDay) || sleepHistory[dateIndex] || sleepHistory[0];
-    const currentReadiness = findByDay(readinessHistory, referenceDay) || readinessHistory[dateIndex] || readinessHistory[0];
-    const currentActivity = findByDay(activityHistory, referenceDay) || activityHistory[dateIndex] || activityHistory[0];
+    const currentSleep = findByDay(sleepHistory, referenceDay);
+    const currentReadiness = findByDay(readinessHistory, referenceDay);
+    const currentActivity = findByDay(activityHistory, referenceDay);
     const currentSession = findSessionForDay(referenceDay);
     const currentSpo2 = findByDay(spo2History, referenceDay);
     const currentStress = findByDay(stressHistory, referenceDay);
