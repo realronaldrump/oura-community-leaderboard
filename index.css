@@ -15,22 +15,25 @@
   --bg-raised: #141414;
   --bg-elevated: #1C1C1C;
   --bg-hover: #242424;
-  
+
   /* Minimal borders */
   --border-subtle: #222222;
   --border-default: #333333;
   --border-strong: #444444;
-  
+
   /* Functional accent - ONE color, used sparingly */
   --accent: #00C896;
   --accent-dim: rgba(0, 200, 150, 0.15);
-  
+  --accent-cyan: #00C896;
+  --accent-purple: #A855F7;
+  --accent-orange: #F59E0B;
+
   /* Metric colors - muted, functional */
   --metric-green: #34D399;
   --metric-blue: #60A5FA;
   --metric-amber: #FBBF24;
   --metric-red: #F87171;
-  
+
   /* Text - high contrast */
   --text-primary: #FAFAFA;
   --text-secondary: #A0A0A0;
@@ -559,4 +562,50 @@ select {
   .hide-mobile {
     display: none;
   }
+}
+
+/* ========================================
+   DASHBOARD SPECIFIC
+   ======================================== */
+
+.section-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.score-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem 1rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.score-card:hover {
+  border-color: var(--border-default);
+  background: var(--bg-elevated);
+}
+
+.score-card:active {
+  transform: scale(0.98);
+}
+
+/* Glass card - used by existing components */
+.glass-card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.glass-card:hover {
+  border-color: var(--border-default);
 }

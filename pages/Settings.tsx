@@ -10,11 +10,7 @@ const Settings: React.FC = () => {
 
     const [showSyncModal, setShowSyncModal] = useState(false);
     const [syncProgress, setSyncProgress] = useState<SyncProgress>({
-        status: 'idle',
-        currentStep: '',
-        stepsCompleted: 0,
-        totalSteps: 0,
-        details: '',
+        status: 'idle', currentStep: '', stepsCompleted: 0, totalSteps: 0, details: '',
     });
 
     const [firstName, setFirstName] = useState(activeProfile?.firstName || '');
@@ -33,10 +29,7 @@ const Settings: React.FC = () => {
         if (!activeProfile) return;
         setIsSaving(true);
         try {
-            await updateProfile({
-                firstName,
-                lastName
-            });
+            await updateProfile({ firstName, lastName });
             setSaveMessage('Profile updated!');
             setTimeout(() => setSaveMessage(''), 3000);
         } catch (error) {
@@ -49,176 +42,117 @@ const Settings: React.FC = () => {
 
     const handleFullSync = async () => {
         if (!activeProfile) return;
-
         setShowSyncModal(true);
-
         try {
-            await fullSync(activeProfile.token, (progress) => {
-                setSyncProgress(progress);
-            });
-
-            // After full sync, invalidate all caches
+            await fullSync(activeProfile.token, (progress) => { setSyncProgress(progress); });
             await queryClient.invalidateQueries({ queryKey: ['dailyStats'] });
             await queryClient.invalidateQueries({ queryKey: ['allTimeStats'] });
             await queryClient.invalidateQueries({ queryKey: ['heartRate'] });
         } catch (err) {
             console.error('Full sync failed:', err);
-            setSyncProgress(prev => ({
-                ...prev,
-                status: 'error',
-                error: 'Something went wrong. Please try again.',
-            }));
+            setSyncProgress(prev => ({ ...prev, status: 'error', error: 'Something went wrong. Please try again.' }));
         }
     };
 
-    const handleBackToDashboard = () => {
-        window.history.back();
-    };
+    const handleBackToDashboard = () => { window.history.back(); };
 
     if (!activeProfile) {
         return (
             <div className="min-h-screen flex items-center justify-center">
-                <p className="text-text-muted">Please select a profile first.</p>
+                <p className="text-[#666]">Please select a profile first.</p>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-void text-text-primary">
-            {/* Sync Modal */}
-            <SyncModal
-                isOpen={showSyncModal}
-                progress={syncProgress}
-                onClose={() => setShowSyncModal(false)}
-            />
+        <div className="min-h-screen bg-[#0C0C0C] text-[#FAFAFA]">
+            <SyncModal isOpen={showSyncModal} progress={syncProgress} onClose={() => setShowSyncModal(false)} />
 
-            {/* Header */}
-            <nav className="fixed top-0 left-0 right-0 z-40 bg-void/80 backdrop-blur-xl border-b border-dashboard-border px-4 md:px-8 py-4">
+            <nav className="sticky top-0 z-40 bg-[#0C0C0C]/90 backdrop-blur-md border-b border-[#1C1C1C] px-4 py-3">
                 <div className="max-w-2xl mx-auto flex justify-between items-center">
-                    <button
-                        onClick={handleBackToDashboard}
-                        className="text-text-muted hover:text-text-primary transition-colors flex items-center gap-2"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button onClick={handleBackToDashboard} className="text-[#666] hover:text-[#FAFAFA] transition-colors flex items-center gap-2 text-sm">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
                         Back
                     </button>
-                    <h1 className="text-lg font-bold">Settings</h1>
-                    <div className="w-16" /> {/* Spacer */}
+                    <h1 className="text-base font-semibold">Settings</h1>
+                    <div className="w-16" />
                 </div>
             </nav>
 
-            {/* Content */}
-            <div className="max-w-2xl mx-auto px-4 pt-24 pb-12">
-                {/* Profile Section */}
+            <div className="max-w-2xl mx-auto px-4 pt-8 pb-12">
+                {/* Profile */}
                 <section className="mb-8">
-                    <h2 className="text-sm text-text-muted uppercase tracking-wider mb-4">Profile Settings</h2>
-                    <div className="glass-card p-6 space-y-6">
+                    <h2 className="text-xs text-[#666] uppercase tracking-wider mb-3">Profile</h2>
+                    <div className="bg-[#141414] border border-[#222] rounded-lg p-5 space-y-5">
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-xs text-text-muted mb-2 uppercase tracking-wide">First Name</label>
-                                <input
-                                    type="text"
-                                    value={firstName}
-                                    onChange={(e) => setFirstName(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-text-primary focus:border-accent-cyan focus:ring-1 focus:ring-accent-cyan outline-none transition-all placeholder-text-dim/50"
-                                    placeholder="Enter first name"
-                                />
+                                <label className="block text-xs text-[#666] mb-1.5 uppercase tracking-wide">First Name</label>
+                                <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)}
+                                    className="w-full bg-[#0C0C0C] border border-[#333] rounded-md px-3 py-2.5 text-[#FAFAFA] text-sm focus:border-[#00C896] outline-none transition-colors"
+                                    placeholder="First name" />
                             </div>
                             <div>
-                                <label className="block text-xs text-text-muted mb-2 uppercase tracking-wide">Last Name</label>
-                                <input
-                                    type="text"
-                                    value={lastName}
-                                    onChange={(e) => setLastName(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-text-primary focus:border-accent-cyan focus:ring-1 focus:ring-accent-cyan outline-none transition-all placeholder-text-dim/50"
-                                    placeholder="Enter last name"
-                                />
+                                <label className="block text-xs text-[#666] mb-1.5 uppercase tracking-wide">Last Name</label>
+                                <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)}
+                                    className="w-full bg-[#0C0C0C] border border-[#333] rounded-md px-3 py-2.5 text-[#FAFAFA] text-sm focus:border-[#00C896] outline-none transition-colors"
+                                    placeholder="Last name" />
                             </div>
                         </div>
 
-                        <div className="flex items-center justify-between pt-2">
+                        <div className="flex items-center justify-between pt-1">
                             <div>
-                                <p className="text-xs text-text-muted mb-1">Email Account</p>
-                                <p className="text-sm text-text-secondary">{activeProfile.email}</p>
+                                <p className="text-xs text-[#666] mb-0.5">Email</p>
+                                <p className="text-sm text-[#A0A0A0]">{activeProfile.email}</p>
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3">
                                 {saveMessage && (
-                                    <span className={`text-sm ${saveMessage.includes('Failed') ? 'text-accent-rose' : 'text-accent-cyan'}`}>
-                                        {saveMessage}
-                                    </span>
+                                    <span className={`text-xs ${saveMessage.includes('Failed') ? 'text-[#F87171]' : 'text-[#00C896]'}`}>{saveMessage}</span>
                                 )}
-                                <button
-                                    onClick={handleSaveProfile}
-                                    disabled={isSaving}
-                                    className="btn-primary px-6 py-2 text-sm disabled:opacity-50"
-                                >
-                                    {isSaving ? 'Saving...' : 'Save Changes'}
+                                <button onClick={handleSaveProfile} disabled={isSaving}
+                                    className="px-4 py-2 bg-[#00C896] text-[#0C0C0C] font-medium rounded-md text-sm disabled:opacity-50 hover:opacity-90 transition-opacity">
+                                    {isSaving ? 'Saving...' : 'Save'}
                                 </button>
                             </div>
                         </div>
 
-                        <hr className="border-white/5" />
+                        <hr className="border-[#222]" />
 
                         <div className="flex justify-between items-center">
-                            <span className="text-sm text-text-muted">Switch to a different profile?</span>
-                            <button
-                                onClick={() => setActiveProfileId('')}
-                                className="text-sm text-accent-cyan hover:text-accent-cyan/80 transition-colors"
-                            >
-                                Switch Profile
-                            </button>
+                            <span className="text-sm text-[#666]">Switch profile</span>
+                            <button onClick={() => setActiveProfileId('')} className="text-sm text-[#00C896] hover:opacity-80 transition-opacity">Switch</button>
                         </div>
                     </div>
                 </section>
 
-                {/* Data Sync Section */}
+                {/* Data Sync */}
                 <section className="mb-8">
-                    <h2 className="text-sm text-text-muted uppercase tracking-wider mb-4">Data Sync</h2>
-                    <div className="glass-card p-4 space-y-4">
-                        {/* Full Sync Option */}
+                    <h2 className="text-xs text-[#666] uppercase tracking-wider mb-3">Data Sync</h2>
+                    <div className="bg-[#141414] border border-[#222] rounded-lg p-5 space-y-4">
                         <div className="flex items-start justify-between gap-4">
                             <div className="flex-1">
-                                <p className="text-text-primary font-medium">Full Data Sync</p>
-                                <p className="text-text-muted text-sm mt-1">
-                                    Download all your Oura data from the beginning. This retrieves your complete history and may take a few minutes.
-                                </p>
+                                <p className="text-[#FAFAFA] font-medium text-sm">Full Data Sync</p>
+                                <p className="text-[#666] text-xs mt-1">Download your complete Oura history. This may take a few minutes.</p>
                             </div>
-                            <button
-                                onClick={handleFullSync}
-                                className="btn-secondary px-4 py-2 text-sm whitespace-nowrap"
-                            >
+                            <button onClick={handleFullSync} className="px-4 py-2 border border-[#333] text-[#FAFAFA] font-medium rounded-md text-sm hover:bg-[#1C1C1C] transition-colors">
                                 Sync All
                             </button>
                         </div>
-
-                        <hr className="border-dashboard-border" />
-
-                        {/* Info */}
-                        <div className="flex items-start gap-3 text-sm">
-                            <svg className="w-5 h-5 text-accent-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <p className="text-text-muted">
-                                The "Sync" button in the dashboard only fetches recent data to keep things fast. Use Full Sync here to backfill your complete history.
-                            </p>
-                        </div>
+                        <hr className="border-[#222]" />
+                        <p className="text-xs text-[#666]">
+                            The dashboard syncs recent data automatically every hour. Use Full Sync here to backfill your complete history.
+                        </p>
                     </div>
                 </section>
 
-                {/* Add Profile Section */}
+                {/* Add Profile */}
                 <section>
-                    <h2 className="text-sm text-text-muted uppercase tracking-wider mb-4">Add Profile</h2>
-                    <div className="glass-card p-4">
+                    <h2 className="text-xs text-[#666] uppercase tracking-wider mb-3">Add Profile</h2>
+                    <div className="bg-[#141414] border border-[#222] rounded-lg p-5">
                         <div className="flex items-center justify-between gap-4">
-                            <p className="text-text-muted text-sm">
-                                Connect another Oura account to compare with friends.
-                            </p>
-                            <button
-                                onClick={login}
-                                className="btn-primary px-4 py-2 text-sm whitespace-nowrap"
-                            >
+                            <p className="text-[#666] text-sm">Connect another Oura account.</p>
+                            <button onClick={login} className="px-4 py-2 bg-[#00C896] text-[#0C0C0C] font-medium rounded-md text-sm hover:opacity-90 transition-opacity">
                                 + Add
                             </button>
                         </div>
