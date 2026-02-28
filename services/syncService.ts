@@ -12,14 +12,19 @@ export interface SyncProgress {
 
 export type SyncProgressCallback = (progress: SyncProgress) => void;
 
+const hasScope = (grantedScopes: string[] | undefined, requiredScope: string): boolean => {
+    if (!grantedScopes || grantedScopes.length === 0) return true;
+    return grantedScopes.includes(requiredScope);
+};
+
 const DATA_TYPES = [
-    { key: 'sleep', label: 'Sleep', fetch: 'getDailySleep' },
-    { key: 'readiness', label: 'Readiness', fetch: 'getDailyReadiness' },
-    { key: 'activity', label: 'Activity', fetch: 'getDailyActivity' },
-    { key: 'session', label: 'Sleep Sessions', fetch: 'getSleepSessions' },
-    { key: 'spo2', label: 'SpO2', fetch: 'getDailySpO2' },
-    { key: 'stress', label: 'Stress', fetch: 'getDailyStress' },
-    { key: 'resilience', label: 'Resilience', fetch: 'getDailyResilience' },
+    { key: 'sleep', label: 'Sleep', fetch: 'getDailySleep', requiredScope: 'daily' },
+    { key: 'readiness', label: 'Readiness', fetch: 'getDailyReadiness', requiredScope: 'daily' },
+    { key: 'activity', label: 'Activity', fetch: 'getDailyActivity', requiredScope: 'daily' },
+    { key: 'session', label: 'Sleep Sessions', fetch: 'getSleepSessions', requiredScope: 'daily' },
+    { key: 'spo2', label: 'SpO2', fetch: 'getDailySpO2', requiredScope: 'spo2' },
+    { key: 'stress', label: 'Stress', fetch: 'getDailyStress', requiredScope: 'daily' },
+    { key: 'resilience', label: 'Resilience', fetch: 'getDailyResilience', requiredScope: 'daily' },
 ] as const;
 
 /**
@@ -65,7 +70,8 @@ const formatDateRange = (start: string, end: string): string => {
 export const smartSync = async (
     token: string,
     existingData: DailyStats | undefined,
-    onProgress: SyncProgressCallback
+    onProgress: SyncProgressCallback,
+    grantedScopes?: string[]
 ): Promise<Partial<DailyStats>> => {
     const today = new Date().toISOString().split('T')[0];
     const lastDate = getMostRecentDate(existingData);
@@ -80,24 +86,37 @@ export const smartSync = async (
 
     const dateRange = formatDateRange(startDate, today);
 
+    const enabledDataTypes = DATA_TYPES.filter(type => hasScope(grantedScopes, type.requiredScope));
+
+    if (enabledDataTypes.length === 0) {
+        onProgress({
+            status: 'complete',
+            currentStep: 'Sync complete!',
+            stepsCompleted: 0,
+            totalSteps: 0,
+            details: 'No authorized scopes available for sync',
+        });
+        return {};
+    }
+
     onProgress({
         status: 'syncing',
         currentStep: 'Starting sync...',
         stepsCompleted: 0,
-        totalSteps: DATA_TYPES.length,
+        totalSteps: enabledDataTypes.length,
         details: `Fetching data: ${dateRange}`,
     });
 
     const result: Partial<DailyStats> = {};
 
-    for (let i = 0; i < DATA_TYPES.length; i++) {
-        const dataType = DATA_TYPES[i];
+    for (let i = 0; i < enabledDataTypes.length; i++) {
+        const dataType = enabledDataTypes[i];
 
         onProgress({
             status: 'syncing',
             currentStep: `Syncing ${dataType.label}...`,
             stepsCompleted: i,
-            totalSteps: DATA_TYPES.length,
+            totalSteps: enabledDataTypes.length,
             details: dateRange,
         });
 
@@ -119,8 +138,8 @@ export const smartSync = async (
     onProgress({
         status: 'complete',
         currentStep: 'Sync complete!',
-        stepsCompleted: DATA_TYPES.length,
-        totalSteps: DATA_TYPES.length,
+        stepsCompleted: enabledDataTypes.length,
+        totalSteps: enabledDataTypes.length,
         details: `Updated: ${dateRange}`,
     });
 
@@ -132,29 +151,51 @@ export const smartSync = async (
  */
 export const fullSync = async (
     token: string,
-    onProgress: SyncProgressCallback
+    onProgress: SyncProgressCallback,
+    grantedScopes?: string[]
 ): Promise<DailyStats> => {
     const today = new Date().toISOString().split('T')[0];
     const startDate = '2016-01-01'; // Oura Gen 1 era
+
+    const enabledDataTypes = DATA_TYPES.filter(type => hasScope(grantedScopes, type.requiredScope));
+
+    if (enabledDataTypes.length === 0) {
+        onProgress({
+            status: 'complete',
+            currentStep: 'Full sync complete!',
+            stepsCompleted: 0,
+            totalSteps: 0,
+            details: 'No authorized scopes available for sync',
+        });
+        return {
+            sleep: [],
+            readiness: [],
+            activity: [],
+            session: [],
+            spo2: [],
+            stress: [],
+            resilience: [],
+        };
+    }
 
     onProgress({
         status: 'syncing',
         currentStep: 'Starting full sync...',
         stepsCompleted: 0,
-        totalSteps: DATA_TYPES.length,
+        totalSteps: enabledDataTypes.length,
         details: 'Fetching all historical data (this may take a moment)',
     });
 
     const result: Partial<DailyStats> = {};
 
-    for (let i = 0; i < DATA_TYPES.length; i++) {
-        const dataType = DATA_TYPES[i];
+    for (let i = 0; i < enabledDataTypes.length; i++) {
+        const dataType = enabledDataTypes[i];
 
         onProgress({
             status: 'syncing',
             currentStep: `Syncing all ${dataType.label} data...`,
             stepsCompleted: i,
-            totalSteps: DATA_TYPES.length,
+            totalSteps: enabledDataTypes.length,
             details: 'Fetching complete history',
         });
 
@@ -175,8 +216,8 @@ export const fullSync = async (
     onProgress({
         status: 'complete',
         currentStep: 'Full sync complete!',
-        stepsCompleted: DATA_TYPES.length,
-        totalSteps: DATA_TYPES.length,
+        stepsCompleted: enabledDataTypes.length,
+        totalSteps: enabledDataTypes.length,
         details: 'All historical data synced',
     });
 

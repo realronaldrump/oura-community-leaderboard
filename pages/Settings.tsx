@@ -44,7 +44,7 @@ const Settings: React.FC = () => {
         if (!activeProfile) return;
         setShowSyncModal(true);
         try {
-            await fullSync(activeProfile.token, (progress) => { setSyncProgress(progress); });
+            await fullSync(activeProfile.token, (progress) => { setSyncProgress(progress); }, activeProfile.grantedScopes);
             await queryClient.invalidateQueries({ queryKey: ['dailyStats'] });
             await queryClient.invalidateQueries({ queryKey: ['allTimeStats'] });
             await queryClient.invalidateQueries({ queryKey: ['heartRate'] });

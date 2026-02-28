@@ -85,7 +85,7 @@ const Dashboard: React.FC = () => {
             const existingData = queryClient.getQueryData(['dailyStats', activeProfile.token]) as any;
             await smartSync(activeProfile.token, existingData, (progress) => {
                 setSyncProgress(progress);
-            });
+            }, activeProfile.grantedScopes);
             await queryClient.invalidateQueries({ queryKey: ['dailyStats'] });
             await queryClient.invalidateQueries({ queryKey: ['heartRate'] });
         } catch (err) {
