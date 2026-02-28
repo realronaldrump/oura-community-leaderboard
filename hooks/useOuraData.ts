@@ -3,7 +3,7 @@ import { ouraService } from '../services/ouraService';
 import { DailyStats } from '../types';
 
 export const FULL_HISTORY_START_DATE = '2016-01-01';
-const INITIAL_RECENT_DAYS = 45;
+const INITIAL_RECENT_DAYS = 28;
 const INCREMENTAL_OVERLAP_DAYS = 3;
 
 type FetchConfig = {
@@ -252,4 +252,3 @@ export const useAllTimeStats = (token: string, enabled: boolean = true) => {
         gcTime: 1000 * 60 * 60 * 24,
     });
 };
-
