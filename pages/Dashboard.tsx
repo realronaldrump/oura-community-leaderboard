@@ -344,7 +344,7 @@ const Dashboard: React.FC = () => {
                         <div className="w-12 h-12 rounded-full bg-[#141414] border border-[#1E1E1E] flex items-center justify-center mx-auto mb-5">
                             <Heart className="w-5 h-5 text-[#00C896]" />
                         </div>
-                        <h1 className="text-2xl font-semibold tracking-tight text-[#FAFAFA] mb-2">Health Dashboard</h1>
+                        <h1 className="text-2xl font-semibold tracking-tight text-[#FAFAFA] mb-2">Davis Watches You Sleep</h1>
                         <p className="text-[#666] text-sm">Your Oura data, clearly presented</p>
                     </div>
 
