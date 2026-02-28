@@ -120,6 +120,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 lastUpdated: new Date().toISOString(),
             };
 
+            // Clear any cached unavailable-endpoint blacklists for the new token
+            ouraService.clearUnavailableEndpoints(token);
+
             await firebaseService.saveProfile(newProfile);
             setActiveProfileId(profileId);
             setAuthStatus(AuthStatus.AUTHENTICATED);

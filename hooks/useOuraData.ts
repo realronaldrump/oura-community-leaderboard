@@ -80,6 +80,44 @@ const getMostRecentDay = (existingData: DailyStats | undefined): string | null =
     return candidates.sort().reverse()[0];
 };
 
+const resolveSettled = (settled: PromiseSettledResult<any[]>[], names: string[]): any[][] =>
+    settled.map((result, idx) => {
+        if (result.status === 'fulfilled') return result.value as any[];
+        console.warn(`Failed to fetch ${names[idx]}:`, result.reason);
+        return [];
+    });
+
+const buildDailyStats = (
+    sleep: any[], readiness: any[], activity: any[], sessions: any[],
+    spo2: any[], stress: any[], resilience: any[], heartrate: any[],
+    workout: any[], guidedSession: any[], sleepTime: any[], tag: any[],
+    enhancedTag: any[], restModePeriod: any[], ringConfiguration: any[],
+    cardiovascularAge: any[], vo2Max: any[]
+): DailyStats => ({
+    sleep: sleep.map(s => ({ ...s, score: toNumberOrNull(s.score) })).sort(sortByDayDesc),
+    readiness: readiness.map(r => ({ ...r, score: toNumberOrNull(r.score) })).sort(sortByDayDesc),
+    activity: activity.map(a => ({
+        ...a,
+        score: toNumberOrNull(a.score),
+        steps: a.steps != null ? Number(a.steps) : 0,
+        active_calories: a.active_calories != null ? Number(a.active_calories) : 0,
+    })).sort(sortByDayDesc),
+    session: sessions.map(s => ({ ...s, average_hrv: toNumberOrNull(s.average_hrv) })).sort(sortByDayDesc),
+    spo2: spo2.sort(sortByDayDesc),
+    stress: stress.sort(sortByDayDesc),
+    resilience: resilience.sort(sortByDayDesc),
+    heartrate: heartrate.sort(sortByTimestampDesc),
+    workout: workout.sort(sortByDayDesc),
+    guidedSession: guidedSession.sort(sortByDayDesc),
+    sleepTime: sleepTime.sort(sortByDayDesc),
+    tag: tag.sort(sortByDayDesc),
+    enhancedTag: enhancedTag.sort(sortByDayDesc),
+    restModePeriod: restModePeriod.sort(sortByDayDesc),
+    ringConfiguration,
+    cardiovascularAge: cardiovascularAge.sort(sortByDayDesc),
+    vo2Max: vo2Max.sort(sortByDayDesc),
+});
+
 export const fetchDailyStats = async (
     token: string,
     dateRange?: { start: string; end?: string },
@@ -90,15 +128,27 @@ export const fetchDailyStats = async (
     const start = dateRange?.start || shiftDate(getToday(), -INITIAL_RECENT_DAYS);
     const end = dateRange?.end;
 
-    const requests = [
+    // Phase 1: Critical endpoints the dashboard needs to render scores + details
+    const criticalRequests = [
         ouraService.getDailySleep(token, start, end),
         ouraService.getDailyReadiness(token, start, end),
         ouraService.getDailyActivity(token, start, end),
         ouraService.getSleepSessions(token, start, end),
+    ];
+
+    const criticalSettled = await Promise.allSettled(criticalRequests);
+    const [sleep, readiness, activity, sessions] = resolveSettled(
+        criticalSettled, ['sleep', 'readiness', 'activity', 'sessions']
+    );
+
+    // Phase 2: Supplementary endpoints — fetched after critical data is secured
+    // Limit heartrate to 2 days for the dashboard (the slowest, most paginated endpoint)
+    const hrStart = shiftDate(end || getToday(), -2);
+    const supplementaryRequests = [
         ouraService.getDailySpO2(token, start, end),
         ouraService.getDailyStress(token, start, end),
         ouraService.getDailyResilience(token, start, end),
-        ouraService.getHeartRate(token, start, end),
+        ouraService.getHeartRate(token, hrStart, end),
         ouraService.getWorkouts(token, start, end),
         ouraService.getSessions(token, start, end),
         ouraService.getSleepTime(token, start, end),
@@ -107,78 +157,27 @@ export const fetchDailyStats = async (
         ouraService.getRestModePeriods(token, start, end),
         includeStaticCollections ? ouraService.getRingConfiguration(token) : Promise.resolve([]),
         ouraService.getDailyCardiovascularAge(token, start, end),
-        ouraService.getVO2Max(token, start, end)
-    ] as const;
+        ouraService.getVO2Max(token, start, end),
+    ];
 
-    const settled = await Promise.allSettled(requests);
-    const endpointNames = [
-        'sleep',
-        'readiness',
-        'activity',
-        'sessions',
-        'spo2',
-        'stress',
-        'resilience',
-        'heartrate',
-        'workout',
-        'guidedSession',
-        'sleepTime',
-        'tag',
-        'enhancedTag',
-        'restModePeriod',
-        'ringConfiguration',
-        'cardiovascularAge',
-        'vo2Max'
-    ] as const;
-
+    const suppSettled = await Promise.allSettled(supplementaryRequests);
     const [
-        sleep,
-        readiness,
-        activity,
-        sessions,
-        spo2,
-        stress,
-        resilience,
-        heartrate,
-        workout,
-        guidedSession,
-        sleepTime,
-        tag,
-        enhancedTag,
-        restModePeriod,
-        ringConfiguration,
-        cardiovascularAge,
-        vo2Max
-    ] = settled.map((result, idx) => {
-        if (result.status === 'fulfilled') return result.value as any[];
-        console.warn(`Failed to fetch ${endpointNames[idx]}:`, result.reason);
-        return [];
-    });
+        spo2, stress, resilience, heartrate, workout, guidedSession,
+        sleepTime, tag, enhancedTag, restModePeriod, ringConfiguration,
+        cardiovascularAge, vo2Max
+    ] = resolveSettled(suppSettled, [
+        'spo2', 'stress', 'resilience', 'heartrate', 'workout', 'guidedSession',
+        'sleepTime', 'tag', 'enhancedTag', 'restModePeriod', 'ringConfiguration',
+        'cardiovascularAge', 'vo2Max'
+    ]);
 
-    return {
-        sleep: sleep.map(s => ({ ...s, score: toNumberOrNull(s.score) })).sort(sortByDayDesc),
-        readiness: readiness.map(r => ({ ...r, score: toNumberOrNull(r.score) })).sort(sortByDayDesc),
-        activity: activity.map(a => ({
-            ...a,
-            score: toNumberOrNull(a.score),
-            steps: a.steps != null ? Number(a.steps) : 0,
-            active_calories: a.active_calories != null ? Number(a.active_calories) : 0,
-        })).sort(sortByDayDesc),
-        session: sessions.map(s => ({ ...s, average_hrv: toNumberOrNull(s.average_hrv) })).sort(sortByDayDesc),
-        spo2: spo2.sort(sortByDayDesc),
-        stress: stress.sort(sortByDayDesc),
-        resilience: resilience.sort(sortByDayDesc),
-        heartrate: heartrate.sort(sortByTimestampDesc),
-        workout: workout.sort(sortByDayDesc),
-        guidedSession: guidedSession.sort(sortByDayDesc),
-        sleepTime: sleepTime.sort(sortByDayDesc),
-        tag: tag.sort(sortByDayDesc),
-        enhancedTag: enhancedTag.sort(sortByDayDesc),
-        restModePeriod: restModePeriod.sort(sortByDayDesc),
-        ringConfiguration,
-        cardiovascularAge: cardiovascularAge.sort(sortByDayDesc),
-        vo2Max: vo2Max.sort(sortByDayDesc),
-    };
+    return buildDailyStats(
+        sleep, readiness, activity, sessions,
+        spo2, stress, resilience, heartrate,
+        workout, guidedSession, sleepTime, tag,
+        enhancedTag, restModePeriod, ringConfiguration,
+        cardiovascularAge, vo2Max
+    );
 };
 
 const mergeDailyStats = (existingData: DailyStats, incomingData: DailyStats): DailyStats => {
