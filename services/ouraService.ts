@@ -14,12 +14,25 @@ import {
 
 type QueryParams = Record<string, string | undefined>;
 
+const REQUEST_TIMEOUT_MS = 15_000;
+const MAX_RETRIES = 2;
+const RETRY_BACKOFF_MS = [1_000, 3_000];
+const UNAVAILABLE_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+interface UnavailableEntry {
+  endpoints: string[];
+  timestamp: number;
+}
+
 class OuraService {
   private unavailableEndpointsByToken = new Map<string, Set<string>>();
-  private readonly unavailableCacheKey = 'oura_unavailable_endpoints_v1';
+  private unavailableTimestamps = new Map<string, number>();
+  private readonly unavailableCacheKey = 'oura_unavailable_endpoints_v2';
 
   constructor() {
     this.loadUnavailableCache();
+    // Remove stale v1 cache key
+    try { window.localStorage?.removeItem('oura_unavailable_endpoints_v1'); } catch { /* noop */ }
   }
 
   private getHeaders(token: string) {
@@ -60,12 +73,14 @@ class OuraService {
     try {
       const raw = window.localStorage.getItem(this.unavailableCacheKey);
       if (!raw) return;
-      const parsed = JSON.parse(raw) as Record<string, string[]>;
-      const map = new Map<string, Set<string>>();
-      Object.entries(parsed).forEach(([tokenKey, endpoints]) => {
-        map.set(tokenKey, new Set(endpoints));
+      const parsed = JSON.parse(raw) as Record<string, UnavailableEntry>;
+      const now = Date.now();
+      Object.entries(parsed).forEach(([tokenKey, entry]) => {
+        if (now - entry.timestamp < UNAVAILABLE_CACHE_TTL_MS) {
+          this.unavailableEndpointsByToken.set(tokenKey, new Set(entry.endpoints));
+          this.unavailableTimestamps.set(tokenKey, entry.timestamp);
+        }
       });
-      this.unavailableEndpointsByToken = map;
     } catch {
       // Ignore malformed cache.
     }
@@ -74,9 +89,12 @@ class OuraService {
   private persistUnavailableCache(): void {
     if (typeof window === 'undefined') return;
     try {
-      const payload: Record<string, string[]> = {};
+      const payload: Record<string, UnavailableEntry> = {};
       this.unavailableEndpointsByToken.forEach((endpoints, tokenKey) => {
-        payload[tokenKey] = Array.from(endpoints);
+        payload[tokenKey] = {
+          endpoints: Array.from(endpoints),
+          timestamp: this.unavailableTimestamps.get(tokenKey) ?? Date.now(),
+        };
       });
       window.localStorage.setItem(this.unavailableCacheKey, JSON.stringify(payload));
     } catch {
@@ -86,6 +104,13 @@ class OuraService {
 
   private isEndpointUnavailable(token: string, endpoint: string): boolean {
     const tokenKey = this.getTokenKey(token);
+    const ts = this.unavailableTimestamps.get(tokenKey);
+    if (ts && Date.now() - ts >= UNAVAILABLE_CACHE_TTL_MS) {
+      this.unavailableEndpointsByToken.delete(tokenKey);
+      this.unavailableTimestamps.delete(tokenKey);
+      this.persistUnavailableCache();
+      return false;
+    }
     return this.unavailableEndpointsByToken.get(tokenKey)?.has(endpoint) ?? false;
   }
 
@@ -94,6 +119,14 @@ class OuraService {
     const unavailable = this.unavailableEndpointsByToken.get(tokenKey) ?? new Set<string>();
     unavailable.add(endpoint);
     this.unavailableEndpointsByToken.set(tokenKey, unavailable);
+    this.unavailableTimestamps.set(tokenKey, Date.now());
+    this.persistUnavailableCache();
+  }
+
+  clearUnavailableEndpoints(token: string): void {
+    const tokenKey = this.getTokenKey(token);
+    this.unavailableEndpointsByToken.delete(tokenKey);
+    this.unavailableTimestamps.delete(tokenKey);
     this.persistUnavailableCache();
   }
 
@@ -127,6 +160,16 @@ class OuraService {
     return `${API_BASE_URL}/${endpoint}${query ? `?${query}` : ''}`;
   }
 
+  private async fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number = REQUEST_TIMEOUT_MS): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   private async fetchPaginated<T>(
     token: string,
     endpoint: string,
@@ -143,26 +186,59 @@ class OuraService {
     let nextToken: string | undefined = undefined;
 
     while (true) {
-      const response = await fetch(this.buildUrl(endpoint, params, nextToken), {
-        headers: this.getHeaders(token),
-      });
+      let response: Response | undefined;
+      let lastError: unknown;
+
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          response = await this.fetchWithTimeout(
+            this.buildUrl(endpoint, params, nextToken),
+            { headers: this.getHeaders(token) },
+          );
+
+          if (response.status === 429 && attempt < MAX_RETRIES) {
+            await new Promise(r => setTimeout(r, RETRY_BACKOFF_MS[attempt]));
+            response = undefined;
+            continue;
+          }
+
+          if (response.status >= 500 && attempt < MAX_RETRIES) {
+            await new Promise(r => setTimeout(r, RETRY_BACKOFF_MS[attempt]));
+            response = undefined;
+            continue;
+          }
+
+          break;
+        } catch (err) {
+          lastError = err;
+          if (attempt < MAX_RETRIES) {
+            await new Promise(r => setTimeout(r, RETRY_BACKOFF_MS[attempt]));
+            continue;
+          }
+        }
+      }
+
+      if (!response) {
+        if (optional) return results;
+        throw lastError ?? new Error(`Failed to fetch ${endpoint} data`);
+      }
 
       if (!response.ok) {
         if (response.status === 401) {
           if (optional) {
             this.markEndpointUnavailable(token, endpoint);
-            return [];
+            return results;
           }
           throw new Error('Unauthorized');
         }
 
         if (optional && (response.status === 403 || response.status === 404)) {
           this.markEndpointUnavailable(token, endpoint);
-          return [];
+          return results;
         }
 
-        if (optional && response.status === 400) {
-          return [];
+        if (optional && (response.status === 400 || response.status === 429)) {
+          return results;
         }
 
         throw new Error(`Failed to fetch ${endpoint} data`);

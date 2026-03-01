@@ -224,10 +224,24 @@ const Dashboard: React.FC = () => {
         const dataSource = data || activeData;
         if (!dataSource) return [];
         const { session: sh, activity: ah, spo2: sp, stress: st, resilience: rl } = dataSource;
+
+        // Build day-keyed lookup maps so we match by date, not array index
+        const activityByDay = new Map((ah || []).map(a => [a.day, a]));
+        const spo2ByDay = new Map((sp || []).map(s => [s.day, s]));
+        const stressByDay = new Map((st || []).map(s => [s.day, s]));
+        const resilienceByDay = new Map((rl || []).map(r => [r.day, r]));
+
         const dataPoints: { date: string; value: number }[] = [];
-        for (let i = 0; i < Math.min(days, sh?.length || 0); i++) {
-            const session = sh?.[i]; const activity = ah?.[i]; const spo2 = sp?.[i]; const stress = st?.[i]; const resilience = rl?.[i];
+        const limit = Math.min(days, sh?.length || 0);
+        for (let i = 0; i < limit; i++) {
+            const session = sh?.[i];
             if (!session?.day) continue;
+            const day = session.day;
+            const activity = activityByDay.get(day);
+            const spo2 = spo2ByDay.get(day);
+            const stress = stressByDay.get(day);
+            const resilience = resilienceByDay.get(day);
+
             let value: number | null = null;
             switch (metricType) {
                 case 'hrv': value = session.average_hrv ?? null; break;
@@ -249,26 +263,36 @@ const Dashboard: React.FC = () => {
                 case 'efficiency': value = session.efficiency ?? null; break;
             }
             const isHR = metricType === 'hrv' || metricType === 'heart_rate' || metricType === 'lowest_hr';
-            if (value !== null && (!isHR || value > 0)) dataPoints.push({ date: session.day, value });
+            if (value !== null && (!isHR || value > 0)) dataPoints.push({ date: day, value });
         }
         return dataPoints;
     };
 
-    const handleMetricCardClick = async (
+    const handleMetricCardClick = (
         metricType: 'hrv' | 'heart_rate' | 'lowest_hr' | 'spo2' | 'stress' | 'resilience' | 'steps' | 'calories' | 'sleep_duration' | 'deep_sleep' | 'rem_sleep' | 'efficiency',
         currentValue: number | null,
         unit?: string,
         color?: string
     ) => {
         if (!activeProfile?.token) return;
+
+        // Show modal immediately with currently available data
         const allTimeQueryKey = ['allTimeStats', activeProfile.token] as const;
-        let allTimeData = queryClient.getQueryData(allTimeQueryKey) as DailyStats | undefined;
-        if (!allTimeData) {
-            allTimeData = await fetchDailyStats(activeProfile.token, { start: FULL_HISTORY_START_DATE });
-            queryClient.setQueryData(allTimeQueryKey, allTimeData);
-        }
-        const historyData = getMetricHistoryData(metricType, allTimeData.session?.length || 0, allTimeData);
+        const cachedAllTime = queryClient.getQueryData(allTimeQueryKey) as DailyStats | undefined;
+        const bestAvailable = cachedAllTime || activeData;
+        const historyData = bestAvailable
+            ? getMetricHistoryData(metricType, bestAvailable.session?.length || 0, bestAvailable)
+            : [];
         setMetricDetailModal({ isOpen: true, metricType, currentValue, historyData, unit, color, date: currentSleep?.day });
+
+        // Prefetch full history in background if not cached
+        if (!cachedAllTime) {
+            queryClient.prefetchQuery({
+                queryKey: allTimeQueryKey,
+                queryFn: () => fetchDailyStats(activeProfile.token, { start: FULL_HISTORY_START_DATE }),
+                staleTime: 1000 * 60 * 60 * 24,
+            });
+        }
     };
 
     // Versus data
