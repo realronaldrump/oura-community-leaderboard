@@ -13,6 +13,7 @@ import {
 } from '../types';
 
 type QueryParams = Record<string, string | undefined>;
+type DateWindow = { start: string; end: string };
 
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_RETRIES = 2;
@@ -28,6 +29,7 @@ class OuraService {
   private unavailableEndpointsByToken = new Map<string, Set<string>>();
   private unavailableTimestamps = new Map<string, number>();
   private readonly unavailableCacheKey = 'oura_unavailable_endpoints_v2';
+  private readonly maxWindowDays = 90;
 
   constructor() {
     this.loadUnavailableCache();
@@ -142,12 +144,49 @@ class OuraService {
     return clamped.toISOString().split('T')[0];
   }
 
-  private getClampedDailyRange(start?: string, end?: string, maxDays: number = 29) {
-    const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return {
-      start_date: this.clampDateWindow(start_date, end_date, maxDays),
-      end_date,
-    };
+  private parseDay(day: string): Date | null {
+    const parsed = new Date(`${day}T00:00:00Z`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private formatDay(day: Date): string {
+    return day.toISOString().split('T')[0];
+  }
+
+  private splitDateRange(startDate: string, endDate: string, maxWindowDays: number): DateWindow[] {
+    const start = this.parseDay(startDate);
+    const end = this.parseDay(endDate);
+
+    if (!start || !end) {
+      return [{ start: startDate, end: endDate }];
+    }
+
+    if (start.getTime() >= end.getTime()) {
+      const from = start.getTime() <= end.getTime() ? start : end;
+      const to = start.getTime() <= end.getTime() ? end : start;
+      return [{ start: this.formatDay(from), end: this.formatDay(to) }];
+    }
+
+    const windows: DateWindow[] = [];
+    let cursor = new Date(start);
+
+    while (cursor.getTime() <= end.getTime()) {
+      const windowEnd = new Date(cursor);
+      windowEnd.setUTCDate(windowEnd.getUTCDate() + maxWindowDays - 1);
+      if (windowEnd.getTime() > end.getTime()) {
+        windowEnd.setTime(end.getTime());
+      }
+
+      windows.push({
+        start: this.formatDay(cursor),
+        end: this.formatDay(windowEnd),
+      });
+
+      cursor = new Date(windowEnd);
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+
+    return windows;
   }
 
   private buildUrl(endpoint: string, params: QueryParams = {}, nextToken?: string): string {
@@ -255,6 +294,29 @@ class OuraService {
     return results;
   }
 
+  private async fetchDateWindowed<T>(
+    token: string,
+    endpoint: string,
+    startDate: string,
+    endDate: string,
+    options?: { optional?: boolean; windowDays?: number }
+  ): Promise<T[]> {
+    const windows = this.splitDateRange(startDate, endDate, options?.windowDays ?? this.maxWindowDays);
+    const results: T[] = [];
+
+    for (const window of windows) {
+      const chunk = await this.fetchPaginated<T>(
+        token,
+        endpoint,
+        { start_date: window.start, end_date: window.end },
+        { optional: options?.optional }
+      );
+      results.push(...chunk);
+    }
+
+    return results;
+  }
+
   async getPersonalInfo(token: string): Promise<UserProfile> {
     const response = await fetch(`${API_BASE_URL}/personal_info`, {
       headers: this.getHeaders(token),
@@ -267,23 +329,23 @@ class OuraService {
   }
 
   async getDailySleep(token: string, start?: string, end?: string): Promise<DailySleep[]> {
-    const { start_date, end_date } = this.getClampedDailyRange(start, end);
-    return this.fetchPaginated<DailySleep>(token, 'daily_sleep', { start_date, end_date });
+    const { start_date, end_date } = this.getDateRange(start || 30, end);
+    return this.fetchDateWindowed<DailySleep>(token, 'daily_sleep', start_date, end_date);
   }
 
   async getSleepSessions(token: string, start?: string, end?: string): Promise<SleepSession[]> {
-    const { start_date, end_date } = this.getClampedDailyRange(start, end);
-    return this.fetchPaginated<SleepSession>(token, 'sleep', { start_date, end_date });
+    const { start_date, end_date } = this.getDateRange(start || 30, end);
+    return this.fetchDateWindowed<SleepSession>(token, 'sleep', start_date, end_date);
   }
 
   async getDailyReadiness(token: string, start?: string, end?: string): Promise<DailyReadiness[]> {
-    const { start_date, end_date } = this.getClampedDailyRange(start, end);
-    return this.fetchPaginated<DailyReadiness>(token, 'daily_readiness', { start_date, end_date });
+    const { start_date, end_date } = this.getDateRange(start || 30, end);
+    return this.fetchDateWindowed<DailyReadiness>(token, 'daily_readiness', start_date, end_date);
   }
 
   async getDailyActivity(token: string, start?: string, end?: string): Promise<DailyActivity[]> {
-    const { start_date, end_date } = this.getClampedDailyRange(start, end);
-    return this.fetchPaginated<DailyActivity>(token, 'daily_activity', { start_date, end_date });
+    const { start_date, end_date } = this.getDateRange(start || 30, end);
+    return this.fetchDateWindowed<DailyActivity>(token, 'daily_activity', start_date, end_date);
   }
 
   async getHeartRate(token: string, start?: string, end?: string): Promise<HeartRate[]> {
@@ -303,47 +365,47 @@ class OuraService {
 
   async getDailySpO2(token: string, start?: string, end?: string): Promise<DailySpO2[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchPaginated<DailySpO2>(token, 'daily_spo2', { start_date, end_date }, { optional: true });
+    return this.fetchDateWindowed<DailySpO2>(token, 'daily_spo2', start_date, end_date, { optional: true });
   }
 
   async getDailyStress(token: string, start?: string, end?: string): Promise<DailyStress[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchPaginated<DailyStress>(token, 'daily_stress', { start_date, end_date }, { optional: true });
+    return this.fetchDateWindowed<DailyStress>(token, 'daily_stress', start_date, end_date, { optional: true });
   }
 
   async getDailyResilience(token: string, start?: string, end?: string): Promise<DailyResilience[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchPaginated<DailyResilience>(token, 'daily_resilience', { start_date, end_date }, { optional: true });
+    return this.fetchDateWindowed<DailyResilience>(token, 'daily_resilience', start_date, end_date, { optional: true });
   }
 
   async getWorkouts(token: string, start?: string, end?: string): Promise<Workout[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchPaginated<Workout>(token, 'workout', { start_date, end_date }, { optional: true });
+    return this.fetchDateWindowed<Workout>(token, 'workout', start_date, end_date, { optional: true });
   }
 
   async getSessions(token: string, start?: string, end?: string): Promise<any[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchPaginated<any>(token, 'session', { start_date, end_date }, { optional: true });
+    return this.fetchDateWindowed<any>(token, 'session', start_date, end_date, { optional: true });
   }
 
   async getSleepTime(token: string, start?: string, end?: string): Promise<any[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchPaginated<any>(token, 'sleep_time', { start_date, end_date }, { optional: true });
+    return this.fetchDateWindowed<any>(token, 'sleep_time', start_date, end_date, { optional: true });
   }
 
   async getTags(token: string, start?: string, end?: string): Promise<any[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchPaginated<any>(token, 'tag', { start_date, end_date }, { optional: true });
+    return this.fetchDateWindowed<any>(token, 'tag', start_date, end_date, { optional: true });
   }
 
   async getEnhancedTags(token: string, start?: string, end?: string): Promise<any[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchPaginated<any>(token, 'enhanced_tag', { start_date, end_date }, { optional: true });
+    return this.fetchDateWindowed<any>(token, 'enhanced_tag', start_date, end_date, { optional: true });
   }
 
   async getRestModePeriods(token: string, start?: string, end?: string): Promise<any[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchPaginated<any>(token, 'rest_mode_period', { start_date, end_date }, { optional: true });
+    return this.fetchDateWindowed<any>(token, 'rest_mode_period', start_date, end_date, { optional: true });
   }
 
   async getRingConfiguration(token: string): Promise<any[]> {
@@ -352,12 +414,12 @@ class OuraService {
 
   async getDailyCardiovascularAge(token: string, start?: string, end?: string): Promise<any[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchPaginated<any>(token, 'daily_cardiovascular_age', { start_date, end_date }, { optional: true });
+    return this.fetchDateWindowed<any>(token, 'daily_cardiovascular_age', start_date, end_date, { optional: true });
   }
 
   async getVO2Max(token: string, start?: string, end?: string): Promise<any[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchPaginated<any>(token, 'vO2_max', { start_date, end_date }, { optional: true });
+    return this.fetchDateWindowed<any>(token, 'vO2_max', start_date, end_date, { optional: true });
   }
 }
 

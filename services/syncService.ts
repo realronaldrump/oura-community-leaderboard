@@ -14,6 +14,27 @@ export type SyncProgressCallback = (progress: SyncProgress) => void;
 
 const getToday = () => new Date().toISOString().split('T')[0];
 
+const describeCoverage = (data: DailyStats): { start: string; end: string; days: number } | null => {
+    const days = [
+        ...(data.sleep || []).map((item: any) => item?.day),
+        ...(data.readiness || []).map((item: any) => item?.day),
+        ...(data.activity || []).map((item: any) => item?.day),
+        ...(data.session || []).map((item: any) => item?.day),
+        ...(data.spo2 || []).map((item: any) => item?.day),
+        ...(data.stress || []).map((item: any) => item?.day),
+        ...(data.resilience || []).map((item: any) => item?.day),
+    ].filter((day): day is string => typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day));
+
+    if (days.length === 0) return null;
+
+    const uniqueDays = Array.from(new Set(days)).sort();
+    return {
+        start: uniqueDays[0],
+        end: uniqueDays[uniqueDays.length - 1],
+        days: uniqueDays.length,
+    };
+};
+
 /**
  * Canonical sync path: always fetch complete Oura history.
  * This keeps regular flow, full sync, and export consistent.
@@ -38,12 +59,17 @@ export const smartSync = async (
         endDate: today,
     });
 
+    const coverage = describeCoverage(data as DailyStats);
+    const details = coverage
+        ? `${coverage.start} → ${coverage.end} (${coverage.days} days loaded)`
+        : `Updated through ${today}`;
+
     onProgress({
         status: 'complete',
         currentStep: 'Sync complete!',
         stepsCompleted: 1,
         totalSteps: 1,
-        details: `Updated through ${today}`,
+        details,
     });
 
     return data;
@@ -71,12 +97,17 @@ export const fullSync = async (
         endDate: today,
     });
 
+    const coverage = describeCoverage(data);
+    const details = coverage
+        ? `${coverage.start} → ${coverage.end} (${coverage.days} days loaded)`
+        : `${FULL_HISTORY_START_DATE} → ${today}`;
+
     onProgress({
         status: 'complete',
         currentStep: 'Full sync complete!',
         stepsCompleted: 1,
         totalSteps: 1,
-        details: `${FULL_HISTORY_START_DATE} → ${today}`,
+        details,
     });
 
     return data;

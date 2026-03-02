@@ -37,7 +37,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
     const [filterUser, setFilterUser] = useState<string>('all');
 
     // New Filters
-    const [dateRange, setDateRange] = useState<DateRange>('30d');
+    const [dateRange, setDateRange] = useState<DateRange>('all');
     const [showCommonDatesOnly, setShowCommonDatesOnly] = useState(false);
     const [smoothing, setSmoothing] = useState<Smoothing>('3d');
 
