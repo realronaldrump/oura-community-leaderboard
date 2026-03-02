@@ -4,6 +4,8 @@ import { UserProvider, useUser } from './contexts/UserContext';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import AppDialog from './components/AppDialog';
+import { OAUTH_STATE_KEY, REDIRECT_URI } from './constants';
+import { oauthService } from './services/oauthService';
 
 const Router = () => {
     const { addProfile } = useUser();
@@ -16,12 +18,9 @@ const Router = () => {
         return () => window.removeEventListener('popstate', handlePopState);
     }, []);
 
-    // Handle OAuth Callback
+    // Handle OAuth callback (authorization code flow)
     useEffect(() => {
-        const hash = window.location.hash;
-        if (!hash) return;
-
-        const params = new URLSearchParams(hash.substring(1));
+        const params = new URLSearchParams(window.location.search);
         const oauthError = params.get('error');
         const oauthErrorDescription = params.get('error_description');
 
@@ -32,34 +31,36 @@ const Router = () => {
             return;
         }
 
-        if (params.has('access_token')) {
-            const accessToken = params.get('access_token');
-            const scopeParam = params.get('scope') || '';
-            const grantedScopes = scopeParam
-                .split(/[ ,]+/)
-                .map(scope => scope.trim())
-                .filter(Boolean);
-            const expiresInRaw = params.get('expires_in');
-            const expiresInSeconds = expiresInRaw ? Number(expiresInRaw) : null;
+        const code = params.get('code');
+        if (!code) return;
 
-            if (accessToken) {
-                window.history.replaceState(null, '', window.location.pathname);
+        const state = params.get('state');
+        const storedState = localStorage.getItem(OAUTH_STATE_KEY);
+        localStorage.removeItem(OAUTH_STATE_KEY);
+        window.history.replaceState(null, '', window.location.pathname);
 
-                addProfile(accessToken, {
-                    grantedScopes,
-                    expiresInSeconds: typeof expiresInSeconds === 'number' && Number.isFinite(expiresInSeconds)
-                        ? expiresInSeconds
-                        : null
-                })
-                    .then(() => {
-                        console.log("Profile added via OAuth");
-                    })
-                    .catch(err => {
-                        console.error("Auth failed", err);
-                        setAuthErrorMessage("Authentication failed. Please try again.");
-                    });
-            }
+        if (!state || !storedState || state !== storedState) {
+            console.error("OAuth state mismatch", { state, storedState });
+            setAuthErrorMessage("Authentication failed: invalid OAuth state.");
+            return;
         }
+
+        oauthService.exchangeCodeForTokens(code, REDIRECT_URI)
+            .then((tokens) => {
+                return addProfile({
+                    accessToken: tokens.accessToken,
+                    refreshToken: tokens.refreshToken,
+                    grantedScopes: tokens.grantedScopes,
+                    expiresInSeconds: tokens.expiresInSeconds,
+                });
+            })
+            .then(() => {
+                console.log("Profile added via OAuth");
+            })
+            .catch(err => {
+                console.error("Auth failed", err);
+                setAuthErrorMessage("Authentication failed. Please try again.");
+            });
     }, [addProfile]);
 
     const routedPage = path === '/settings' ? <Settings /> : <Dashboard />;

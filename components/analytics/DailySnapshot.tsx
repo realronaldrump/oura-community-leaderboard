@@ -3,7 +3,7 @@ import { DailyStats, formatDuration } from '../../types';
 import { DailySnapshotData } from '../../types/analyticsTypes';
 import { generateDailySnapshot, CHALLENGE_DEFINITIONS } from '../../services/analyticsService';
 import html2canvas from 'html2canvas';
-import { Camera, ChevronLeft, ChevronRight, Image, Pin, BedDouble, Zap, Flame, Footprints, Clock, Trophy, BarChart2, Crown } from 'lucide-react';
+import { Camera, ChevronLeft, ChevronRight, Image, Pin, BedDouble, Zap, Flame, Footprints, Clock, Trophy, Crown } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
 
 interface DailySnapshotProps {
@@ -46,15 +46,33 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
         return snap;
     }, [profiles, usersData, selectedDate, note]);
 
+    const formattedSelectedDate = useMemo(() => {
+        return new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', {
+            weekday: 'long',
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric'
+        });
+    }, [selectedDate]);
+
+    const rankedUsers = useMemo(() => {
+        if (!snapshot) return [];
+        return [...snapshot.users].sort((a, b) => b.average - a.average);
+    }, [snapshot]);
+
+    const topPerformer = rankedUsers[0];
+
     const handleExport = async () => {
         if (!cardRef.current) return;
 
         setIsExporting(true);
         try {
+            const exportScale = Math.min(3, Math.max(2, window.devicePixelRatio || 1));
             const canvas = await html2canvas(cardRef.current, {
-                backgroundColor: '#0C0C0C',
-                scale: 2,
-                logging: false
+                backgroundColor: '#05070d',
+                scale: exportScale,
+                logging: false,
+                useCORS: true
             });
 
             const link = document.createElement('a');
@@ -169,134 +187,110 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                 <div>
                     <div
                         ref={cardRef}
-                        className="card p-6 relative overflow-hidden"
-                        style={{ background: 'linear-gradient(135deg, #0C0C0C 0%, #1a1a2e 100%)' }}
+                        className="daily-snapshot-export"
                     >
-                        {/* Decorative elements */}
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-[var(--accent)]/10 rounded-full blur-3xl" />
-                        <div className="absolute bottom-0 left-0 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl" />
-
-                        {/* Header */}
-                        <div className="relative mb-6">
-                            <div className="flex items-center justify-between">
+                        <div className="daily-snapshot-export__glow daily-snapshot-export__glow--top" />
+                        <div className="daily-snapshot-export__glow daily-snapshot-export__glow--bottom" />
+                        <div className="daily-snapshot-export__mesh" />
+                        <div className="daily-snapshot-export__content">
+                            <div className="daily-snapshot-export__header">
                                 <div>
-                                    <p className="text-xs text-[var(--accent)] uppercase tracking-wider font-medium">
+                                    <p className="daily-snapshot-export__eyebrow">
                                         Daily Snapshot
                                     </p>
-                                    <h4 className="text-xl font-bold text-[var(--text-primary)]">
-                                        {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', {
-                                            weekday: 'long',
-                                            month: 'long',
-                                            day: 'numeric',
-                                            year: 'numeric'
-                                        })}
+                                    <h4 className="daily-snapshot-export__date">
+                                        {formattedSelectedDate}
                                     </h4>
                                 </div>
-                                <BarChart2 className="w-10 h-10 text-[var(--accent)]" />
+                                <div className="daily-snapshot-export__mark" aria-hidden>
+                                    <span />
+                                    <span />
+                                    <span />
+                                </div>
                             </div>
-                        </div>
 
-                        {/* User Scores */}
-                        {snapshot && (
-                            <div className="relative space-y-4 mb-6">
-                                {snapshot.users.map((user, idx) => (
-                                    <div
-                                        key={user.userId}
-                                        className="flex items-center gap-4 p-3 rounded-lg bg-white/5"
-                                    >
-                                        <div
-                                            className="w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold"
-                                            style={{
-                                                background: idx === 0
-                                                    ? 'linear-gradient(135deg, #00C896, #00A896)'
-                                                    : 'linear-gradient(135deg, #A855F7, #7C3AED)'
-                                            }}
-                                        >
-                                            {user.userName.charAt(0).toUpperCase()}
-                                        </div>
-                                        <div className="flex-1">
-                                            <h5 className="font-semibold text-[var(--text-primary)]">
-                                                {user.userName}
-                                            </h5>
-                                            <div className="flex gap-4 text-sm mt-1">
-                                                <span className="text-blue-400 flex items-center gap-1">
-                                                    <BedDouble className="w-3 h-3" /> {user.sleep}
-                                                </span>
-                                                <span className="text-green-400 flex items-center gap-1">
-                                                    <Zap className="w-3 h-3" /> {user.readiness}
-                                                </span>
-                                                <span className="text-amber-400 flex items-center gap-1">
-                                                    <Flame className="w-3 h-3" /> {user.activity}
-                                                </span>
+                            {/* User Scores */}
+                            {snapshot && (
+                                <div className="daily-snapshot-export__rows">
+                                    {rankedUsers.map((user, idx) => {
+                                        const profile = profiles.find(p => p.id === user.userId);
+                                        const activeChallenge = profile?.challenges?.find((c: any) => c.status === 'active');
+                                        const challengeDefinition = activeChallenge
+                                            ? CHALLENGE_DEFINITIONS.find(d => d.id === activeChallenge.challengeId)
+                                            : undefined;
+                                        const hitTarget = Boolean(activeChallenge?.history?.[selectedDate]);
+
+                                        return (
+                                            <div
+                                                key={user.userId}
+                                                className={`daily-snapshot-export__row ${idx === 0 ? 'is-leading' : ''}`}
+                                            >
+                                                <div className="daily-snapshot-export__rank">{idx + 1}</div>
+                                                <div className="daily-snapshot-export__identity">
+                                                    <h5 className="daily-snapshot-export__name">{user.userName}</h5>
+                                                    <div className="daily-snapshot-export__metrics">
+                                                        <span className="daily-snapshot-export__metric daily-snapshot-export__metric--sleep">
+                                                            <BedDouble className="w-3 h-3" /> {user.sleep}
+                                                        </span>
+                                                        <span className="daily-snapshot-export__metric daily-snapshot-export__metric--readiness">
+                                                            <Zap className="w-3 h-3" /> {user.readiness}
+                                                        </span>
+                                                        <span className="daily-snapshot-export__metric daily-snapshot-export__metric--activity">
+                                                            <Flame className="w-3 h-3" /> {user.activity}
+                                                        </span>
+                                                    </div>
+
+                                                    {challengeDefinition && (
+                                                        <div className="daily-snapshot-export__challenge">
+                                                            <Crown className="w-3 h-3 text-yellow-400" />
+                                                            <span>{challengeDefinition.name}</span>
+                                                            <span className={hitTarget ? 'text-green-300' : 'text-[var(--text-secondary)]'}>
+                                                                {hitTarget ? 'target hit' : `day ${activeChallenge.progress + 1}`}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="daily-snapshot-export__avg">
+                                                    <p className="daily-snapshot-export__avg-value">{user.average}</p>
+                                                    <p className="daily-snapshot-export__avg-label">avg</p>
+                                                </div>
                                             </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
 
-                                            {/* Challenge Progress Badge */}
-                                            {(() => {
-                                                const profile = profiles.find(p => p.id === user.userId);
-                                                const activeChallenge = profile?.challenges?.find((c: any) => c.status === 'active');
-
-                                                if (activeChallenge) {
-                                                    const def = CHALLENGE_DEFINITIONS.find(d => d.id === activeChallenge.challengeId);
-                                                    if (def) {
-                                                        const successToday = activeChallenge.history?.[selectedDate];
-                                                        return (
-                                                            <div className="mt-2 text-xs flex items-center gap-1 text-[var(--text-muted)]">
-                                                                <Crown className="w-3 h-3 text-yellow-400" />
-                                                                <span className="text-[var(--text-primary)]">{def.name}:</span>
-                                                                {successToday
-                                                                    ? <span className="text-green-400">Target Hit!</span>
-                                                                    : <span>Day {activeChallenge.progress + 1}</span>
-                                                                }
-                                                            </div>
-                                                        );
-                                                    }
-                                                }
-                                                return null;
-                                            })()}
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-2xl font-bold font-mono text-[var(--text-primary)]">
-                                                {user.average}
-                                            </p>
-                                            <p className="text-xs text-[var(--text-muted)]">avg</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* Highlights */}
-                        {snapshot && snapshot.highlights.length > 0 && (
-                            <div className="relative mb-6">
-                                <div className="flex flex-wrap gap-2">
-                                    {snapshot.highlights.map((highlight, idx) => (
+                            {/* Highlights */}
+                            {snapshot && snapshot.highlights.length > 0 && (
+                                <div className="daily-snapshot-export__highlights">
+                                    {snapshot.highlights.slice(0, 4).map((highlight, idx) => (
                                         <span
                                             key={idx}
-                                            className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${highlight.type === 'winner'
-                                                ? 'bg-[var(--accent)]/20 text-[var(--accent)]'
-                                                : 'bg-white/10 text-[var(--text-secondary)]'
-                                                }`}
+                                            className={`daily-snapshot-export__highlight ${highlight.type === 'winner' ? 'is-winner' : ''}`}
                                         >
-                                            {getCategoryIcon(highlight.category)} {highlight.description}
+                                            {getCategoryIcon(highlight.category)}
+                                            {highlight.description}
                                         </span>
                                     ))}
                                 </div>
-                            </div>
-                        )}
+                            )}
 
-                        {/* Note */}
-                        {note && (
-                            <div className="relative bg-white/5 rounded-lg p-3 mb-4">
-                                <p className="text-sm text-[var(--text-secondary)] italic">
-                                    "{note}"
-                                </p>
-                            </div>
-                        )}
+                            {/* Note */}
+                            {note && (
+                                <div className="daily-snapshot-export__note">
+                                    <p>"{note}"</p>
+                                </div>
+                            )}
 
-                        {/* Footer */}
-                        <div className="relative flex items-center justify-between text-xs text-[var(--text-muted)] pt-4 border-t border-white/10">
-                            <span>Davis Watches You Sleep</span>
-                            <span>oura-community.app</span>
+                            {/* Footer */}
+                            <div className="daily-snapshot-export__footer">
+                                <span>
+                                    {topPerformer
+                                        ? `${topPerformer.userName} leads with ${topPerformer.average}`
+                                        : 'Daily community leaderboard'}
+                                </span>
+                                <span>oura-community.app</span>
+                            </div>
                         </div>
                     </div>
 

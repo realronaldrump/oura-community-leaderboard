@@ -40,7 +40,19 @@ const METERS_TO_MILES = 0.000621371;
 const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
 
 const Dashboard: React.FC = () => {
-    const { activeProfile, profiles, setActiveProfileId, login, removeProfile, firebaseError, isLoadingProfiles, retryFirebaseConnection } = useUser();
+    const {
+        activeProfile,
+        profiles,
+        setActiveProfileId,
+        login,
+        removeProfile,
+        firebaseError,
+        isLoadingProfiles,
+        retryFirebaseConnection,
+        getAccessTokenForProfile,
+        markProfileSyncSuccess,
+        markProfileSyncError,
+    } = useUser();
     const [viewMode, setViewMode] = useState<'today' | 'compare' | 'trends' | 'insights' | 'export'>('today');
     const [isSyncing, setIsSyncing] = useState(false);
     const [showSyncModal, setShowSyncModal] = useState(false);
@@ -69,12 +81,26 @@ const Dashboard: React.FC = () => {
     }>({ isOpen: false, user: null });
     const [profilePendingRemoval, setProfilePendingRemoval] = useState<{ id: string; name: string } | null>(null);
     const [isRemovingProfile, setIsRemovingProfile] = useState(false);
+    const [removeProfileError, setRemoveProfileError] = useState<string | null>(null);
 
     const queryClient = useQueryClient();
 
+    const runWithAutoTokenRefresh = async <T,>(profileId: string, operation: (token: string) => Promise<T>): Promise<T> => {
+        const firstToken = await getAccessTokenForProfile(profileId);
+        try {
+            return await operation(firstToken);
+        } catch (error) {
+            const message = error instanceof Error ? error.message.toLowerCase() : '';
+            const shouldRetry = message.includes('unauthorized') || message.includes('401');
+            if (!shouldRetry) throw error;
+            const refreshedToken = await getAccessTokenForProfile(profileId, { forceRefresh: true });
+            return operation(refreshedToken);
+        }
+    };
+
     // Auto-sync every hour
-    const tokens = useMemo(() => profiles.map(p => p.token), [profiles]);
-    const { lastSyncTime, refreshNow } = useAutoSync(tokens, !!activeProfile);
+    const profileIds = useMemo(() => profiles.map(p => p.id), [profiles]);
+    const { lastSyncTime } = useAutoSync(profileIds, !!activeProfile);
 
     // Manual sync
     const handleSyncAllData = async () => {
@@ -82,14 +108,18 @@ const Dashboard: React.FC = () => {
         setIsSyncing(true);
         setShowSyncModal(true);
         try {
-            const existingData = queryClient.getQueryData(['dailyStats', activeProfile.token]) as any;
-            const syncedData = await smartSync(activeProfile.token, existingData, (progress) => {
-                setSyncProgress(progress);
-            });
-            queryClient.setQueryData(['dailyStats', activeProfile.token], syncedData);
+            const existingData = queryClient.getQueryData(['dailyStats', activeProfile.id]) as DailyStats | undefined;
+            const syncedData = await runWithAutoTokenRefresh(activeProfile.id, (token) =>
+                smartSync(token, existingData, (progress) => {
+                    setSyncProgress(progress);
+                })
+            );
+            queryClient.setQueryData(['dailyStats', activeProfile.id], syncedData);
+            await markProfileSyncSuccess(activeProfile.id);
         } catch (err) {
             console.error('Sync failed:', err);
             setSyncProgress(prev => ({ ...prev, status: 'error', error: 'Something went wrong. Please try again.' }));
+            await markProfileSyncError(activeProfile.id, err);
         } finally {
             setIsSyncing(false);
         }
@@ -98,10 +128,19 @@ const Dashboard: React.FC = () => {
     // Data queries
     const userQueries = useQueries({
         queries: profiles.map(p => ({
-            queryKey: ['dailyStats', p.token],
+            queryKey: ['dailyStats', p.id],
             queryFn: async () => {
-                const cached = queryClient.getQueryData(['dailyStats', p.token]) as DailyStats | undefined;
-                return syncDailyStats(p.token, cached, { mode: 'incremental' });
+                try {
+                    const cached = queryClient.getQueryData(['dailyStats', p.id]) as DailyStats | undefined;
+                    const synced = await runWithAutoTokenRefresh(p.id, (token) =>
+                        syncDailyStats(token, cached, { mode: 'incremental' })
+                    );
+                    await markProfileSyncSuccess(p.id);
+                    return synced;
+                } catch (error) {
+                    await markProfileSyncError(p.id, error);
+                    throw error;
+                }
             },
             staleTime: 1000 * 60 * 60,
         }))
@@ -109,8 +148,14 @@ const Dashboard: React.FC = () => {
 
     const allTimeQueries = useQueries({
         queries: profiles.map(p => ({
-            queryKey: ['allTimeStats', p.token],
-            queryFn: () => fetchDailyStats(p.token, { start: FULL_HISTORY_START_DATE }),
+            queryKey: ['allTimeStats', p.id],
+            queryFn: async () => {
+                const fullHistory = await runWithAutoTokenRefresh(p.id, (token) =>
+                    fetchDailyStats(token, { start: FULL_HISTORY_START_DATE })
+                );
+                await markProfileSyncSuccess(p.id);
+                return fullHistory;
+            },
             staleTime: 1000 * 60 * 60 * 24,
             enabled: viewMode === 'trends' || viewMode === 'insights',
         }))
@@ -147,6 +192,47 @@ const Dashboard: React.FC = () => {
     const activeUserQuery = userQueries.find((_, idx) => profiles[idx].id === activeProfile?.id);
     const activeData = activeUserQuery?.data as DailyStats | undefined;
     const hrData = activeData?.heartrate || [];
+
+    const profileHealthById = useMemo(() => {
+        const staleThresholdMs = 18 * 60 * 60 * 1000;
+        const now = Date.now();
+        const map = new Map<string, { level: 'ok' | 'warning' | 'error'; label: string }>();
+
+        profiles.forEach((profile, idx) => {
+            const query = userQueries[idx];
+            const lastSuccessfulSyncMs = profile.lastSuccessfulSyncAt ? new Date(profile.lastSuccessfulSyncAt).getTime() : 0;
+            const tokenExpiryMs = profile.tokenExpiresAt ? new Date(profile.tokenExpiresAt).getTime() : 0;
+            const missingRefresh = !profile.refreshToken;
+
+            if (query?.isError || profile.lastSyncError) {
+                map.set(profile.id, { level: 'error', label: 'Needs reconnect' });
+                return;
+            }
+
+            if (!lastSuccessfulSyncMs) {
+                map.set(profile.id, { level: 'warning', label: 'Initial sync pending' });
+                return;
+            }
+
+            if (now - lastSuccessfulSyncMs > staleThresholdMs) {
+                map.set(profile.id, { level: 'warning', label: 'Sync is stale' });
+                return;
+            }
+
+            if (tokenExpiryMs && tokenExpiryMs <= (now + (10 * 60 * 1000)) && missingRefresh) {
+                map.set(profile.id, { level: 'warning', label: 'Will require reconnect soon' });
+                return;
+            }
+
+            map.set(profile.id, { level: 'ok', label: 'Up to date' });
+        });
+
+        return map;
+    }, [profiles, userQueries]);
+
+    const profilesNeedingAttention = useMemo(() => {
+        return profiles.filter((profile) => (profileHealthById.get(profile.id)?.level || 'ok') !== 'ok');
+    }, [profiles, profileHealthById]);
 
     const [dateIndex, setDateIndex] = useState(0);
 
@@ -274,10 +360,10 @@ const Dashboard: React.FC = () => {
         unit?: string,
         color?: string
     ) => {
-        if (!activeProfile?.token) return;
+        if (!activeProfile?.id) return;
 
         // Show modal immediately with currently available data
-        const allTimeQueryKey = ['allTimeStats', activeProfile.token] as const;
+        const allTimeQueryKey = ['allTimeStats', activeProfile.id] as const;
         const cachedAllTime = queryClient.getQueryData(allTimeQueryKey) as DailyStats | undefined;
         const bestAvailable = cachedAllTime || activeData;
         const historyData = bestAvailable
@@ -289,19 +375,24 @@ const Dashboard: React.FC = () => {
         if (!cachedAllTime) {
             queryClient.prefetchQuery({
                 queryKey: allTimeQueryKey,
-                queryFn: () => fetchDailyStats(activeProfile.token, { start: FULL_HISTORY_START_DATE }),
+                queryFn: () => runWithAutoTokenRefresh(activeProfile.id, (token) =>
+                    fetchDailyStats(token, { start: FULL_HISTORY_START_DATE })
+                ),
                 staleTime: 1000 * 60 * 60 * 24,
             });
         }
     };
 
     // Versus data
-    const p1Data = userQueries[0]?.data as DailyStats | undefined;
-    const p2Data = userQueries[1]?.data as DailyStats | undefined;
+    const compareEntries = leaderboardData.slice(0, 2);
+    const p1Data = userQueries.find((_, idx) => profiles[idx]?.id === compareEntries[0]?.id)?.data as DailyStats | undefined;
+    const p2Data = userQueries.find((_, idx) => profiles[idx]?.id === compareEntries[1]?.id)?.data as DailyStats | undefined;
     const p1Hr = p1Data?.heartrate || [];
     const p2Hr = p2Data?.heartrate || [];
     const p1Sleep = p1Data?.sleep[0]; const p1Readiness = p1Data?.readiness[0]; const p1Session = p1Data?.session[0];
     const p2Sleep = p2Data?.sleep[0]; const p2Readiness = p2Data?.readiness[0]; const p2Session = p2Data?.session[0];
+    const compareProfileA = profiles.find((p) => p.id === compareEntries[0]?.id);
+    const compareProfileB = profiles.find((p) => p.id === compareEntries[1]?.id);
 
     const userName = activeProfile?.firstName || activeProfile?.email?.split('@')[0] || 'there';
 
@@ -386,6 +477,8 @@ const Dashboard: React.FC = () => {
             await removeProfile(profilePendingRemoval.id);
         } catch (error) {
             console.error('Failed to remove profile:', error);
+            const message = error instanceof Error ? error.message : 'Failed to remove profile.';
+            setRemoveProfileError(message);
         } finally {
             setIsRemovingProfile(false);
             setProfilePendingRemoval(null);
@@ -431,11 +524,21 @@ const Dashboard: React.FC = () => {
                                             onClick={() => setActiveProfileId(p.id)}
                                             className="flex-1 bg-[#141414] border border-[#1E1E1E] rounded-xl p-4 text-left hover:border-[#333] hover:bg-[#161616] transition-all duration-200 flex items-center justify-between"
                                         >
-                                            <span className="text-[#FAFAFA] font-medium text-sm">
-                                                {getProfileDisplayName(p)}
-                                            </span>
+                                            <div>
+                                                <span className="text-[#FAFAFA] font-medium text-sm block">
+                                                    {getProfileDisplayName(p)}
+                                                </span>
+                                                <span className={`text-[11px] ${profileHealthById.get(p.id)?.level === 'error'
+                                                        ? 'text-[#F87171]'
+                                                        : profileHealthById.get(p.id)?.level === 'warning'
+                                                            ? 'text-[#FBBF24]'
+                                                            : 'text-[#00C896]'
+                                                    }`}>
+                                                    {profileHealthById.get(p.id)?.label || 'Up to date'}
+                                                </span>
+                                            </div>
                                             <span className="text-[#444] text-xs font-mono">
-                                                {p.lastUpdated ? new Date(p.lastUpdated).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                                                {p.lastSuccessfulSyncAt ? new Date(p.lastSuccessfulSyncAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
                                             </span>
                                         </button>
                                         <button
@@ -458,13 +561,21 @@ const Dashboard: React.FC = () => {
                 <AppDialog
                     isOpen={Boolean(profilePendingRemoval)}
                     title="Remove Profile"
-                    message={profilePendingRemoval ? `Remove ${profilePendingRemoval.name} from this device? You can reconnect this profile at any time.` : ''}
+                    message={profilePendingRemoval ? `Remove ${profilePendingRemoval.name} for everyone using this shared leaderboard? This cannot be undone.` : ''}
                     intent="destructive"
                     confirmText={isRemovingProfile ? 'Removing...' : 'Remove'}
                     cancelText="Keep Profile"
                     confirmDisabled={isRemovingProfile}
                     onConfirm={handleConfirmRemoveProfile}
                     onCancel={() => !isRemovingProfile && setProfilePendingRemoval(null)}
+                />
+
+                <AppDialog
+                    isOpen={Boolean(removeProfileError)}
+                    title="Could Not Remove Profile"
+                    message={removeProfileError || ''}
+                    confirmText="Dismiss"
+                    onConfirm={() => setRemoveProfileError(null)}
                 />
             </div>
         );
@@ -489,7 +600,16 @@ const Dashboard: React.FC = () => {
                     <button onClick={login} className="w-full py-3.5 bg-[#00C896] text-[#0C0C0C] font-semibold rounded-lg hover:opacity-90 transition-opacity text-sm mb-4">
                         Reconnect Oura Ring
                     </button>
-                    <button onClick={() => { if (activeProfile) removeProfile(activeProfile.id); }} className="text-[#666] hover:text-[#FAFAFA] text-sm transition-colors">
+                    <button
+                        onClick={() => {
+                            if (!activeProfile) return;
+                            removeProfile(activeProfile.id).catch((error) => {
+                                const message = error instanceof Error ? error.message : 'Failed to remove profile.';
+                                setRemoveProfileError(message);
+                            });
+                        }}
+                        className="text-[#666] hover:text-[#FAFAFA] text-sm transition-colors"
+                    >
                         Remove Profile
                     </button>
                 </div>
@@ -582,6 +702,24 @@ const Dashboard: React.FC = () => {
             </nav>
 
             <main className="max-w-5xl mx-auto px-4 pb-16">
+                {profilesNeedingAttention.length > 0 && (
+                    <div className="mt-6 p-4 bg-[#1C1C1C] border border-[#333] rounded-lg">
+                        <p className="text-[#FAFAFA] text-sm font-medium mb-2">Sync attention needed</p>
+                        <div className="space-y-1">
+                            {profilesNeedingAttention.map((profile) => {
+                                const status = profileHealthById.get(profile.id);
+                                const name = profile.firstName || (profile.email || 'User').split('@')[0];
+                                const isReconnect = status?.level === 'error';
+                                return (
+                                    <p key={profile.id} className={`text-xs ${isReconnect ? 'text-[#F87171]' : 'text-[#FBBF24]'}`}>
+                                        {name}: {status?.label || 'Needs attention'}
+                                    </p>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
                 {/* ======== TODAY VIEW ======== */}
                 {viewMode === 'today' && (
                     <div className="pt-8 animate-fade-in">
@@ -760,24 +898,24 @@ const Dashboard: React.FC = () => {
                 )}
 
                 {/* ======== COMPARE VIEW ======== */}
-                {viewMode === 'compare' && profiles.length >= 2 && leaderboardData.length >= 2 && (
+                {viewMode === 'compare' && compareEntries.length >= 2 && (
                     <div className="space-y-6 pt-6">
                         <div className="bg-[#141414] border border-[#222] rounded-lg p-5 flex items-center justify-between">
                             <div className="text-center flex-1">
-                                <p className="text-sm font-semibold text-[#60A5FA]">{leaderboardData[0].name.split('@')[0]}</p>
-                                <p className="font-mono text-xl font-bold">{leaderboardData[0].average}</p>
+                                <p className="text-sm font-semibold text-[#60A5FA]">{compareEntries[0].name.split('@')[0]}</p>
+                                <p className="font-mono text-xl font-bold">{compareEntries[0].average}</p>
                             </div>
                             <div className="text-[#444] text-sm font-medium px-4">vs</div>
                             <div className="text-center flex-1">
-                                <p className="text-sm font-semibold text-[#A855F7]">{leaderboardData[1].name.split('@')[0]}</p>
-                                <p className="font-mono text-xl font-bold">{leaderboardData[1].average}</p>
+                                <p className="text-sm font-semibold text-[#A855F7]">{compareEntries[1].name.split('@')[0]}</p>
+                                <p className="font-mono text-xl font-bold">{compareEntries[1].average}</p>
                             </div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <MetricComparisonGroup
                                 title="Readiness" scoreA={p1Readiness?.score} scoreB={p2Readiness?.score}
-                                userAName={profiles[0]?.firstName || profiles[0]?.email?.split('@')[0]}
-                                userBName={profiles[1]?.firstName || profiles[1]?.email?.split('@')[0]}
+                                userAName={compareProfileA?.firstName || compareProfileA?.email?.split('@')[0] || compareEntries[0].name}
+                                userBName={compareProfileB?.firstName || compareProfileB?.email?.split('@')[0] || compareEntries[1].name}
                                 defaultOpen={true}
                                 metrics={[
                                     { label: "Resting HR", valA: p1Readiness?.contributors.resting_heart_rate, valB: p2Readiness?.contributors.resting_heart_rate, displayA: p1Session?.lowest_heart_rate ? `${p1Session.lowest_heart_rate}` : undefined, displayB: p2Session?.lowest_heart_rate ? `${p2Session.lowest_heart_rate}` : undefined, unit: "bpm", inverse: true, max: 100 },
@@ -788,8 +926,8 @@ const Dashboard: React.FC = () => {
                             />
                             <MetricComparisonGroup
                                 title="Sleep" scoreA={p1Sleep?.score} scoreB={p2Sleep?.score}
-                                userAName={profiles[0]?.firstName || profiles[0]?.email?.split('@')[0]}
-                                userBName={profiles[1]?.firstName || profiles[1]?.email?.split('@')[0]}
+                                userAName={compareProfileA?.firstName || compareProfileA?.email?.split('@')[0] || compareEntries[0].name}
+                                userBName={compareProfileB?.firstName || compareProfileB?.email?.split('@')[0] || compareEntries[1].name}
                                 defaultOpen={true}
                                 metrics={[
                                     { label: "Total Sleep", valA: p1Sleep?.contributors.total_sleep, valB: p2Sleep?.contributors.total_sleep, displayA: p1Session?.total_sleep_duration ? formatDuration(p1Session.total_sleep_duration) : undefined, displayB: p2Session?.total_sleep_duration ? formatDuration(p2Session.total_sleep_duration) : undefined, max: 100 },
@@ -802,7 +940,7 @@ const Dashboard: React.FC = () => {
                         {(p1Hr?.length || p2Hr?.length) ? (
                             <div className="bg-[#141414] border border-[#222] rounded-lg p-4 h-64">
                                 <h4 className="text-xs text-[#666] uppercase tracking-wider mb-3">Heart Rate (48h)</h4>
-                                <ComparisonHeartRateChart userAData={p1Hr || []} userBData={p2Hr || []} userAName={leaderboardData[0].name} userBName={leaderboardData[1].name} />
+                                <ComparisonHeartRateChart userAData={p1Hr || []} userBData={p2Hr || []} userAName={compareEntries[0].name} userBName={compareEntries[1].name} />
                             </div>
                         ) : null}
                     </div>
@@ -811,6 +949,11 @@ const Dashboard: React.FC = () => {
                     <div className="pt-16 text-center">
                         <p className="text-[#666] mb-4">Add a second profile to compare metrics</p>
                         <button onClick={login} className="px-4 py-2 bg-[#00C896] text-[#0C0C0C] font-medium rounded-md text-sm hover:opacity-90 transition-opacity">Add Profile</button>
+                    </div>
+                )}
+                {viewMode === 'compare' && profiles.length >= 2 && compareEntries.length < 2 && (
+                    <div className="pt-16 text-center">
+                        <p className="text-[#666]">Waiting for enough synced data to compare profiles.</p>
                     </div>
                 )}
 

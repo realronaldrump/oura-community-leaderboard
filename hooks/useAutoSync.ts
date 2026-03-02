@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 const SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const LAST_SYNC_KEY = 'oura_last_sync';
 
-export const useAutoSync = (tokens: string[], enabled: boolean = true) => {
+export const useAutoSync = (profileIds: string[], enabled: boolean = true) => {
     const queryClient = useQueryClient();
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -18,37 +18,54 @@ export const useAutoSync = (tokens: string[], enabled: boolean = true) => {
     }, []);
 
     const refresh = useCallback(async () => {
-        if (tokens.length === 0) return;
+        if (profileIds.length === 0) return;
 
         // Invalidate all data queries so react-query refetches them
         await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['dailyStats'] }),
         ]);
         setLastSyncTime();
-    }, [tokens, queryClient, setLastSyncTime]);
+    }, [profileIds, queryClient, setLastSyncTime]);
 
-    useEffect(() => {
-        if (!enabled || tokens.length === 0) return;
-
-        // Check if we need an immediate sync (e.g., been away for more than the interval)
+    const refreshIfStale = useCallback(() => {
+        if (!enabled || profileIds.length === 0) return;
         const lastSync = getLastSyncTime();
         const elapsed = Date.now() - lastSync;
-
         if (elapsed >= SYNC_INTERVAL_MS) {
             refresh();
         }
+    }, [enabled, profileIds.length, getLastSyncTime, refresh]);
+
+    useEffect(() => {
+        if (!enabled || profileIds.length === 0) return;
+        refreshIfStale();
 
         // Set up the recurring interval
         intervalRef.current = setInterval(() => {
             refresh();
         }, SYNC_INTERVAL_MS);
 
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                refreshIfStale();
+            }
+        };
+
+        const onOnline = () => {
+            refreshIfStale();
+        };
+
+        window.addEventListener('visibilitychange', onVisibilityChange);
+        window.addEventListener('online', onOnline);
+
         return () => {
             if (intervalRef.current) {
                 clearInterval(intervalRef.current);
             }
+            window.removeEventListener('visibilitychange', onVisibilityChange);
+            window.removeEventListener('online', onOnline);
         };
-    }, [enabled, tokens, refresh, getLastSyncTime]);
+    }, [enabled, profileIds, refresh, refreshIfStale]);
 
     return {
         lastSyncTime: getLastSyncTime(),

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { DailyStats } from '../../types';
-import { Milestone, CalendarHeatmapDay } from '../../types/analyticsTypes';
+import { Milestone } from '../../types/analyticsTypes';
 import { calculateMilestones, generateCalendarHeatmap } from '../../services/analyticsService';
 import { Trophy, Target, Calendar, Users, User, BedDouble, Footprints, Flame, TrendingUp, Check } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
@@ -35,10 +35,66 @@ const getMilestoneIcon = (type: string, iconId?: string) => {
 };
 
 type HeatmapMetric = 'sleep' | 'readiness' | 'activity' | 'average';
+type HeatmapRange = '1y' | '2y' | 'all';
+
+type CalendarGridDay = {
+    date: string;
+    value: number;
+    weekday: number;
+    month: number;
+    year: number;
+    hasAnyData: boolean;
+    hasMetricData: boolean;
+};
+
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MS_PER_DAY = 86_400_000;
+
+const toUtcDate = (isoDate: string): Date => {
+    const [year, month, day] = isoDate.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day));
+};
+
+const toIsoDate = (date: Date): string => {
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const addUtcDays = (date: Date, days: number): Date => new Date(date.getTime() + days * MS_PER_DAY);
+
+const diffDaysInclusive = (start: Date, end: Date): number =>
+    Math.floor((end.getTime() - start.getTime()) / MS_PER_DAY) + 1;
+
+const getTodayUtc = (): Date => {
+    const now = new Date();
+    return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+};
+
+const formatDateForDisplay = (date: Date, options: Intl.DateTimeFormatOptions): string =>
+    new Intl.DateTimeFormat('en-US', options).format(
+        new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+    );
+
+const formatHistorySpan = (days: number): string => {
+    if (days >= 365) {
+        const years = days / 365;
+        return `${years >= 10 ? years.toFixed(0) : years.toFixed(1)}y`;
+    }
+
+    if (days >= 30) {
+        const months = days / 30.44;
+        return `${months >= 10 ? months.toFixed(0) : months.toFixed(1)}mo`;
+    }
+
+    return `${days}d`;
+};
 
 const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData }) => {
     const [selectedUser, setSelectedUser] = useState(0);
     const [heatmapMetric, setHeatmapMetric] = useState<HeatmapMetric>('average');
+    const [heatmapRange, setHeatmapRange] = useState<HeatmapRange>('1y');
     const [selectedMilestone, setSelectedMilestone] = useState<Milestone | null>(null);
 
     const milestones = useMemo(() => {
@@ -72,42 +128,75 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
 
     const groupMilestones = milestones.filter(m => !m.userId);
 
-    // Generate calendar grid (last 365 days)
-    const calendarGrid = useMemo(() => {
-        const grid: Array<{ date: string; value: number; weekday: number; month: number }> = [];
-        const today = new Date();
-        const heatmapMap = new Map(heatmapData.map(d => [d.date, d.value]));
+    const calendarView = useMemo(() => {
+        const heatmapMap = new Map(heatmapData.map(day => [day.date, day.value]));
+        const today = getTodayUtc();
+        const firstDataDate = heatmapData.length > 0 ? toUtcDate(heatmapData[0].date) : null;
+        const lastDataDate = heatmapData.length > 0 ? toUtcDate(heatmapData[heatmapData.length - 1].date) : null;
+        const endDate = lastDataDate && lastDataDate > today ? lastDataDate : today;
 
-        for (let i = 364; i >= 0; i--) {
-            const date = new Date(today);
-            date.setDate(date.getDate() - i);
-            const dateStr = date.toISOString().split('T')[0];
+        let startDate: Date;
+        if (!firstDataDate) {
+            startDate = addUtcDays(endDate, -364);
+        } else if (heatmapRange === 'all') {
+            startDate = firstDataDate;
+        } else {
+            const requestedDays = heatmapRange === '2y' ? 730 : 365;
+            startDate = addUtcDays(endDate, -(requestedDays - 1));
+            if (startDate < firstDataDate) startDate = firstDataDate;
+        }
+
+        const visibleDays = diffDaysInclusive(startDate, endDate);
+        const grid: CalendarGridDay[] = [];
+
+        for (let offset = 0; offset < visibleDays; offset++) {
+            const date = addUtcDays(startDate, offset);
+            const dateStr = toIsoDate(date);
+            const value = heatmapMap.get(dateStr) ?? 0;
+            const hasAnyData = heatmapMap.has(dateStr);
 
             grid.push({
                 date: dateStr,
-                value: heatmapMap.get(dateStr) || 0,
-                weekday: date.getDay(),
-                month: date.getMonth()
+                value,
+                weekday: date.getUTCDay(),
+                month: date.getUTCMonth(),
+                year: date.getUTCFullYear(),
+                hasAnyData,
+                hasMetricData: value > 0
             });
         }
 
-        return grid;
-    }, [heatmapData]);
+        const totalTrackedDays = heatmapData.filter(day => day.value > 0).length;
+        const visibleTrackedDays = grid.filter(day => day.hasMetricData).length;
+        const totalSpanDays = firstDataDate ? diffDaysInclusive(firstDataDate, endDate) : visibleDays;
+
+        return {
+            grid,
+            firstDataDate,
+            startDate,
+            endDate,
+            visibleDays,
+            visibleTrackedDays,
+            totalTrackedDays,
+            totalSpanDays
+        };
+    }, [heatmapData, heatmapRange]);
 
     // Group by week for display
     const weeks = useMemo(() => {
-        const result: Array<Array<typeof calendarGrid[0] | null>> = [];
-        let currentWeek: Array<typeof calendarGrid[0] | null> = [];
+        const result: Array<Array<CalendarGridDay | null>> = [];
+        let currentWeek: Array<CalendarGridDay | null> = [];
+        const { grid } = calendarView;
 
         // Pad first week
-        if (calendarGrid.length > 0) {
-            const firstDay = calendarGrid[0].weekday;
+        if (grid.length > 0) {
+            const firstDay = grid[0].weekday;
             for (let i = 0; i < firstDay; i++) {
                 currentWeek.push(null);
             }
         }
 
-        for (const day of calendarGrid) {
+        for (const day of grid) {
             currentWeek.push(day);
             if (day.weekday === 6) {
                 result.push(currentWeek);
@@ -120,14 +209,91 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
         }
 
         return result;
-    }, [calendarGrid]);
+    }, [calendarView]);
 
-    const getHeatmapColor = (value: number) => {
-        if (value === 0) return 'bg-[var(--bg-elevated)]';
-        if (value < 50) return 'bg-red-900/50';
-        if (value < 65) return 'bg-orange-800/50';
-        if (value < 75) return 'bg-yellow-700/50';
-        if (value < 85) return 'bg-green-700/50';
+    const heatmapDensity = useMemo(() => {
+        if (calendarView.visibleDays > 1800) return { cellSize: 7, gap: 2, monthStride: 6 };
+        if (calendarView.visibleDays > 1200) return { cellSize: 8, gap: 2, monthStride: 3 };
+        if (calendarView.visibleDays > 730) return { cellSize: 9, gap: 2, monthStride: 2 };
+        return { cellSize: 12, gap: 3, monthStride: 1 };
+    }, [calendarView.visibleDays]);
+
+    const heatmapLabels = useMemo(() => {
+        const monthLabels: Array<{ month: number; position: number }> = [];
+        const yearLabels: Array<{ year: number; position: number }> = [];
+        const seenYears = new Set<number>();
+        let lastMonth = -1;
+
+        weeks.forEach((week, weekIdx) => {
+            const validDay = week.find((day): day is CalendarGridDay => day !== null);
+            if (!validDay) return;
+
+            if (validDay.month !== lastMonth) {
+                if (validDay.month % heatmapDensity.monthStride === 0) {
+                    monthLabels.push({ month: validDay.month, position: weekIdx });
+                }
+                lastMonth = validDay.month;
+            }
+
+            if ((weekIdx === 0 || validDay.month === 0) && !seenYears.has(validDay.year)) {
+                yearLabels.push({ year: validDay.year, position: weekIdx });
+                seenYears.add(validDay.year);
+            }
+        });
+
+        return { monthLabels, yearLabels };
+    }, [weeks, heatmapDensity.monthStride]);
+
+    const metricLabel = heatmapMetric.charAt(0).toUpperCase() + heatmapMetric.slice(1);
+    const metricScoreLabel = heatmapMetric === 'average' ? 'score' : `${heatmapMetric} score`;
+
+    const rangeLabel = useMemo(() => {
+        if (!calendarView.firstDataDate) return 'All';
+        return `All (${formatHistorySpan(calendarView.totalSpanDays)})`;
+    }, [calendarView.firstDataDate, calendarView.totalSpanDays]);
+
+    const coverageSummary = useMemo(() => {
+        const startLabel = formatDateForDisplay(calendarView.startDate, {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+        });
+        const endLabel = formatDateForDisplay(calendarView.endDate, {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+        });
+
+        if (calendarView.visibleTrackedDays === 0) {
+            return `${startLabel} - ${endLabel} • No ${metricScoreLabel} values yet`;
+        }
+
+        return `${startLabel} - ${endLabel} • ${calendarView.visibleTrackedDays.toLocaleString()} ${metricScoreLabel} days`;
+    }, [calendarView.startDate, calendarView.endDate, calendarView.visibleTrackedDays, metricScoreLabel]);
+
+    const availabilitySummary = useMemo(() => {
+        if (!calendarView.firstDataDate) return 'No synced history is available for this user yet.';
+
+        const firstLabel = formatDateForDisplay(calendarView.firstDataDate, {
+            month: 'short',
+            year: 'numeric'
+        });
+
+        return `Available since ${firstLabel} • ${calendarView.totalTrackedDays.toLocaleString()} ${metricScoreLabel} days total`;
+    }, [calendarView.firstDataDate, calendarView.totalTrackedDays, metricScoreLabel]);
+
+    const columnPitch = heatmapDensity.cellSize + heatmapDensity.gap;
+    const dayLabelGutter = 28;
+    const showYearLabels = calendarView.visibleDays > 365;
+    const hasTwoYearWindow = calendarView.totalSpanDays > 365;
+
+    const getHeatmapColor = (day: CalendarGridDay) => {
+        if (!day.hasAnyData) return 'bg-[var(--bg-elevated)]';
+        if (!day.hasMetricData) return 'bg-[var(--bg-elevated)]/70 border border-[var(--border-subtle)]';
+        if (day.value < 50) return 'bg-red-900/50';
+        if (day.value < 65) return 'bg-orange-800/50';
+        if (day.value < 75) return 'bg-yellow-700/50';
+        if (day.value < 85) return 'bg-green-700/50';
         return 'bg-green-500/70';
     };
 
@@ -156,8 +322,6 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
 
         return [];
     };
-
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     if (usersData.every(u => !u.data)) {
         return (
@@ -206,7 +370,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                     <InfoTooltip
                         title="Milestone Tracking"
                         description="Track cumulative achievements across your health journey. Includes personal and group milestones."
-                        calculation="Milestones track total progress like days tracked, total steps, and sleep hours. The heatmap shows daily scores over the past year."
+                        calculation="Milestones track total progress like days tracked, total steps, and sleep hours. The score history heatmap supports 1-year, 2-year, or all available data windows per selected user."
                     />
                 </div>
                 <p className="text-sm text-[var(--text-muted)] mt-1">
@@ -308,59 +472,97 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
 
             {/* Calendar Heatmap */}
             <div>
-                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-4">
-                    <h4 className="section-header mb-0 flex items-center gap-2">
-                        <Calendar className="w-5 h-5 text-blue-400" /> Score History
-                    </h4>
+                <div className="flex flex-col gap-3 mb-4">
+                    <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+                        <h4 className="section-header mb-0 flex items-center gap-2">
+                            <Calendar className="w-5 h-5 text-blue-400" /> Score History
+                        </h4>
 
-                    <div className="flex gap-2">
-                        {(['average', 'sleep', 'readiness', 'activity'] as HeatmapMetric[]).map(m => (
-                            <button
-                                key={m}
-                                onClick={() => setHeatmapMetric(m)}
-                                className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${heatmapMetric === m
-                                    ? 'bg-[var(--accent)] text-black'
-                                    : 'bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                                    }`}
-                            >
-                                {m.charAt(0).toUpperCase() + m.slice(1)}
-                            </button>
-                        ))}
+                        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                            <div className="inline-flex rounded-xl p-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)]">
+                                {(['average', 'sleep', 'readiness', 'activity'] as HeatmapMetric[]).map(m => (
+                                    <button
+                                        key={m}
+                                        onClick={() => setHeatmapMetric(m)}
+                                        className={`px-3 min-h-[44px] rounded-lg text-xs font-medium transition-all whitespace-nowrap ${heatmapMetric === m
+                                            ? 'bg-[var(--accent)] text-black'
+                                            : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                                            }`}
+                                    >
+                                        {m.charAt(0).toUpperCase() + m.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="inline-flex rounded-xl p-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)]">
+                                {([
+                                    { id: '1y', label: '1Y' },
+                                    { id: '2y', label: '2Y', disabled: !hasTwoYearWindow },
+                                    { id: 'all', label: rangeLabel }
+                                ] as Array<{ id: HeatmapRange; label: string; disabled?: boolean }>).map(option => (
+                                    <button
+                                        key={option.id}
+                                        onClick={() => setHeatmapRange(option.id)}
+                                        disabled={option.disabled}
+                                        className={`px-3 min-h-[44px] rounded-lg text-xs font-medium transition-all whitespace-nowrap ${heatmapRange === option.id
+                                            ? 'bg-[var(--accent)] text-black'
+                                            : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                                            } ${option.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                    >
+                                        {option.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                        <p className="text-xs text-[var(--text-secondary)]">{coverageSummary}</p>
+                        <p className="text-xs text-[var(--text-muted)]">{availabilitySummary}</p>
                     </div>
                 </div>
 
                 <div className="card p-4 overflow-x-auto">
-                    {/* Month labels */}
-                    <div className="flex mb-2 ml-8">
-                        {(() => {
-                            const monthLabels: Array<{ month: number; position: number }> = [];
-                            let lastMonth = -1;
-
-                            weeks.forEach((week, weekIdx) => {
-                                const validDay = week.find(d => d !== null);
-                                if (validDay && validDay.month !== lastMonth) {
-                                    monthLabels.push({ month: validDay.month, position: weekIdx });
-                                    lastMonth = validDay.month;
-                                }
-                            });
-
-                            return monthLabels.map((m, idx) => (
-                                <span
-                                    key={idx}
-                                    className="text-xs text-[var(--text-muted)] absolute"
-                                    style={{ marginLeft: m.position * 14 }}
-                                >
-                                    {months[m.month]}
-                                </span>
-                            ));
-                        })()}
+                    {/* Month + year labels */}
+                    <div className="relative mb-2 h-9" style={{ marginLeft: dayLabelGutter }}>
+                        {heatmapLabels.monthLabels.map((m, idx) => (
+                            <span
+                                key={`month-${idx}`}
+                                className="absolute text-xs text-[var(--text-muted)]"
+                                style={{ left: m.position * columnPitch, top: 0 }}
+                            >
+                                {MONTH_LABELS[m.month]}
+                            </span>
+                        ))}
+                        {showYearLabels && heatmapLabels.yearLabels.map((y, idx) => (
+                            <span
+                                key={`year-${idx}`}
+                                className="absolute text-[10px] uppercase tracking-wide text-[var(--text-muted)]/80"
+                                style={{ left: y.position * columnPitch, top: 16 }}
+                            >
+                                {y.year}
+                            </span>
+                        ))}
                     </div>
 
-                    <div className="flex gap-1 mt-6">
+                    <div className="flex mt-1" style={{ columnGap: `${heatmapDensity.gap}px` }}>
                         {/* Day labels */}
-                        <div className="flex flex-col gap-1 mr-1">
+                        <div
+                            className="flex flex-col shrink-0"
+                            style={{
+                                rowGap: `${heatmapDensity.gap}px`,
+                                width: `${dayLabelGutter - 4}px`
+                            }}
+                        >
                             {['', 'M', '', 'W', '', 'F', ''].map((d, i) => (
-                                <span key={i} className="text-[10px] text-[var(--text-muted)] h-3 leading-3">
+                                <span
+                                    key={i}
+                                    className="text-[10px] text-[var(--text-muted)]"
+                                    style={{
+                                        height: `${heatmapDensity.cellSize}px`,
+                                        lineHeight: `${heatmapDensity.cellSize}px`
+                                    }}
+                                >
                                     {d}
                                 </span>
                             ))}
@@ -368,24 +570,42 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
 
                         {/* Weeks */}
                         {weeks.map((week, weekIdx) => (
-                            <div key={weekIdx} className="flex flex-col gap-1">
+                            <div
+                                key={weekIdx}
+                                className="flex flex-col"
+                                style={{ rowGap: `${heatmapDensity.gap}px` }}
+                            >
                                 {week.map((day, dayIdx) => (
                                     <div
                                         key={dayIdx}
-                                        className={`w-3 h-3 rounded-sm ${day ? getHeatmapColor(day.value) : 'invisible'} group relative cursor-pointer`}
-                                        title={day ? `${day.date}: ${day.value.toFixed(0)}` : ''}
+                                        className={`${day ? getHeatmapColor(day) : 'invisible'} group relative cursor-pointer rounded-sm`}
+                                        style={{
+                                            width: `${heatmapDensity.cellSize}px`,
+                                            height: `${heatmapDensity.cellSize}px`
+                                        }}
+                                        title={day
+                                            ? day.hasMetricData
+                                                ? `${day.date}: ${day.value.toFixed(0)}`
+                                                : day.hasAnyData
+                                                    ? `${day.date}: No ${metricScoreLabel}`
+                                                    : `${day.date}: No synced data`
+                                            : ''}
                                     >
                                         {day && (
                                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[var(--bg-base)] border border-[var(--border-default)] rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
                                                 <p className="font-medium text-[var(--text-primary)]">
-                                                    {new Date(day.date).toLocaleDateString('en-US', {
+                                                    {formatDateForDisplay(toUtcDate(day.date), {
                                                         month: 'short',
                                                         day: 'numeric',
                                                         year: 'numeric'
                                                     })}
                                                 </p>
                                                 <p className="text-[var(--text-muted)]">
-                                                    {heatmapMetric.charAt(0).toUpperCase() + heatmapMetric.slice(1)}: {day.value.toFixed(0)}
+                                                    {day.hasMetricData
+                                                        ? `${metricLabel}: ${day.value.toFixed(0)}`
+                                                        : day.hasAnyData
+                                                            ? `No ${metricScoreLabel}`
+                                                            : 'No synced data'}
                                                 </p>
                                             </div>
                                         )}
@@ -396,17 +616,28 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                     </div>
 
                     {/* Legend */}
-                    <div className="flex items-center justify-end gap-2 mt-4">
-                        <span className="text-xs text-[var(--text-muted)]">Less</span>
-                        <div className="flex gap-1">
+                    <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
+                        <div className="flex items-center gap-2">
                             <div className="w-3 h-3 rounded-sm bg-[var(--bg-elevated)]" />
-                            <div className="w-3 h-3 rounded-sm bg-red-900/50" />
-                            <div className="w-3 h-3 rounded-sm bg-orange-800/50" />
-                            <div className="w-3 h-3 rounded-sm bg-yellow-700/50" />
-                            <div className="w-3 h-3 rounded-sm bg-green-700/50" />
-                            <div className="w-3 h-3 rounded-sm bg-green-500/70" />
+                            <span className="text-xs text-[var(--text-muted)]">No synced day</span>
                         </div>
-                        <span className="text-xs text-[var(--text-muted)]">More</span>
+
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-sm bg-[var(--bg-elevated)]/70 border border-[var(--border-subtle)]" />
+                            <span className="text-xs text-[var(--text-muted)]">Synced day, no {metricScoreLabel}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-[var(--text-muted)]">Less</span>
+                            <div className="flex gap-1">
+                                <div className="w-3 h-3 rounded-sm bg-red-900/50" />
+                                <div className="w-3 h-3 rounded-sm bg-orange-800/50" />
+                                <div className="w-3 h-3 rounded-sm bg-yellow-700/50" />
+                                <div className="w-3 h-3 rounded-sm bg-green-700/50" />
+                                <div className="w-3 h-3 rounded-sm bg-green-500/70" />
+                            </div>
+                            <span className="text-xs text-[var(--text-muted)]">More</span>
+                        </div>
                     </div>
                 </div>
             </div>

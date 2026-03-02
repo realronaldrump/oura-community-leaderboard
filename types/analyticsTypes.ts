@@ -25,6 +25,12 @@ export interface Streak {
     endDate?: string;           // ISO date (undefined if active)
     isActive: boolean;
     dates: string[];            // ISO dates included in the streak
+    currentDates?: string[];    // Dates in the active run
+    longestDates?: string[];    // Dates in the all-time record run
+    currentStartDate?: string;  // ISO date
+    currentEndDate?: string;    // ISO date
+    longestStartDate?: string;  // ISO date
+    longestEndDate?: string;    // ISO date
     avgValue?: number;          // Average value during the streak
     threshold?: number;         // e.g., sleep score > 80
     impactOnTrend?: number;     // % improvement during streak
@@ -273,4 +279,3 @@ export interface UserChallenge {
     progress: number; // days completed
     history: Record<string, boolean>; // date -> success map
 }
-

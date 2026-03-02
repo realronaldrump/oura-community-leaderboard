@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, TrendingUp, Award, X, Flame } from 'lucide-react';
+import { Calendar, X } from 'lucide-react';
 
 interface DetailsModalProps {
     isOpen: boolean;
@@ -9,10 +9,11 @@ interface DetailsModalProps {
     description: string;
     stats: Array<{ label: string; value: string | number; subValue?: string }>;
     dates?: string[]; // List of dates involved
+    datesTitle?: string;
 }
 
 const DetailsModal: React.FC<DetailsModalProps> = ({
-    isOpen, onClose, title, subtitle, description, stats, dates
+    isOpen, onClose, title, subtitle, description, stats, dates, datesTitle = 'Contributing Days'
 }) => {
     if (!isOpen) return null;
 
@@ -80,7 +81,7 @@ const DetailsModal: React.FC<DetailsModalProps> = ({
                         <div>
                             <h4 className="text-sm font-medium text-[var(--text-primary)] mb-3 flex items-center gap-2">
                                 <Calendar className="w-4 h-4 text-[var(--accent)]" />
-                                Contributing Days ({dates.length})
+                                {datesTitle} ({dates.length})
                             </h4>
                             <div className="bg-[var(--bg-base)] rounded-lg border border-[var(--border-subtle)] max-h-48 overflow-y-auto">
                                 {dates.map((date, idx) => (

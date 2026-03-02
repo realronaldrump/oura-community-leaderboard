@@ -153,6 +153,318 @@ h1, h2, h3, h4 {
   margin-bottom: 1rem;
 }
 
+/* ========================================
+   DAILY SNAPSHOT EXPORT
+   ======================================== */
+
+.daily-snapshot-export {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  padding: clamp(1.25rem, 0.95rem + 1.2vw, 2rem);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at 88% 8%, rgba(0, 200, 150, 0.18), transparent 42%),
+    radial-gradient(circle at 8% 92%, rgba(44, 116, 255, 0.18), transparent 45%),
+    linear-gradient(135deg, #05070d 0%, #0b1020 55%, #111734 100%);
+  box-shadow: 0 18px 36px rgba(3, 5, 12, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.daily-snapshot-export__content {
+  position: relative;
+  z-index: 2;
+}
+
+.daily-snapshot-export__mesh {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 22px 22px;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.daily-snapshot-export__glow {
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+  filter: blur(36px);
+  z-index: 1;
+}
+
+.daily-snapshot-export__glow--top {
+  width: 15rem;
+  height: 15rem;
+  top: -7.5rem;
+  right: -5rem;
+  background: rgba(0, 200, 150, 0.2);
+}
+
+.daily-snapshot-export__glow--bottom {
+  width: 12rem;
+  height: 12rem;
+  bottom: -6.5rem;
+  left: -3.5rem;
+  background: rgba(50, 89, 255, 0.22);
+}
+
+.daily-snapshot-export__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.daily-snapshot-export__eyebrow {
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.73rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.daily-snapshot-export__date {
+  margin: 0.2rem 0 0;
+  color: #f7f8fa;
+  font-size: clamp(1.35rem, 1.1rem + 1vw, 2rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.daily-snapshot-export__mark {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 0.4rem;
+  padding-top: 0.15rem;
+}
+
+.daily-snapshot-export__mark span {
+  display: block;
+  width: 0.32rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #37f5ca 0%, #00c896 100%);
+}
+
+.daily-snapshot-export__mark span:nth-child(1) {
+  height: 1.65rem;
+}
+
+.daily-snapshot-export__mark span:nth-child(2) {
+  height: 2.85rem;
+}
+
+.daily-snapshot-export__mark span:nth-child(3) {
+  height: 2.15rem;
+}
+
+.daily-snapshot-export__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.daily-snapshot-export__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 0.8rem 0.9rem;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+}
+
+.daily-snapshot-export__row.is-leading {
+  border-color: rgba(0, 200, 150, 0.55);
+  background: linear-gradient(120deg, rgba(0, 200, 150, 0.16), rgba(255, 255, 255, 0.06));
+}
+
+.daily-snapshot-export__rank {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: rgba(7, 12, 24, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(248, 249, 252, 0.9);
+}
+
+.daily-snapshot-export__identity {
+  min-width: 0;
+}
+
+.daily-snapshot-export__name {
+  margin: 0;
+  color: #f5f7fb;
+  font-size: 1.15rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.daily-snapshot-export__metrics {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.daily-snapshot-export__metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.18rem 0.48rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.76rem;
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 500;
+}
+
+.daily-snapshot-export__metric--sleep {
+  color: #8dc2ff;
+  border-color: rgba(141, 194, 255, 0.35);
+  background: rgba(47, 93, 159, 0.18);
+}
+
+.daily-snapshot-export__metric--readiness {
+  color: #59f2b8;
+  border-color: rgba(89, 242, 184, 0.35);
+  background: rgba(25, 98, 74, 0.2);
+}
+
+.daily-snapshot-export__metric--activity {
+  color: #ffc95d;
+  border-color: rgba(255, 201, 93, 0.4);
+  background: rgba(128, 88, 22, 0.25);
+}
+
+.daily-snapshot-export__challenge {
+  margin-top: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: rgba(243, 245, 250, 0.8);
+  font-size: 0.69rem;
+  letter-spacing: 0.01em;
+}
+
+.daily-snapshot-export__avg {
+  text-align: right;
+}
+
+.daily-snapshot-export__avg-value {
+  margin: 0;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 1.85rem;
+  line-height: 1;
+  font-weight: 600;
+  color: #f5f8fe;
+  letter-spacing: -0.03em;
+}
+
+.daily-snapshot-export__avg-label {
+  margin: 0.1rem 0 0;
+  text-transform: lowercase;
+  font-size: 0.72rem;
+  color: rgba(242, 245, 250, 0.6);
+}
+
+.daily-snapshot-export__highlights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.95rem;
+}
+
+.daily-snapshot-export__highlight {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.58rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(240, 244, 252, 0.82);
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.daily-snapshot-export__highlight.is-winner {
+  border-color: rgba(0, 200, 150, 0.4);
+  background: rgba(0, 200, 150, 0.16);
+  color: #e9fff8;
+}
+
+.daily-snapshot-export__note {
+  margin-top: 0.95rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(5, 7, 13, 0.55);
+  padding: 0.65rem 0.75rem;
+}
+
+.daily-snapshot-export__note p {
+  margin: 0;
+  color: rgba(240, 244, 252, 0.8);
+  font-style: italic;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.daily-snapshot-export__footer {
+  margin-top: 1rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  font-size: 0.72rem;
+  color: rgba(242, 245, 252, 0.58);
+}
+
+@media (max-width: 640px) {
+  .daily-snapshot-export {
+    padding: 1rem;
+    border-radius: 1rem;
+  }
+
+  .daily-snapshot-export__date {
+    font-size: 1.2rem;
+  }
+
+  .daily-snapshot-export__row {
+    grid-template-columns: auto 1fr;
+  }
+
+  .daily-snapshot-export__avg {
+    grid-column: 2;
+    text-align: left;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.3rem;
+  }
+
+  .daily-snapshot-export__avg-value {
+    font-size: 1.35rem;
+  }
+
+  .daily-snapshot-export__footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 /* Progress bar */
 .progress-bar {
   height: 4px;

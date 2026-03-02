@@ -5,7 +5,16 @@ import { fullSync, SyncProgress } from '../services/syncService';
 import SyncModal from '../components/SyncModal';
 
 const Settings: React.FC = () => {
-    const { activeProfile, profiles, setActiveProfileId, login, updateProfile } = useUser();
+    const {
+        activeProfile,
+        profiles,
+        setActiveProfileId,
+        login,
+        updateProfile,
+        getAccessTokenForProfile,
+        markProfileSyncSuccess,
+        markProfileSyncError,
+    } = useUser();
     const queryClient = useQueryClient();
 
     const [showSyncModal, setShowSyncModal] = useState(false);
@@ -44,12 +53,28 @@ const Settings: React.FC = () => {
         if (!activeProfile) return;
         setShowSyncModal(true);
         try {
-            const syncedData = await fullSync(activeProfile.token, (progress) => { setSyncProgress(progress); });
-            queryClient.setQueryData(['dailyStats', activeProfile.token], syncedData);
-            queryClient.setQueryData(['allTimeStats', activeProfile.token], syncedData);
+            const runSync = async (forceRefresh: boolean = false) => {
+                const token = await getAccessTokenForProfile(activeProfile.id, { forceRefresh });
+                return fullSync(token, (progress) => { setSyncProgress(progress); });
+            };
+
+            let syncedData;
+            try {
+                syncedData = await runSync(false);
+            } catch (error) {
+                const message = error instanceof Error ? error.message.toLowerCase() : '';
+                const shouldRetry = message.includes('unauthorized') || message.includes('401');
+                if (!shouldRetry) throw error;
+                syncedData = await runSync(true);
+            }
+
+            queryClient.setQueryData(['dailyStats', activeProfile.id], syncedData);
+            queryClient.setQueryData(['allTimeStats', activeProfile.id], syncedData);
+            await markProfileSyncSuccess(activeProfile.id);
         } catch (err) {
             console.error('Full sync failed:', err);
             setSyncProgress(prev => ({ ...prev, status: 'error', error: 'Something went wrong. Please try again.' }));
+            await markProfileSyncError(activeProfile.id, err);
         }
     };
 

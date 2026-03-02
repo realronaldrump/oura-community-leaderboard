@@ -1,7 +1,7 @@
 {
     "rewrites": [
         {
-            "source": "/api/(.*)",
+            "source": "/api/oura/(.*)",
             "destination": "https://api.ouraring.com/v2/usercollection/$1"
         },
         {

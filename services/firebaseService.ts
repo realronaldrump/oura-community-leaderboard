@@ -54,6 +54,18 @@ export const firebaseService = {
     },
 
     /**
+     * Patch a profile without overwriting unrelated fields.
+     */
+    patchProfile: async (id: string, patch: Partial<UserProfile>): Promise<void> => {
+        try {
+            await setDoc(doc(db, PROFILES_COLLECTION, id), patch, { merge: true });
+        } catch (error) {
+            console.error("Error patching profile in Firebase:", error);
+            throw error;
+        }
+    },
+
+    /**
      * Delete a profile
      */
     deleteProfile: async (id: string): Promise<void> => {

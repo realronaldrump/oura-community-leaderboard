@@ -1,10 +1,15 @@
 
 import React, { useState } from 'react';
-import { AUTH_URL, REDIRECT_URI } from '../constants';
+import { REDIRECT_URI, createOAuthState, getAuthUrl, OAUTH_STATE_KEY } from '../constants';
 import { ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline';
 
 const Login: React.FC = () => {
   const [copied, setCopied] = useState(false);
+  const handleConnect = () => {
+    const state = createOAuthState();
+    localStorage.setItem(OAUTH_STATE_KEY, state);
+    window.location.href = getAuthUrl(state);
+  };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(REDIRECT_URI);
@@ -30,12 +35,13 @@ const Login: React.FC = () => {
           A community leaderboard for your health. Connect your ring to see how you stack up against friends.
         </p>
 
-        <a 
-          href={AUTH_URL}
+        <button
+          type="button"
+          onClick={handleConnect}
           className="block w-full py-4 px-6 bg-white text-oura-dark font-bold rounded-xl hover:bg-gray-100 transform hover:scale-[1.02] transition-all duration-200 shadow-lg"
         >
           Connect Oura Ring
-        </a>
+        </button>
         
         <p className="mt-6 text-xs text-gray-600">
           By connecting, you agree to share your activity, sleep, and readiness scores within this private leaderboard application.

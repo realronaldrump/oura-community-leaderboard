@@ -14,7 +14,7 @@ const toFahrenheitDelta = (celsiusDelta: number | null | undefined): number | ''
     celsiusDelta == null ? '' : Number((celsiusDelta * CELSIUS_DELTA_TO_FAHRENHEIT_DELTA).toFixed(2));
 
 const DataExport: React.FC = () => {
-    const { activeProfile } = useUser();
+    const { activeProfile, getAccessTokenForProfile, markProfileSyncSuccess, markProfileSyncError } = useUser();
     const [isLoading, setIsLoading] = useState(false);
     const [exportData, setExportData] = useState<{
         sleep: any[];
@@ -30,19 +30,34 @@ const DataExport: React.FC = () => {
         setError(null);
 
         try {
-            const allHistory = await fetchDailyStats(activeProfile.token, {
-                start: FULL_HISTORY_START_DATE,
-                end: new Date().toISOString().split('T')[0]
-            });
+            const runFetch = async (forceRefresh: boolean = false) => {
+                const token = await getAccessTokenForProfile(activeProfile.id, { forceRefresh });
+                return fetchDailyStats(token, {
+                    start: FULL_HISTORY_START_DATE,
+                    end: new Date().toISOString().split('T')[0]
+                });
+            };
+
+            let allHistory;
+            try {
+                allHistory = await runFetch(false);
+            } catch (syncError) {
+                const message = syncError instanceof Error ? syncError.message.toLowerCase() : '';
+                const shouldRetry = message.includes('unauthorized') || message.includes('401');
+                if (!shouldRetry) throw syncError;
+                allHistory = await runFetch(true);
+            }
 
             setExportData({
                 sleep: allHistory.sleep || [],
                 readiness: allHistory.readiness || [],
                 activity: allHistory.activity || [],
             });
+            await markProfileSyncSuccess(activeProfile.id);
         } catch (err) {
             console.error('Error fetching data:', err);
             setError('Failed to fetch data. Please try again.');
+            await markProfileSyncError(activeProfile.id, err);
         } finally {
             setIsLoading(false);
         }

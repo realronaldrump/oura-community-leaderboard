@@ -9,9 +9,13 @@ export interface UserProfile {
   biological_sex?: string | null;
   email?: string | null;
   token: string; // Access Token
+  refreshToken?: string | null;
   grantedScopes?: string[];
   tokenExpiresAt?: string | null;
   lastUpdated?: string;
+  lastSuccessfulSyncAt?: string | null;
+  lastSyncError?: string | null;
+  lastSyncErrorAt?: string | null;
   activeChallenges?: any[]; // using any[] temporarilly to avoid circular dependency, or better yet, define a minimal type here or import if possible.
   // Actually, let's keep it simple and just use an array of objects that match the structure we know, 
   // or define the structure here if we can't import `UserChallenge` easily without cycles.

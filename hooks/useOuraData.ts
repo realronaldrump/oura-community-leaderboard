@@ -87,6 +87,44 @@ const resolveSettled = (settled: PromiseSettledResult<any[]>[], names: string[])
         return [];
     });
 
+const getErrorMessage = (reason: unknown): string => {
+    if (reason instanceof Error) return reason.message;
+    if (typeof reason === 'string') return reason;
+    try {
+        return JSON.stringify(reason);
+    } catch {
+        return String(reason);
+    }
+};
+
+const resolveCriticalSettled = (settled: PromiseSettledResult<any[]>[], names: string[]): any[][] => {
+    const failures: Array<{ name: string; reason: unknown }> = [];
+
+    const values = settled.map((result, idx) => {
+        if (result.status === 'fulfilled') return result.value as any[];
+        failures.push({ name: names[idx], reason: result.reason });
+        console.warn(`Failed to fetch ${names[idx]}:`, result.reason);
+        return [];
+    });
+
+    if (failures.length === 0) {
+        return values;
+    }
+
+    const failureNames = failures.map((f) => f.name).join(', ');
+    const hasUnauthorizedError = failures.some((f) => {
+        const message = getErrorMessage(f.reason).toLowerCase();
+        return message.includes('unauthorized') || message.includes('401');
+    });
+
+    if (hasUnauthorizedError) {
+        throw new Error(`Unauthorized while fetching critical endpoints (${failureNames})`);
+    }
+
+    const firstFailureMessage = getErrorMessage(failures[0].reason);
+    throw new Error(`Critical data fetch failed (${failureNames}): ${firstFailureMessage}`);
+};
+
 const buildDailyStats = (
     sleep: any[], readiness: any[], activity: any[], sessions: any[],
     spo2: any[], stress: any[], resilience: any[], heartrate: any[],
@@ -137,7 +175,7 @@ export const fetchDailyStats = async (
     ];
 
     const criticalSettled = await Promise.allSettled(criticalRequests);
-    const [sleep, readiness, activity, sessions] = resolveSettled(
+    const [sleep, readiness, activity, sessions] = resolveCriticalSettled(
         criticalSettled, ['sleep', 'readiness', 'activity', 'sessions']
     );
 
