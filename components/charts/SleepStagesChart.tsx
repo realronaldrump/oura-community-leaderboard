@@ -235,7 +235,13 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
                     transition: opacity 0.2s ease-in-out;
                 }
             `}</style>
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={100}>
+            <ResponsiveContainer
+                width="100%"
+                height="100%"
+                minWidth={0}
+                minHeight={100}
+                initialDimension={{ width: 640, height: 180 }}
+            >
                 <BarChart
                     data={chartData}
                     margin={{ top: 24, right: 10, left: 0, bottom: 0 }}

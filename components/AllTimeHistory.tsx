@@ -323,7 +323,13 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
 
                     {/* Chart */}
                     <div className="h-[400px] w-full mt-2">
-                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={300}>
+                        <ResponsiveContainer
+                            width="100%"
+                            height="100%"
+                            minWidth={0}
+                            minHeight={300}
+                            initialDimension={{ width: 960, height: 300 }}
+                        >
                             <ComposedChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                                 <XAxis

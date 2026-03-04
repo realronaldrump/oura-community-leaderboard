@@ -46,7 +46,13 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ data, dataKey, color, heigh
 
   return (
     <div style={{ height, width: '100%' }}>
-      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={height}>
+      <ResponsiveContainer
+        width="100%"
+        height="100%"
+        minWidth={0}
+        minHeight={height}
+        initialDimension={{ width: 400, height }}
+      >
         <LineChart data={chartData}>
           <XAxis
             dataKey="day"

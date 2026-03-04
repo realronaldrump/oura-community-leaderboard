@@ -848,7 +848,13 @@ const Dashboard: React.FC = () => {
                             {sessionHistory.length > 0 && (
                                 <div className="chart-container" style={{ height: 180 }}>
                                     <h4 className="chart-label">HRV Trend · 30 Days</h4>
-                                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={100}>
+                                    <ResponsiveContainer
+                                        width="100%"
+                                        height="100%"
+                                        minWidth={0}
+                                        minHeight={100}
+                                        initialDimension={{ width: 480, height: 100 }}
+                                    >
                                         <LineChart data={sessionHistory.slice(0, 30).reverse()}>
                                             <XAxis dataKey="day" tick={{ fill: '#444', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(val) => val.slice(5)} />
                                             <YAxis tick={{ fill: '#444', fontSize: 10 }} axisLine={false} tickLine={false} unit=" ms" />

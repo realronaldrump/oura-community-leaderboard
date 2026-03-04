@@ -404,7 +404,13 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                 {config.title} History
                             </h4>
                             <div style={{ height: 200 }}>
-                                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={150}>
+                                <ResponsiveContainer
+                                    width="100%"
+                                    height="100%"
+                                    minWidth={0}
+                                    minHeight={150}
+                                    initialDimension={{ width: 560, height: 180 }}
+                                >
                                     <AreaChart data={filteredData}>
                                         <defs>
                                             <linearGradient id={`colorGradient-${metricType}`} x1="0" y1="0" x2="0" y2="1">
