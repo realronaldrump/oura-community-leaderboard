@@ -1,10 +1,14 @@
 const OURA_TOKEN_URL = 'https://api.ouraring.com/oauth/token';
+const DEFAULT_OURA_CLIENT_ID = '92e4c379-b278-4c42-a7c0-db088b67680f';
 
 const getOAuthConfig = (): { clientId: string; clientSecret: string } | null => {
-    const clientId = process.env.OURA_CLIENT_ID?.trim() || '';
+    const clientId =
+        process.env.OURA_CLIENT_ID?.trim() ||
+        process.env.VITE_OURA_CLIENT_ID?.trim() ||
+        DEFAULT_OURA_CLIENT_ID;
     const clientSecret = process.env.OURA_CLIENT_SECRET?.trim() || '';
 
-    if (!clientId || !clientSecret) {
+    if (!clientSecret) {
         return null;
     }
 
@@ -26,7 +30,7 @@ export default async function handler(req: any, res: any) {
         if (!config) {
             sendJson(res, 500, {
                 error: 'missing_oauth_config',
-                details: 'Set OURA_CLIENT_ID and OURA_CLIENT_SECRET in the server environment.',
+                details: 'Set OURA_CLIENT_SECRET in the server environment (OURA_CLIENT_ID is optional).',
             });
             return;
         }
