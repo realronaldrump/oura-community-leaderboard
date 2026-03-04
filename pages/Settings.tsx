@@ -38,6 +38,26 @@ const getLatestDay = (items?: Array<{ day?: string }>): string | null => {
     }, null);
 };
 
+const buildQuickCheckBaseline = (sleep: any[], readiness: any[], activity: any[]): DailyStats => ({
+    sleep,
+    readiness,
+    activity,
+    session: [],
+    spo2: [],
+    stress: [],
+    resilience: [],
+    heartrate: [],
+    workout: [],
+    guidedSession: [],
+    sleepTime: [],
+    tag: [],
+    enhancedTag: [],
+    restModePeriod: [],
+    ringConfiguration: [],
+    cardiovascularAge: [],
+    vo2Max: [],
+});
+
 const Settings: React.FC = () => {
     const {
         activeProfile,
@@ -137,15 +157,30 @@ const Settings: React.FC = () => {
         });
 
         try {
-            const token = await getAccessTokenForProfile(activeProfile.id);
             const endDay = toDay(new Date());
             const startDay = shiftDay(endDay, -QUICK_CHECK_LOOKBACK_DAYS);
 
-            const [sleep, readiness, activity] = await Promise.all([
-                ouraService.getDailySleep(token, startDay, endDay),
-                ouraService.getDailyReadiness(token, startDay, endDay),
-                ouraService.getDailyActivity(token, startDay, endDay),
-            ]);
+            const runCheck = async (forceRefresh: boolean = false) => {
+                const token = await getAccessTokenForProfile(activeProfile.id, { forceRefresh });
+                return Promise.all([
+                    ouraService.getDailySleep(token, startDay, endDay),
+                    ouraService.getDailyReadiness(token, startDay, endDay),
+                    ouraService.getDailyActivity(token, startDay, endDay),
+                ]);
+            };
+
+            let sleep: any[] = [];
+            let readiness: any[] = [];
+            let activity: any[] = [];
+
+            try {
+                [sleep, readiness, activity] = await runCheck(false);
+            } catch (error) {
+                const message = error instanceof Error ? error.message.toLowerCase() : '';
+                const shouldRetry = message.includes('unauthorized') || message.includes('401');
+                if (!shouldRetry) throw error;
+                [sleep, readiness, activity] = await runCheck(true);
+            }
 
             const apiLatestDays = {
                 sleep: getLatestDay(sleep),
@@ -154,10 +189,34 @@ const Settings: React.FC = () => {
             };
 
             const cached = queryClient.getQueryData(['dailyStats', activeProfile.id]) as DailyStats | undefined;
+            const hasLocalBaseline = Boolean(
+                getLatestDay(cached?.sleep) ||
+                getLatestDay(cached?.readiness) ||
+                getLatestDay(cached?.activity)
+            );
+
+            let effectiveCached = cached;
+            let hydratedFromQuickCheck = false;
+
+            if (!hasLocalBaseline) {
+                hydratedFromQuickCheck = true;
+
+                effectiveCached = cached
+                    ? {
+                        ...cached,
+                        sleep: cached.sleep?.length ? cached.sleep : sleep,
+                        readiness: cached.readiness?.length ? cached.readiness : readiness,
+                        activity: cached.activity?.length ? cached.activity : activity,
+                    }
+                    : buildQuickCheckBaseline(sleep, readiness, activity);
+
+                queryClient.setQueryData(['dailyStats', activeProfile.id], effectiveCached);
+            }
+
             const localLatestDays = {
-                sleep: getLatestDay(cached?.sleep),
-                readiness: getLatestDay(cached?.readiness),
-                activity: getLatestDay(cached?.activity),
+                sleep: getLatestDay(effectiveCached?.sleep),
+                readiness: getLatestDay(effectiveCached?.readiness),
+                activity: getLatestDay(effectiveCached?.activity),
             };
 
             const staleMetrics: string[] = [];
@@ -191,12 +250,16 @@ const Settings: React.FC = () => {
                 details.push(`No recent Oura data returned for: ${noRecentApiData.join(', ')}`);
             }
 
+            if (hydratedFromQuickCheck) {
+                details.push('Local metric cache was empty and has been hydrated from this quick check.');
+            }
+
             let status: QuickCheckStatus = 'ok';
             let message = 'Oura API is working and cached metrics look up to date.';
 
-            if (!cached) {
-                status = 'warning';
-                message = 'Oura API is working, but this session has no cached metrics loaded yet.';
+            if (hydratedFromQuickCheck) {
+                status = 'ok';
+                message = 'Oura API is working and local metrics cache has been refreshed.';
             } else if (staleMetrics.length > 0) {
                 status = 'warning';
                 message = 'Oura API is working, but some cached metrics are behind the latest Oura data.';

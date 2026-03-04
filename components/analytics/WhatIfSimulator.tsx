@@ -9,6 +9,9 @@ interface WhatIfSimulatorProps {
     usersData: Array<{ data: DailyStats | undefined }>;
 }
 
+type SimulatorMode = 'simple' | 'advanced';
+type TimeWindowOption = 30 | 90 | 180 | 'all';
+
 type MetricOption = {
     metric: 'deep_sleep' | 'steps' | 'hrv' | 'sleep_duration';
     label: string;
@@ -74,6 +77,19 @@ const TARGET_SCORE_OPTIONS: Array<{ key: WhatIfTargetScore; label: string }> = [
     { key: 'activity', label: 'Activity' }
 ];
 
+const LOOKBACK_OPTIONS: Array<{ key: TimeWindowOption; label: string }> = [
+    { key: 30, label: '30D' },
+    { key: 90, label: '90D' },
+    { key: 180, label: '180D' },
+    { key: 'all', label: 'All' }
+];
+
+const OUTLIER_OPTIONS: Array<{ value: number; label: string }> = [
+    { value: 0, label: 'No trim' },
+    { value: 0.05, label: '5% trim' },
+    { value: 0.1, label: '10% trim' }
+];
+
 const DEFAULT_LOOKBACK_DAYS = 90;
 const DEFAULT_OUTLIER_TRIM = 0.05;
 
@@ -104,9 +120,13 @@ const formatAdjustment = (value: number, unit: string): string => {
 };
 
 const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }) => {
+    const [mode, setMode] = useState<SimulatorMode>('simple');
     const [selectedMetric, setSelectedMetric] = useState<MetricOption>(SCENARIO_OPTIONS[0]);
     const [selectedTargetScore, setSelectedTargetScore] = useState<WhatIfTargetScore>('readiness');
     const [adjustment, setAdjustment] = useState(SCENARIO_OPTIONS[0].defaultAdjustment);
+    const [lookbackDays, setLookbackDays] = useState<TimeWindowOption>(DEFAULT_LOOKBACK_DAYS);
+    const [outlierTrimPercent, setOutlierTrimPercent] = useState(DEFAULT_OUTLIER_TRIM);
+    const [hideLowReliability, setHideLowReliability] = useState(false);
 
     const selectedTargetLabel = TARGET_SCORE_OPTIONS.find(option => option.key === selectedTargetScore)?.label || 'Readiness';
 
@@ -116,8 +136,8 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
             adjustment,
             unit: selectedMetric.unit,
             targetScore: selectedTargetScore,
-            lookbackDays: DEFAULT_LOOKBACK_DAYS,
-            outlierTrimPercent: DEFAULT_OUTLIER_TRIM
+            lookbackDays: mode === 'advanced' ? lookbackDays : DEFAULT_LOOKBACK_DAYS,
+            outlierTrimPercent: mode === 'advanced' ? outlierTrimPercent : DEFAULT_OUTLIER_TRIM
         };
 
         const usersDataFormatted = profiles.map((profile, idx) => ({
@@ -128,15 +148,22 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
 
         if (usersDataFormatted.length === 0) return [];
         return simulateWhatIf(scenario, usersDataFormatted);
-    }, [profiles, usersData, selectedMetric, selectedTargetScore, adjustment]);
+    }, [profiles, usersData, selectedMetric, selectedTargetScore, adjustment, mode, lookbackDays, outlierTrimPercent]);
+
+    const visibleResults = useMemo(() => {
+        if (mode === 'advanced' && hideLowReliability) {
+            return results.filter(result => result.reliability !== 'low');
+        }
+        return results;
+    }, [results, mode, hideLowReliability]);
 
     const summary = useMemo(() => {
-        if (results.length === 0) return null;
-        const averageChange = results.reduce((sum, result) => sum + result.projectedChange, 0) / results.length;
-        const reliableCount = results.filter(result => result.reliability !== 'low').length;
-        const topResponder = results[0];
-        return { averageChange, reliableCount, topResponder };
-    }, [results]);
+        if (visibleResults.length === 0) return null;
+        const averageChange = visibleResults.reduce((sum, result) => sum + result.projectedChange, 0) / visibleResults.length;
+        const reliableCount = visibleResults.filter(result => result.reliability !== 'low').length;
+        const topResponder = visibleResults[0];
+        return { averageChange, reliableCount, topResponder, total: visibleResults.length };
+    }, [visibleResults]);
 
     if (usersData.every(u => !u.data)) {
         return (
@@ -155,9 +182,33 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
     return (
         <div className="space-y-6">
             <div>
-                <h3 className="section-header mb-2">What-If Simulator</h3>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
+                    <h3 className="section-header mb-0">What-If Simulator</h3>
+                    <div className="inline-flex rounded-xl p-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)]">
+                        <button
+                            onClick={() => setMode('simple')}
+                            className={`px-3 min-h-[44px] rounded-lg text-xs font-medium transition-all ${mode === 'simple'
+                                ? 'bg-[var(--accent)] text-black'
+                                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                                }`}
+                        >
+                            Simple
+                        </button>
+                        <button
+                            onClick={() => setMode('advanced')}
+                            className={`px-3 min-h-[44px] rounded-lg text-xs font-medium transition-all ${mode === 'advanced'
+                                ? 'bg-[var(--accent)] text-black'
+                                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                                }`}
+                        >
+                            Advanced
+                        </button>
+                    </div>
+                </div>
                 <p className="text-sm text-[var(--text-secondary)]">
-                    Pick one behavior change and see the likely next-day impact. The model uses recent history automatically.
+                    {mode === 'simple'
+                        ? 'Pick one behavior change and see the likely next-day impact.'
+                        : 'Tune model settings while keeping the same clear forecast cards.'}
                 </p>
             </div>
 
@@ -234,12 +285,66 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                         <span>+{selectedMetric.max}</span>
                     </div>
                 </div>
+
+                {mode === 'advanced' && (
+                    <div className="pt-2 border-t border-[var(--border-subtle)] space-y-4">
+                        <div>
+                            <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2 block">
+                                Model Window
+                            </label>
+                            <div className="inline-flex rounded-xl p-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)]">
+                                {LOOKBACK_OPTIONS.map((option) => (
+                                    <button
+                                        key={String(option.key)}
+                                        onClick={() => setLookbackDays(option.key)}
+                                        className={`px-3 min-h-[44px] rounded-lg text-xs font-medium transition-all ${lookbackDays === option.key
+                                            ? 'bg-[var(--accent)] text-black'
+                                            : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                                            }`}
+                                    >
+                                        {option.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2 block">
+                                Outlier Handling
+                            </label>
+                            <div className="flex gap-2 flex-wrap">
+                                {OUTLIER_OPTIONS.map((option) => (
+                                    <button
+                                        key={option.label}
+                                        onClick={() => setOutlierTrimPercent(option.value)}
+                                        className={`px-3 min-h-[44px] rounded-lg text-xs font-medium border transition-all ${outlierTrimPercent === option.value
+                                            ? 'border-[var(--accent)]/50 bg-[var(--accent)]/15 text-[var(--accent)]'
+                                            : 'border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                                            }`}
+                                    >
+                                        {option.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                            <input
+                                type="checkbox"
+                                checked={hideLowReliability}
+                                onChange={(e) => setHideLowReliability(e.target.checked)}
+                                className="rounded border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--accent)] focus:ring-[var(--accent)]"
+                            />
+                            Hide low-confidence models
+                        </label>
+                    </div>
+                )}
             </div>
 
             <div className="card p-5 sm:p-6 bg-[var(--accent)]/5 border-[var(--accent)]/20">
-                <p className="text-base sm:text-lg text-[#F8FAFC] leading-relaxed">
+                <p className="text-base sm:text-lg leading-relaxed" style={{ color: 'var(--text-primary)' }}>
                     If I {adjustment >= 0 ? 'increase' : 'decrease'} my{' '}
-                    <span className="font-semibold text-[#E5E7EB]">{selectedMetric.label.toLowerCase()}</span> by{' '}
+                    <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{selectedMetric.label.toLowerCase()}</span> by{' '}
                     <span className="font-bold text-[var(--accent)]">{formatAdjustment(Math.abs(adjustment), selectedMetric.unit)}</span>,
                     what is the likely effect on next-day {selectedTargetLabel.toLowerCase()} score?
                 </p>
@@ -263,16 +368,16 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                     <div className="card p-4">
                         <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Usable Models</p>
                         <p className="text-2xl font-mono font-bold text-[var(--text-primary)] mt-1">
-                            {summary.reliableCount}/{results.length}
+                            {summary.reliableCount}/{summary.total}
                         </p>
                         <p className="text-xs text-[var(--text-muted)] mt-1">medium/high confidence</p>
                     </div>
                 </div>
             )}
 
-            {results.length > 0 ? (
+            {visibleResults.length > 0 ? (
                 <div className="space-y-3">
-                    {results.map((result) => {
+                    {visibleResults.map((result) => {
                         const reliability = RELIABILITY_UI[result.reliability];
                         return (
                             <div key={result.userId} className="card p-4 sm:p-5">
@@ -333,12 +438,14 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
             ) : (
                 <div className="card p-8 text-center">
                     <p className="text-[var(--text-muted)]">
-                        Not enough matched history to model this scenario yet. Keep tracking for at least 2 weeks.
+                        {results.length === 0
+                            ? 'Not enough matched history to model this scenario yet. Keep tracking for at least 2 weeks.'
+                            : 'No models match your current Advanced filters. Try showing low-confidence models or widening the model window.'}
                     </p>
                 </div>
             )}
 
-            {results.length > 1 && (
+            {visibleResults.length > 1 && (
                 <div className="card p-4 bg-[var(--bg-elevated)]">
                     <div className="flex items-start gap-3">
                         <Lightbulb className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
