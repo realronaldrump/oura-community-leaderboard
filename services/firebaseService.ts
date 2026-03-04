@@ -9,9 +9,10 @@ import {
     DocumentData
 } from "firebase/firestore";
 import { db } from "./firebaseConfig";
-import { UserProfile } from "../types";
+import { UserProfile, WebhookSignal } from "../types";
 
 const PROFILES_COLLECTION = "profiles";
+const WEBHOOK_SIGNALS_COLLECTION = "webhookSignals";
 
 export const firebaseService = {
     /**
@@ -75,5 +76,33 @@ export const firebaseService = {
             console.error("Error deleting profile from Firebase:", error);
             throw error;
         }
+    },
+
+    /**
+     * Subscribe to webhook signal updates for a specific Oura user id.
+     */
+    subscribeToWebhookSignal: (
+        ouraUserId: string,
+        callback: (signal: WebhookSignal | null) => void,
+        onError?: (error: any) => void
+    ) => {
+        const signalRef = doc(db, WEBHOOK_SIGNALS_COLLECTION, ouraUserId);
+        return onSnapshot(
+            signalRef,
+            (snapshot) => {
+                if (!snapshot.exists()) {
+                    callback(null);
+                    return;
+                }
+                callback(snapshot.data() as WebhookSignal);
+            },
+            (error) => {
+                if (onError) {
+                    onError(error);
+                } else {
+                    console.error("Webhook signal subscription error:", error);
+                }
+            }
+        );
     }
 };

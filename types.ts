@@ -36,6 +36,16 @@ export interface UserProfile {
   }>;
 }
 
+export interface WebhookSignal {
+  ouraUserId: string;
+  lastEventAt?: string;
+  lastReceivedAt?: string;
+  lastEventType?: string;
+  lastDataType?: string;
+  lastObjectId?: string | null;
+  updateCount?: number;
+}
+
 export interface SleepContributors {
   deep_sleep?: number | null;
   efficiency?: number | null;
@@ -84,7 +94,7 @@ export interface SleepSession {
   sleep_score_delta?: number | null;
   time_in_bed?: number | null; // Duration in seconds
   total_sleep_duration?: number | null; // Duration in seconds
-  type?: 'deleted' | 'sleep' | 'long_sleep' | 'rest';
+  type?: 'deleted' | 'sleep' | 'long_sleep' | 'late_nap' | 'rest';
   heart_rate?: SampleModel | null; // HR time series
   hrv?: SampleModel | null; // HRV time series
 }

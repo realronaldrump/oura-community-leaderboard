@@ -92,7 +92,7 @@ const toTimestampMs = (value?: string | null): number => {
 
 const countDefinedValues = (value: any): number => {
     if (!value || typeof value !== 'object') return 0;
-    return Object.values(value).reduce((count, entry) => {
+    return Object.values(value as Record<string, unknown>).reduce<number>((count, entry) => {
         if (entry == null) return count;
         if (Array.isArray(entry)) return count + (entry.length > 0 ? 1 : 0);
         if (typeof entry === 'object') return count + countDefinedValues(entry);

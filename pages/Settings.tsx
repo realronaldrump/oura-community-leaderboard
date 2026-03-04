@@ -5,6 +5,7 @@ import { fullSync, SyncProgress } from '../services/syncService';
 import SyncModal from '../components/SyncModal';
 import PrimaryProfileSwitcher from '../components/PrimaryProfileSwitcher';
 import { ouraService } from '../services/ouraService';
+import { webhookService } from '../services/webhookService';
 import { DailyStats } from '../types';
 import { getProfileDisplayName } from '../utils/profileName';
 import { formatLocalISODate } from '../utils/date';
@@ -13,6 +14,13 @@ type QuickCheckStatus = 'idle' | 'running' | 'ok' | 'warning' | 'error';
 
 type QuickCheckState = {
     status: QuickCheckStatus;
+    message: string;
+    details: string[];
+    checkedAt: string | null;
+};
+
+type WebhookStatusState = {
+    status: 'idle' | 'running' | 'ok' | 'warning' | 'error';
     message: string;
     details: string[];
     checkedAt: string | null;
@@ -98,6 +106,12 @@ const Settings: React.FC = () => {
         details: [],
         checkedAt: null,
     });
+    const [webhookStatus, setWebhookStatus] = useState<WebhookStatusState>({
+        status: 'idle',
+        message: '',
+        details: [],
+        checkedAt: null,
+    });
 
     React.useEffect(() => {
         if (activeProfile) {
@@ -110,7 +124,57 @@ const Settings: React.FC = () => {
             details: [],
             checkedAt: null,
         });
+        setWebhookStatus({
+            status: 'idle',
+            message: '',
+            details: [],
+            checkedAt: null,
+        });
     }, [activeProfile]);
+
+    React.useEffect(() => {
+        if (!activeProfile) return;
+        let cancelled = false;
+
+        webhookService.getStatus()
+            .then((result) => {
+                if (cancelled) return;
+                if (!result.configured) {
+                    const missing = result.missing?.length ? result.missing.join(', ') : 'server webhook configuration';
+                    setWebhookStatus({
+                        status: 'warning',
+                        message: 'Live updates are not configured on the server yet.',
+                        details: [`Missing: ${missing}`],
+                        checkedAt: new Date().toISOString(),
+                    });
+                    return;
+                }
+
+                const activeSubscriptions = result.subscriptions?.length || 0;
+                const details = [
+                    `Callback URL: ${result.callbackUrl}`,
+                    `Data types: ${result.dataTypes.join(', ')}`,
+                    `Subscriptions active: ${activeSubscriptions}`,
+                ];
+
+                setWebhookStatus({
+                    status: activeSubscriptions > 0 ? 'ok' : 'warning',
+                    message: activeSubscriptions > 0
+                        ? 'Live webhook updates are enabled.'
+                        : 'Webhook config is ready, but subscriptions are not active yet.',
+                    details,
+                    checkedAt: new Date().toISOString(),
+                });
+            })
+            .catch(() => {
+                if (cancelled) return;
+                // Keep status idle; manual "Enable Live Updates" can surface full diagnostics.
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeProfile?.id]);
 
     const handleSaveProfile = async () => {
         if (!activeProfile) return;
@@ -329,6 +393,55 @@ const Settings: React.FC = () => {
         }
     };
 
+    const handleEnableLiveUpdates = async () => {
+        setWebhookStatus({
+            status: 'running',
+            message: 'Configuring Oura webhook subscriptions...',
+            details: [],
+            checkedAt: null,
+        });
+
+        try {
+            const result = await webhookService.ensureSetup();
+            if (!result.configured) {
+                const missing = result.missing?.length ? result.missing.join(', ') : 'server webhook configuration';
+                setWebhookStatus({
+                    status: 'warning',
+                    message: 'Live updates are not configured on the server yet.',
+                    details: [`Missing: ${missing}`],
+                    checkedAt: new Date().toISOString(),
+                });
+                return;
+            }
+
+            const createdCount = result.created?.length || 0;
+            const renewedCount = result.renewed?.length || 0;
+            const existingCount = result.existing?.length || 0;
+            const totalActive = createdCount + renewedCount + existingCount;
+            const details = [
+                `Callback URL: ${result.callbackUrl}`,
+                `Data types: ${result.dataTypes.join(', ')}`,
+                `Subscriptions active: ${totalActive}`,
+                `Created: ${createdCount} | Renewed: ${renewedCount} | Existing: ${existingCount}`,
+            ];
+
+            setWebhookStatus({
+                status: 'ok',
+                message: 'Live webhook updates are enabled.',
+                details,
+                checkedAt: new Date().toISOString(),
+            });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown webhook setup error';
+            setWebhookStatus({
+                status: 'error',
+                message: 'Could not enable live webhook updates.',
+                details: [message],
+                checkedAt: new Date().toISOString(),
+            });
+        }
+    };
+
     if (!activeProfile) {
         return (
             <div className="min-h-screen bg-[#0C0C0C] text-[#FAFAFA] flex flex-col items-center justify-center p-4">
@@ -478,6 +591,48 @@ const Settings: React.FC = () => {
                                     {quickCheck.checkedAt && (
                                         <p className="mt-2 text-[11px] opacity-80">
                                             Checked {new Date(quickCheck.checkedAt).toLocaleString()}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="mt-5 pt-5 border-t border-[#222]">
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1">
+                                    <p className="text-[#FAFAFA] font-medium text-sm">Live Webhook Updates</p>
+                                    <p className="text-[#666] text-xs mt-1 leading-relaxed">
+                                        Configure Oura webhooks so the Today view refreshes as soon as Oura publishes new data.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={handleEnableLiveUpdates}
+                                    disabled={webhookStatus.status === 'running'}
+                                    className="px-4 py-2 border border-[#333] text-[#FAFAFA] font-medium rounded-md text-sm hover:bg-[#1C1C1C] transition-colors whitespace-nowrap disabled:opacity-50"
+                                >
+                                    {webhookStatus.status === 'running' ? 'Configuring...' : 'Enable Live Updates'}
+                                </button>
+                            </div>
+
+                            {webhookStatus.status !== 'idle' && (
+                                <div
+                                    className={`mt-3 rounded-md border px-3 py-2.5 text-xs ${
+                                        webhookStatus.status === 'ok'
+                                            ? 'border-[#00C896]/40 bg-[#00C896]/10 text-[#9AF0D3]'
+                                            : webhookStatus.status === 'warning'
+                                                ? 'border-[#F59E0B]/40 bg-[#F59E0B]/10 text-[#FCD34D]'
+                                                : webhookStatus.status === 'error'
+                                                    ? 'border-[#F87171]/40 bg-[#F87171]/10 text-[#FCA5A5]'
+                                                    : 'border-[#333] bg-[#0C0C0C] text-[#A0A0A0]'
+                                    }`}
+                                >
+                                    <p className="font-medium">{webhookStatus.message}</p>
+                                    {webhookStatus.details.map((detail, index) => (
+                                        <p key={`${detail}-${index}`} className="mt-1.5">{detail}</p>
+                                    ))}
+                                    {webhookStatus.checkedAt && (
+                                        <p className="mt-2 text-[11px] opacity-80">
+                                            Checked {new Date(webhookStatus.checkedAt).toLocaleString()}
                                         </p>
                                     )}
                                 </div>

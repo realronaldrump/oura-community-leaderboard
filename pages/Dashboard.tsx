@@ -36,6 +36,7 @@ import {
     ChallengeManager
 } from '../components/analytics';
 import { useAutoSync, formatLastSync } from '../hooks/useAutoSync';
+import { useWebhookRefresh } from '../hooks/useWebhookRefresh';
 import { X, RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain } from 'lucide-react';
 import { getProfileDisplayName } from '../utils/profileName';
 import { formatLocalISODate } from '../utils/date';
@@ -101,6 +102,8 @@ const shiftIsoDay = (day: string, deltaDays: number): string => {
     return formatLocalISODate(parsed);
 };
 
+const NEXT_DAY_SESSION_TYPES = new Set(['sleep', 'long_sleep', 'late_nap']);
+
 const isScoreReady = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value);
 
@@ -139,7 +142,7 @@ const getSessionCandidateDays = (session: SleepSession): Set<string> => {
     // fallback for sessions that contribute to next-day daily scores.
     if (
         isIsoDay(session.day) &&
-        (session.type === 'sleep' || session.type === 'long_sleep' || session.type === 'late_nap')
+        Boolean(session.type && NEXT_DAY_SESSION_TYPES.has(session.type))
     ) {
         days.add(shiftIsoDay(session.day, 1));
     }
@@ -249,6 +252,7 @@ const Dashboard: React.FC = () => {
     // Auto-sync every hour
     const profileIds = useMemo(() => profiles.map(p => p.id), [profiles]);
     const { lastSyncTime } = useAutoSync(profileIds, !!activeProfile);
+    useWebhookRefresh(activeProfile, viewMode === 'today');
 
     // Manual sync
     const handleSyncAllData = async () => {
@@ -278,7 +282,9 @@ const Dashboard: React.FC = () => {
 
     // Data queries
     const userQueries = useQueries({
-        queries: profiles.map(p => ({
+        queries: profiles.map(p => {
+            const isLiveProfile = viewMode === 'today' && p.id === activeProfile?.id;
+            return ({
             queryKey: ['dailyStats', p.id],
             queryFn: async () => {
                 try {
@@ -300,12 +306,13 @@ const Dashboard: React.FC = () => {
             staleTime: viewMode === 'today' && p.id === activeProfile?.id
                 ? LIVE_DAILY_STATS_STALE_MS
                 : DEFAULT_DAILY_STATS_STALE_MS,
-            refetchInterval: viewMode === 'today' && p.id === activeProfile?.id
+            refetchInterval: isLiveProfile
                 ? LIVE_DAILY_STATS_REFETCH_MS
-                : false,
+                : (false as const),
             refetchIntervalInBackground: false,
-            refetchOnWindowFocus: viewMode === 'today' && p.id === activeProfile?.id ? 'always' : true,
-        }))
+            refetchOnWindowFocus: isLiveProfile ? ('always' as const) : true,
+        });
+        })
     });
 
     const allTimeQueries = useQueries({
@@ -745,7 +752,7 @@ const Dashboard: React.FC = () => {
 
     useEffect(() => {
         if (!profiles.length) return;
-        let timer: ReturnType<typeof window.setTimeout> | null = null;
+        let timer: number | null = null;
 
         const scheduleMidnightInvalidation = () => {
             const now = new Date();

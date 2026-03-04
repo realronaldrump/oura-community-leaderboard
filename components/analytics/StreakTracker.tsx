@@ -77,7 +77,10 @@ const getStreakLabel = (type: StreakType): string => {
         case 'early_bedtime': return 'Early Bedtime';
         case 'hrv_improvement': return 'HRV Improvement';
         case 'activity_sync': return 'Activity Sync';
-        default: return type.split('_').map(w => `${w[0].toUpperCase()}${w.slice(1)}`).join(' ');
+        default: {
+            const fallback = String(type);
+            return fallback.split('_').map(w => `${w[0].toUpperCase()}${w.slice(1)}`).join(' ');
+        }
     }
 };
 
