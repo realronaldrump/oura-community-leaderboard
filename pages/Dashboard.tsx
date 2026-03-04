@@ -471,6 +471,11 @@ const Dashboard: React.FC = () => {
     }, [activeProfile?.id]);
 
     useEffect(() => {
+        if (viewMode !== 'today') return;
+        setTodayOverrideDay((current) => (current === todayIsoDay ? current : todayIsoDay));
+    }, [todayIsoDay, viewMode]);
+
+    useEffect(() => {
         const lastIndex = Math.max(availableDays.length - 1, 0);
         if (dateIndex > lastIndex) {
             setDateIndex(lastIndex);
