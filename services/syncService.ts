@@ -13,6 +13,11 @@ export interface SyncProgress {
 
 export type SyncProgressCallback = (progress: SyncProgress) => void;
 
+type SyncAuthContext = {
+    grantedScopes?: string[];
+    availabilityKey?: string;
+};
+
 const getToday = () => formatLocalISODate();
 
 const describeCoverage = (data: DailyStats): { start: string; end: string; days: number } | null => {
@@ -43,7 +48,8 @@ const describeCoverage = (data: DailyStats): { start: string; end: string; days:
 export const smartSync = async (
     token: string,
     existingData: DailyStats | undefined,
-    onProgress: SyncProgressCallback
+    onProgress: SyncProgressCallback,
+    authContext: SyncAuthContext = {}
 ): Promise<Partial<DailyStats>> => {
     const today = getToday();
 
@@ -58,6 +64,8 @@ export const smartSync = async (
     const data = await syncDailyStats(token, existingData, {
         mode: 'incremental',
         endDate: today,
+        grantedScopes: authContext.grantedScopes,
+        availabilityKey: authContext.availabilityKey,
     });
 
     const coverage = describeCoverage(data as DailyStats);
@@ -81,7 +89,8 @@ export const smartSync = async (
  */
 export const fullSync = async (
     token: string,
-    onProgress: SyncProgressCallback
+    onProgress: SyncProgressCallback,
+    authContext: SyncAuthContext = {}
 ): Promise<DailyStats> => {
     const today = getToday();
 
@@ -96,6 +105,8 @@ export const fullSync = async (
     const data = await syncDailyStats(token, undefined, {
         mode: 'full',
         endDate: today,
+        grantedScopes: authContext.grantedScopes,
+        availabilityKey: authContext.availabilityKey,
     });
 
     const coverage = describeCoverage(data);

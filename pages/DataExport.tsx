@@ -36,6 +36,9 @@ const DataExport: React.FC = () => {
                 return fetchDailyStats(token, {
                     start: FULL_HISTORY_START_DATE,
                     end: formatLocalISODate()
+                }, {
+                    grantedScopes: activeProfile.grantedScopes,
+                    availabilityKey: activeProfile.id,
                 });
             };
 

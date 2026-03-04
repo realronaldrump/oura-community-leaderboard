@@ -9,6 +9,8 @@ const INCREMENTAL_OVERLAP_DAYS = 3;
 
 type FetchConfig = {
     includeStaticCollections?: boolean;
+    grantedScopes?: string[];
+    availabilityKey?: string;
 };
 
 type SyncMode = 'incremental' | 'full';
@@ -16,6 +18,8 @@ type SyncMode = 'incremental' | 'full';
 type SyncDailyStatsOptions = {
     mode?: SyncMode;
     endDate?: string;
+    grantedScopes?: string[];
+    availabilityKey?: string;
 };
 
 const getToday = (): string => formatLocalISODate();
@@ -25,6 +29,23 @@ const shiftDate = (day: string, daysDelta: number): string => {
     if (Number.isNaN(d.getTime())) return day;
     d.setDate(d.getDate() + daysDelta);
     return formatLocalISODate(d);
+};
+
+const normalizeScope = (scope: string): string =>
+    scope.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const normalizeGrantedScopes = (grantedScopes?: string[]): Set<string> => {
+    if (!grantedScopes?.length) return new Set<string>();
+    return new Set(
+        grantedScopes
+            .filter((scope): scope is string => typeof scope === 'string' && scope.trim().length > 0)
+            .map((scope) => normalizeScope(scope))
+    );
+};
+
+const hasAnyScope = (scopeSet: Set<string>, candidates: string[]): boolean => {
+    if (scopeSet.size === 0) return true;
+    return candidates.some((candidate) => scopeSet.has(normalizeScope(candidate)));
 };
 
 const sortByDayDesc = (a: any, b: any): number => {
@@ -211,19 +232,25 @@ const buildDailyStats = (
 export const fetchDailyStats = async (
     token: string,
     dateRange?: { start: string; end?: string },
-    _grantedScopes?: string[],
     config: FetchConfig = {}
 ): Promise<DailyStats> => {
     const includeStaticCollections = config.includeStaticCollections ?? true;
+    const availabilityKey = config.availabilityKey;
+    const normalizedScopes = normalizeGrantedScopes(config.grantedScopes);
+    const canFetchSpO2 = hasAnyScope(normalizedScopes, ['spo2Daily', 'spo2']);
+    const canFetchHeartrate = hasAnyScope(normalizedScopes, ['heartrate']);
+    const canFetchWorkout = hasAnyScope(normalizedScopes, ['workout']);
+    const canFetchSession = hasAnyScope(normalizedScopes, ['session']);
+    const canFetchTag = hasAnyScope(normalizedScopes, ['tag', 'tag user', 'enhanced_tag']);
     const start = dateRange?.start || shiftDate(getToday(), -INITIAL_RECENT_DAYS);
     const end = dateRange?.end;
 
     // Phase 1: Critical endpoints the dashboard needs to render scores + details
     const criticalRequests = [
-        ouraService.getDailySleep(token, start, end),
-        ouraService.getDailyReadiness(token, start, end),
-        ouraService.getDailyActivity(token, start, end),
-        ouraService.getSleepSessions(token, start, end),
+        ouraService.getDailySleep(token, start, end, { availabilityKey }),
+        ouraService.getDailyReadiness(token, start, end, { availabilityKey }),
+        ouraService.getDailyActivity(token, start, end, { availabilityKey }),
+        ouraService.getSleepSessions(token, start, end, { availabilityKey }),
     ];
 
     const criticalSettled = await Promise.allSettled(criticalRequests);
@@ -235,19 +262,19 @@ export const fetchDailyStats = async (
     // Limit heartrate to 2 days for the dashboard (the slowest, most paginated endpoint)
     const hrStart = shiftDate(end || getToday(), -2);
     const supplementaryRequests = [
-        ouraService.getDailySpO2(token, start, end),
-        ouraService.getDailyStress(token, start, end),
-        ouraService.getDailyResilience(token, start, end),
-        ouraService.getHeartRate(token, hrStart, end),
-        ouraService.getWorkouts(token, start, end),
-        ouraService.getSessions(token, start, end),
-        ouraService.getSleepTime(token, start, end),
-        ouraService.getTags(token, start, end),
-        ouraService.getEnhancedTags(token, start, end),
-        ouraService.getRestModePeriods(token, start, end),
-        includeStaticCollections ? ouraService.getRingConfiguration(token) : Promise.resolve([]),
-        ouraService.getDailyCardiovascularAge(token, start, end),
-        ouraService.getVO2Max(token, start, end),
+        canFetchSpO2 ? ouraService.getDailySpO2(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        ouraService.getDailyStress(token, start, end, { availabilityKey }),
+        ouraService.getDailyResilience(token, start, end, { availabilityKey }),
+        canFetchHeartrate ? ouraService.getHeartRate(token, hrStart, end, { availabilityKey }) : Promise.resolve([]),
+        canFetchWorkout ? ouraService.getWorkouts(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        canFetchSession ? ouraService.getSessions(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        canFetchSession ? ouraService.getSleepTime(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        canFetchTag ? ouraService.getTags(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        canFetchTag ? ouraService.getEnhancedTags(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        ouraService.getRestModePeriods(token, start, end, { availabilityKey }),
+        includeStaticCollections ? ouraService.getRingConfiguration(token, { availabilityKey }) : Promise.resolve([]),
+        ouraService.getDailyCardiovascularAge(token, start, end, { availabilityKey }),
+        ouraService.getVO2Max(token, start, end, { availabilityKey }),
     ];
 
     const suppSettled = await Promise.allSettled(supplementaryRequests);
@@ -304,7 +331,11 @@ export const syncDailyStats = async (
         return fetchDailyStats(token, {
             start: FULL_HISTORY_START_DATE,
             end: endDate,
-        }, undefined, { includeStaticCollections: true });
+        }, {
+            includeStaticCollections: true,
+            grantedScopes: options.grantedScopes,
+            availabilityKey: options.availabilityKey,
+        });
     }
 
     const lastDay = getMostRecentDay(existingData);
@@ -315,27 +346,45 @@ export const syncDailyStats = async (
     const delta = await fetchDailyStats(token, {
         start: startDate,
         end: endDate,
-    }, undefined, {
+    }, {
         includeStaticCollections: !existingData,
+        grantedScopes: options.grantedScopes,
+        availabilityKey: options.availabilityKey,
     });
 
     return existingData ? mergeDailyStats(existingData, delta) : delta;
 };
 
-export const useDailyStats = (token: string, enabled: boolean = true) => {
+export const useDailyStats = (
+    token: string,
+    enabled: boolean = true,
+    options?: { grantedScopes?: string[]; availabilityKey?: string }
+) => {
     return useQuery({
         queryKey: ['dailyStats', token],
-        queryFn: () => syncDailyStats(token, undefined, { mode: 'incremental' }),
+        queryFn: () => syncDailyStats(token, undefined, {
+            mode: 'incremental',
+            grantedScopes: options?.grantedScopes,
+            availabilityKey: options?.availabilityKey,
+        }),
         enabled: !!token && enabled,
         staleTime: 1000 * 60 * 30, // 30 minutes
         gcTime: 1000 * 60 * 60 * 24, // Keep cache for 24 hours
     });
 };
 
-export const useAllTimeStats = (token: string, enabled: boolean = true) => {
+export const useAllTimeStats = (
+    token: string,
+    enabled: boolean = true,
+    options?: { grantedScopes?: string[]; availabilityKey?: string }
+) => {
     return useQuery({
         queryKey: ['allTimeStats', token],
-        queryFn: () => syncDailyStats(token, undefined, { mode: 'full' }),
+        queryFn: () => syncDailyStats(token, undefined, {
+            mode: 'full',
+            grantedScopes: options?.grantedScopes,
+            availabilityKey: options?.availabilityKey,
+        }),
         enabled: !!token && enabled,
         staleTime: 1000 * 60 * 60 * 24, // 24 hours
         gcTime: 1000 * 60 * 60 * 24,

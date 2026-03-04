@@ -259,6 +259,9 @@ const Dashboard: React.FC = () => {
             const syncedData = await runWithAutoTokenRefresh(activeProfile.id, (token) =>
                 smartSync(token, existingData, (progress) => {
                     setSyncProgress(progress);
+                }, {
+                    grantedScopes: activeProfile.grantedScopes,
+                    availabilityKey: activeProfile.id,
                 })
             );
             queryClient.setQueryData(['dailyStats', activeProfile.id], syncedData);
@@ -280,7 +283,11 @@ const Dashboard: React.FC = () => {
                 try {
                     const cached = queryClient.getQueryData(['dailyStats', p.id]) as DailyStats | undefined;
                     const synced = await runWithAutoTokenRefresh(p.id, (token) =>
-                        syncDailyStats(token, cached, { mode: 'incremental' })
+                        syncDailyStats(token, cached, {
+                            mode: 'incremental',
+                            grantedScopes: p.grantedScopes,
+                            availabilityKey: p.id,
+                        })
                     );
                     await markProfileSyncSuccess(p.id);
                     return synced;
@@ -305,7 +312,10 @@ const Dashboard: React.FC = () => {
             queryKey: ['allTimeStats', p.id],
             queryFn: async () => {
                 const fullHistory = await runWithAutoTokenRefresh(p.id, (token) =>
-                    fetchDailyStats(token, { start: FULL_HISTORY_START_DATE })
+                    fetchDailyStats(token, { start: FULL_HISTORY_START_DATE }, {
+                        grantedScopes: p.grantedScopes,
+                        availabilityKey: p.id,
+                    })
                 );
                 await markProfileSyncSuccess(p.id);
                 return fullHistory;
@@ -537,7 +547,10 @@ const Dashboard: React.FC = () => {
             queryClient.prefetchQuery({
                 queryKey: allTimeQueryKey,
                 queryFn: () => runWithAutoTokenRefresh(activeProfile.id, (token) =>
-                    fetchDailyStats(token, { start: FULL_HISTORY_START_DATE })
+                    fetchDailyStats(token, { start: FULL_HISTORY_START_DATE }, {
+                        grantedScopes: activeProfile.grantedScopes,
+                        availabilityKey: activeProfile.id,
+                    })
                 ),
                 staleTime: 1000 * 60 * 60 * 24,
             });
@@ -664,8 +677,10 @@ const Dashboard: React.FC = () => {
     );
     const p1Sleep = findLatestByDay(p1Data?.sleep || [], compareDay);
     const p1Readiness = findLatestByDay(p1Data?.readiness || [], compareDay);
+    const p1Activity = findLatestByDay(p1Data?.activity || [], compareDay);
     const p2Sleep = findLatestByDay(p2Data?.sleep || [], compareDay);
     const p2Readiness = findLatestByDay(p2Data?.readiness || [], compareDay);
+    const p2Activity = findLatestByDay(p2Data?.activity || [], compareDay);
     const p1Session = pickBestSession(getSessionsForDay(p1Data?.session, compareDay));
     const p2Session = pickBestSession(getSessionsForDay(p2Data?.session, compareDay));
 
@@ -1258,7 +1273,7 @@ const Dashboard: React.FC = () => {
                         </div>
                         {compareDay ? (
                             <>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                                     <MetricComparisonGroup
                                         title="Readiness" scoreA={p1Readiness?.score} scoreB={p2Readiness?.score}
                                         userAName={compareProfileA?.firstName || compareProfileA?.email?.split('@')[0] || compareEntries[0].name}
@@ -1281,6 +1296,20 @@ const Dashboard: React.FC = () => {
                                             { label: "Efficiency", valA: p1Sleep?.contributors.efficiency, valB: p2Sleep?.contributors.efficiency, displayA: p1Session?.efficiency ? `${p1Session.efficiency}` : undefined, displayB: p2Session?.efficiency ? `${p2Session.efficiency}` : undefined, unit: "%", max: 100 },
                                             { label: "Deep Sleep", valA: p1Sleep?.contributors.deep_sleep, valB: p2Sleep?.contributors.deep_sleep, displayA: p1Session?.deep_sleep_duration ? formatDuration(p1Session.deep_sleep_duration) : undefined, displayB: p2Session?.deep_sleep_duration ? formatDuration(p2Session.deep_sleep_duration) : undefined, max: 100 },
                                             { label: "REM Sleep", valA: p1Sleep?.contributors.rem_sleep, valB: p2Sleep?.contributors.rem_sleep, displayA: p1Session?.rem_sleep_duration ? formatDuration(p1Session.rem_sleep_duration) : undefined, displayB: p2Session?.rem_sleep_duration ? formatDuration(p2Session.rem_sleep_duration) : undefined, max: 100 },
+                                        ]}
+                                    />
+                                    <MetricComparisonGroup
+                                        title="Activity" scoreA={p1Activity?.score} scoreB={p2Activity?.score}
+                                        userAName={compareProfileA?.firstName || compareProfileA?.email?.split('@')[0] || compareEntries[0].name}
+                                        userBName={compareProfileB?.firstName || compareProfileB?.email?.split('@')[0] || compareEntries[1].name}
+                                        defaultOpen={true}
+                                        metrics={[
+                                            { label: "Stay Active", valA: p1Activity?.contributors.stay_active, valB: p2Activity?.contributors.stay_active, displayA: p1Activity?.steps?.toLocaleString(), displayB: p2Activity?.steps?.toLocaleString(), unit: "steps", max: 100 },
+                                            { label: "Meet Daily Targets", valA: p1Activity?.contributors.meet_daily_targets, valB: p2Activity?.contributors.meet_daily_targets, max: 100 },
+                                            { label: "Move Every Hour", valA: p1Activity?.contributors.move_every_hour, valB: p2Activity?.contributors.move_every_hour, displayA: p1Activity?.inactivity_alerts != null ? `${p1Activity.inactivity_alerts}` : undefined, displayB: p2Activity?.inactivity_alerts != null ? `${p2Activity.inactivity_alerts}` : undefined, unit: "alerts", max: 100 },
+                                            { label: "Recovery Time", valA: p1Activity?.contributors.recovery_time, valB: p2Activity?.contributors.recovery_time, max: 100 },
+                                            { label: "Training Frequency", valA: p1Activity?.contributors.training_frequency, valB: p2Activity?.contributors.training_frequency, displayA: formatDuration(p1Activity?.high_activity_time), displayB: formatDuration(p2Activity?.high_activity_time), max: 100 },
+                                            { label: "Training Volume", valA: p1Activity?.contributors.training_volume, valB: p2Activity?.contributors.training_volume, displayA: p1Activity?.active_calories?.toLocaleString(), displayB: p2Activity?.active_calories?.toLocaleString(), unit: "kcal", max: 100 },
                                         ]}
                                     />
                                 </div>

@@ -147,7 +147,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             };
 
             // Clear any cached unavailable-endpoint blacklists for the new token
-            ouraService.clearUnavailableEndpoints(accessToken);
+            ouraService.clearUnavailableEndpoints(accessToken, profileId);
 
             await firebaseService.saveProfile(newProfile);
             setActiveProfileId(profileId);

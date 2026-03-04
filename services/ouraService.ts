@@ -15,11 +15,13 @@ import { formatLocalISODate } from '../utils/date';
 
 type QueryParams = Record<string, string | undefined>;
 type DateWindow = { start: string; end: string };
+type FetchOptions = { optional?: boolean; availabilityKey?: string };
+type DateWindowOptions = FetchOptions & { windowDays?: number };
 
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_RETRIES = 2;
 const RETRY_BACKOFF_MS = [1_000, 3_000];
-const UNAVAILABLE_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const UNAVAILABLE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 interface UnavailableEntry {
   endpoints: string[];
@@ -27,16 +29,21 @@ interface UnavailableEntry {
 }
 
 class OuraService {
-  private unavailableEndpointsByToken = new Map<string, Set<string>>();
+  private unavailableEndpointsByAvailability = new Map<string, Set<string>>();
   private unavailableTimestamps = new Map<string, number>();
-  private readonly unavailableCacheKey = 'oura_unavailable_endpoints_v2';
+  private readonly unavailableCacheKey = 'oura_unavailable_endpoints_v3';
   private readonly maxWindowDays = 90;
   private readonly maxConcurrentWindowRequests = 2;
 
   constructor() {
     this.loadUnavailableCache();
-    // Remove stale v1 cache key
-    try { window.localStorage?.removeItem('oura_unavailable_endpoints_v1'); } catch { /* noop */ }
+    // Remove stale cache keys from prior formats.
+    try {
+      window.localStorage?.removeItem('oura_unavailable_endpoints_v1');
+      window.localStorage?.removeItem('oura_unavailable_endpoints_v2');
+    } catch {
+      /* noop */
+    }
   }
 
   private getHeaders(token: string) {
@@ -68,8 +75,13 @@ class OuraService {
     };
   }
 
-  private getTokenKey(token: string): string {
-    return token.slice(0, 20);
+  private getAvailabilityKey(token: string, explicitKey?: string): string {
+    const scopedKey = explicitKey?.trim();
+    if (scopedKey) {
+      return `profile:${scopedKey}`;
+    }
+    // Backward-compatible fallback when no profile key is provided.
+    return `token:${token.slice(0, 20)}`;
   }
 
   private loadUnavailableCache(): void {
@@ -79,10 +91,10 @@ class OuraService {
       if (!raw) return;
       const parsed = JSON.parse(raw) as Record<string, UnavailableEntry>;
       const now = Date.now();
-      Object.entries(parsed).forEach(([tokenKey, entry]) => {
+      Object.entries(parsed).forEach(([availabilityKey, entry]) => {
         if (now - entry.timestamp < UNAVAILABLE_CACHE_TTL_MS) {
-          this.unavailableEndpointsByToken.set(tokenKey, new Set(entry.endpoints));
-          this.unavailableTimestamps.set(tokenKey, entry.timestamp);
+          this.unavailableEndpointsByAvailability.set(availabilityKey, new Set(entry.endpoints));
+          this.unavailableTimestamps.set(availabilityKey, entry.timestamp);
         }
       });
     } catch {
@@ -94,10 +106,10 @@ class OuraService {
     if (typeof window === 'undefined') return;
     try {
       const payload: Record<string, UnavailableEntry> = {};
-      this.unavailableEndpointsByToken.forEach((endpoints, tokenKey) => {
-        payload[tokenKey] = {
+      this.unavailableEndpointsByAvailability.forEach((endpoints, availabilityKey) => {
+        payload[availabilityKey] = {
           endpoints: Array.from(endpoints),
-          timestamp: this.unavailableTimestamps.get(tokenKey) ?? Date.now(),
+          timestamp: this.unavailableTimestamps.get(availabilityKey) ?? Date.now(),
         };
       });
       window.localStorage.setItem(this.unavailableCacheKey, JSON.stringify(payload));
@@ -106,31 +118,29 @@ class OuraService {
     }
   }
 
-  private isEndpointUnavailable(token: string, endpoint: string): boolean {
-    const tokenKey = this.getTokenKey(token);
-    const ts = this.unavailableTimestamps.get(tokenKey);
+  private isEndpointUnavailable(availabilityKey: string, endpoint: string): boolean {
+    const ts = this.unavailableTimestamps.get(availabilityKey);
     if (ts && Date.now() - ts >= UNAVAILABLE_CACHE_TTL_MS) {
-      this.unavailableEndpointsByToken.delete(tokenKey);
-      this.unavailableTimestamps.delete(tokenKey);
+      this.unavailableEndpointsByAvailability.delete(availabilityKey);
+      this.unavailableTimestamps.delete(availabilityKey);
       this.persistUnavailableCache();
       return false;
     }
-    return this.unavailableEndpointsByToken.get(tokenKey)?.has(endpoint) ?? false;
+    return this.unavailableEndpointsByAvailability.get(availabilityKey)?.has(endpoint) ?? false;
   }
 
-  private markEndpointUnavailable(token: string, endpoint: string): void {
-    const tokenKey = this.getTokenKey(token);
-    const unavailable = this.unavailableEndpointsByToken.get(tokenKey) ?? new Set<string>();
+  private markEndpointUnavailable(availabilityKey: string, endpoint: string): void {
+    const unavailable = this.unavailableEndpointsByAvailability.get(availabilityKey) ?? new Set<string>();
     unavailable.add(endpoint);
-    this.unavailableEndpointsByToken.set(tokenKey, unavailable);
-    this.unavailableTimestamps.set(tokenKey, Date.now());
+    this.unavailableEndpointsByAvailability.set(availabilityKey, unavailable);
+    this.unavailableTimestamps.set(availabilityKey, Date.now());
     this.persistUnavailableCache();
   }
 
-  clearUnavailableEndpoints(token: string): void {
-    const tokenKey = this.getTokenKey(token);
-    this.unavailableEndpointsByToken.delete(tokenKey);
-    this.unavailableTimestamps.delete(tokenKey);
+  clearUnavailableEndpoints(token: string, availabilityKey?: string): void {
+    const key = this.getAvailabilityKey(token, availabilityKey);
+    this.unavailableEndpointsByAvailability.delete(key);
+    this.unavailableTimestamps.delete(key);
     this.persistUnavailableCache();
   }
 
@@ -215,11 +225,12 @@ class OuraService {
     token: string,
     endpoint: string,
     params: QueryParams = {},
-    options?: { optional?: boolean }
+    options?: FetchOptions
   ): Promise<T[]> {
     const optional = options?.optional ?? false;
+    const availabilityKey = this.getAvailabilityKey(token, options?.availabilityKey);
 
-    if (optional && this.isEndpointUnavailable(token, endpoint)) {
+    if (optional && this.isEndpointUnavailable(availabilityKey, endpoint)) {
       return [];
     }
 
@@ -267,14 +278,14 @@ class OuraService {
       if (!response.ok) {
         if (response.status === 401) {
           if (optional) {
-            this.markEndpointUnavailable(token, endpoint);
+            this.markEndpointUnavailable(availabilityKey, endpoint);
             return results;
           }
           throw new Error('Unauthorized');
         }
 
         if (optional && (response.status === 403 || response.status === 404)) {
-          this.markEndpointUnavailable(token, endpoint);
+          this.markEndpointUnavailable(availabilityKey, endpoint);
           return results;
         }
 
@@ -301,7 +312,7 @@ class OuraService {
     endpoint: string,
     startDate: string,
     endDate: string,
-    options?: { optional?: boolean; windowDays?: number }
+    options?: DateWindowOptions
   ): Promise<T[]> {
     const windows = this.splitDateRange(startDate, endDate, options?.windowDays ?? this.maxWindowDays);
     const chunksByWindow: T[][] = new Array(windows.length);
@@ -318,7 +329,7 @@ class OuraService {
           token,
           endpoint,
           { start_date: window.start, end_date: window.end },
-          { optional: options?.optional }
+          { optional: options?.optional, availabilityKey: options?.availabilityKey }
         );
       }
     };
@@ -341,27 +352,35 @@ class OuraService {
     return response.json();
   }
 
-  async getDailySleep(token: string, start?: string, end?: string): Promise<DailySleep[]> {
+  async getDailySleep(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<DailySleep[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchDateWindowed<DailySleep>(token, 'daily_sleep', start_date, end_date);
+    return this.fetchDateWindowed<DailySleep>(token, 'daily_sleep', start_date, end_date, {
+      availabilityKey: options?.availabilityKey,
+    });
   }
 
-  async getSleepSessions(token: string, start?: string, end?: string): Promise<SleepSession[]> {
+  async getSleepSessions(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<SleepSession[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchDateWindowed<SleepSession>(token, 'sleep', start_date, end_date);
+    return this.fetchDateWindowed<SleepSession>(token, 'sleep', start_date, end_date, {
+      availabilityKey: options?.availabilityKey,
+    });
   }
 
-  async getDailyReadiness(token: string, start?: string, end?: string): Promise<DailyReadiness[]> {
+  async getDailyReadiness(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<DailyReadiness[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchDateWindowed<DailyReadiness>(token, 'daily_readiness', start_date, end_date);
+    return this.fetchDateWindowed<DailyReadiness>(token, 'daily_readiness', start_date, end_date, {
+      availabilityKey: options?.availabilityKey,
+    });
   }
 
-  async getDailyActivity(token: string, start?: string, end?: string): Promise<DailyActivity[]> {
+  async getDailyActivity(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<DailyActivity[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchDateWindowed<DailyActivity>(token, 'daily_activity', start_date, end_date);
+    return this.fetchDateWindowed<DailyActivity>(token, 'daily_activity', start_date, end_date, {
+      availabilityKey: options?.availabilityKey,
+    });
   }
 
-  async getHeartRate(token: string, start?: string, end?: string): Promise<HeartRate[]> {
+  async getHeartRate(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<HeartRate[]> {
     const { start_date, end_date } = this.getDateRange(start || 2, end);
     // Oura heartrate timeseries can reject very large windows; keep this to recent history.
     const clampedStartDate = this.clampDateWindow(start_date, end_date, 30);
@@ -372,67 +391,103 @@ class OuraService {
         start_datetime: `${clampedStartDate}T00:00:00`,
         end_datetime: `${end_date}T23:59:59`,
       },
-      { optional: true }
+      { optional: true, availabilityKey: options?.availabilityKey }
     );
   }
 
-  async getDailySpO2(token: string, start?: string, end?: string): Promise<DailySpO2[]> {
+  async getDailySpO2(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<DailySpO2[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchDateWindowed<DailySpO2>(token, 'daily_spo2', start_date, end_date, { optional: true });
+    return this.fetchDateWindowed<DailySpO2>(token, 'daily_spo2', start_date, end_date, {
+      optional: true,
+      availabilityKey: options?.availabilityKey,
+    });
   }
 
-  async getDailyStress(token: string, start?: string, end?: string): Promise<DailyStress[]> {
+  async getDailyStress(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<DailyStress[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchDateWindowed<DailyStress>(token, 'daily_stress', start_date, end_date, { optional: true });
+    return this.fetchDateWindowed<DailyStress>(token, 'daily_stress', start_date, end_date, {
+      optional: true,
+      availabilityKey: options?.availabilityKey,
+    });
   }
 
-  async getDailyResilience(token: string, start?: string, end?: string): Promise<DailyResilience[]> {
+  async getDailyResilience(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<DailyResilience[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchDateWindowed<DailyResilience>(token, 'daily_resilience', start_date, end_date, { optional: true });
+    return this.fetchDateWindowed<DailyResilience>(token, 'daily_resilience', start_date, end_date, {
+      optional: true,
+      availabilityKey: options?.availabilityKey,
+    });
   }
 
-  async getWorkouts(token: string, start?: string, end?: string): Promise<Workout[]> {
+  async getWorkouts(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<Workout[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchDateWindowed<Workout>(token, 'workout', start_date, end_date, { optional: true });
+    return this.fetchDateWindowed<Workout>(token, 'workout', start_date, end_date, {
+      optional: true,
+      availabilityKey: options?.availabilityKey,
+    });
   }
 
-  async getSessions(token: string, start?: string, end?: string): Promise<any[]> {
+  async getSessions(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<any[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchDateWindowed<any>(token, 'session', start_date, end_date, { optional: true });
+    return this.fetchDateWindowed<any>(token, 'session', start_date, end_date, {
+      optional: true,
+      availabilityKey: options?.availabilityKey,
+    });
   }
 
-  async getSleepTime(token: string, start?: string, end?: string): Promise<any[]> {
+  async getSleepTime(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<any[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchDateWindowed<any>(token, 'sleep_time', start_date, end_date, { optional: true });
+    return this.fetchDateWindowed<any>(token, 'sleep_time', start_date, end_date, {
+      optional: true,
+      availabilityKey: options?.availabilityKey,
+    });
   }
 
-  async getTags(token: string, start?: string, end?: string): Promise<any[]> {
+  async getTags(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<any[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchDateWindowed<any>(token, 'tag', start_date, end_date, { optional: true });
+    return this.fetchDateWindowed<any>(token, 'tag', start_date, end_date, {
+      optional: true,
+      availabilityKey: options?.availabilityKey,
+    });
   }
 
-  async getEnhancedTags(token: string, start?: string, end?: string): Promise<any[]> {
+  async getEnhancedTags(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<any[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchDateWindowed<any>(token, 'enhanced_tag', start_date, end_date, { optional: true });
+    return this.fetchDateWindowed<any>(token, 'enhanced_tag', start_date, end_date, {
+      optional: true,
+      availabilityKey: options?.availabilityKey,
+    });
   }
 
-  async getRestModePeriods(token: string, start?: string, end?: string): Promise<any[]> {
+  async getRestModePeriods(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<any[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchDateWindowed<any>(token, 'rest_mode_period', start_date, end_date, { optional: true });
+    return this.fetchDateWindowed<any>(token, 'rest_mode_period', start_date, end_date, {
+      optional: true,
+      availabilityKey: options?.availabilityKey,
+    });
   }
 
-  async getRingConfiguration(token: string): Promise<any[]> {
-    return this.fetchPaginated<any>(token, 'ring_configuration', {}, { optional: true });
+  async getRingConfiguration(token: string, options?: { availabilityKey?: string }): Promise<any[]> {
+    return this.fetchPaginated<any>(token, 'ring_configuration', {}, {
+      optional: true,
+      availabilityKey: options?.availabilityKey,
+    });
   }
 
-  async getDailyCardiovascularAge(token: string, start?: string, end?: string): Promise<any[]> {
+  async getDailyCardiovascularAge(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<any[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchDateWindowed<any>(token, 'daily_cardiovascular_age', start_date, end_date, { optional: true });
+    return this.fetchDateWindowed<any>(token, 'daily_cardiovascular_age', start_date, end_date, {
+      optional: true,
+      availabilityKey: options?.availabilityKey,
+    });
   }
 
-  async getVO2Max(token: string, start?: string, end?: string): Promise<any[]> {
+  async getVO2Max(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<any[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchDateWindowed<any>(token, 'vO2_max', start_date, end_date, { optional: true });
+    return this.fetchDateWindowed<any>(token, 'vo2_max', start_date, end_date, {
+      optional: true,
+      availabilityKey: options?.availabilityKey,
+    });
   }
 }
 

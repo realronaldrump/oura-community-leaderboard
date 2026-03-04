@@ -133,7 +133,10 @@ const Settings: React.FC = () => {
         try {
             const runSync = async (forceRefresh: boolean = false) => {
                 const token = await getAccessTokenForProfile(activeProfile.id, { forceRefresh });
-                return fullSync(token, (progress) => { setSyncProgress(progress); });
+                return fullSync(token, (progress) => { setSyncProgress(progress); }, {
+                    grantedScopes: activeProfile.grantedScopes,
+                    availabilityKey: activeProfile.id,
+                });
             };
 
             let syncedData;
@@ -175,9 +178,9 @@ const Settings: React.FC = () => {
             const runCheck = async (forceRefresh: boolean = false) => {
                 const token = await getAccessTokenForProfile(activeProfile.id, { forceRefresh });
                 return Promise.all([
-                    ouraService.getDailySleep(token, startDay, endDay),
-                    ouraService.getDailyReadiness(token, startDay, endDay),
-                    ouraService.getDailyActivity(token, startDay, endDay),
+                    ouraService.getDailySleep(token, startDay, endDay, { availabilityKey: activeProfile.id }),
+                    ouraService.getDailyReadiness(token, startDay, endDay, { availabilityKey: activeProfile.id }),
+                    ouraService.getDailyActivity(token, startDay, endDay, { availabilityKey: activeProfile.id }),
                 ]);
             };
 
