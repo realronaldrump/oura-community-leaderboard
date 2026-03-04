@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     DailyActivity, DailyReadiness, DailySleep, SleepSession, HeartRate,
     DailySpO2, DailyStress, DailyResilience, LeaderboardEntry, formatDuration, formatTime, DailyStats
@@ -23,6 +23,7 @@ import ComparisonHeartRateChart from '../components/charts/ComparisonHeartRateCh
 import AllTimeHistory from '../components/AllTimeHistory';
 import SyncModal from '../components/SyncModal';
 import PrimaryProfileSwitcher from '../components/PrimaryProfileSwitcher';
+import DateRangePicker from '../components/DateRangePicker';
 import { smartSync, SyncProgress } from '../services/syncService';
 import {
     StreakTracker,
@@ -258,6 +259,25 @@ const Dashboard: React.FC = () => {
     const stressHistory = activeData?.stress || [];
     const resilienceHistory = activeData?.resilience || [];
 
+    const availableDays = useMemo(() => {
+        const daySet = new Set<string>();
+        sleepHistory.forEach((item) => item.day && daySet.add(item.day));
+        readinessHistory.forEach((item) => item.day && daySet.add(item.day));
+        activityHistory.forEach((item) => item.day && daySet.add(item.day));
+        return Array.from(daySet).sort((a, b) => b.localeCompare(a));
+    }, [activityHistory, readinessHistory, sleepHistory]);
+
+    useEffect(() => {
+        setDateIndex(0);
+    }, [activeProfile?.id]);
+
+    useEffect(() => {
+        const lastIndex = Math.max(availableDays.length - 1, 0);
+        if (dateIndex > lastIndex) {
+            setDateIndex(lastIndex);
+        }
+    }, [availableDays.length, dateIndex]);
+
     const findByDay = <T extends { day?: string }>(items: T[], day?: string): T | undefined => {
         if (!day) return undefined;
         return items.find(item => item.day === day);
@@ -281,11 +301,13 @@ const Dashboard: React.FC = () => {
         return pickBestSession(sessionHistory.filter(s => s.day === day));
     };
 
-    const scoreAnchorDay =
-        sleepHistory[dateIndex]?.day ||
-        readinessHistory[dateIndex]?.day ||
-        activityHistory[dateIndex]?.day;
+    const scoreAnchorDay = availableDays[dateIndex];
     const referenceDay = scoreAnchorDay;
+
+    const handleSelectReferenceDay = (day: string) => {
+        const nextIndex = availableDays.indexOf(day);
+        if (nextIndex >= 0) setDateIndex(nextIndex);
+    };
 
     const currentSleep = findByDay(sleepHistory, referenceDay);
     const currentReadiness = findByDay(readinessHistory, referenceDay);
@@ -735,7 +757,7 @@ const Dashboard: React.FC = () => {
                     <div className="pt-8 animate-fade-in">
                         {/* ── Greeting & Date Navigation ── */}
                         <div className="mb-10">
-                            <div className="flex items-start justify-between gap-4">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                                 <div className="min-w-0">
                                     <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-1.5">
                                         {formatDayLabel(referenceDay)}
@@ -744,14 +766,35 @@ const Dashboard: React.FC = () => {
                                         {getDailyInsight()}
                                     </p>
                                 </div>
-                                <div className="flex items-center gap-0.5 shrink-0 mt-1">
-                                    <button disabled={dateIndex >= sleepHistory.length - 1} onClick={() => setDateIndex(dateIndex + 1)} className="p-2.5 rounded-lg hover:bg-[#1C1C1C] disabled:opacity-20 transition-colors text-[#555]">
-                                        <ChevronLeft className="w-4 h-4" />
-                                    </button>
-                                    <span className="text-xs text-[#555] font-mono min-w-[72px] text-center tabular-nums">{referenceDay || '--'}</span>
-                                    <button disabled={dateIndex === 0} onClick={() => setDateIndex(dateIndex - 1)} className="p-2.5 rounded-lg hover:bg-[#1C1C1C] disabled:opacity-20 transition-colors text-[#555]">
-                                        <ChevronRight className="w-4 h-4" />
-                                    </button>
+                                <div className="w-full sm:w-auto shrink-0 mt-1 space-y-2">
+                                    <DateRangePicker
+                                        dates={availableDays}
+                                        selectedDate={referenceDay}
+                                        onSelectDate={handleSelectReferenceDay}
+                                    />
+                                    <div className="flex items-center justify-end gap-0.5">
+                                        <button
+                                            disabled={dateIndex >= availableDays.length - 1 || availableDays.length === 0}
+                                            onClick={() => {
+                                                if (!availableDays.length) return;
+                                                setDateIndex((current) => Math.min(current + 1, availableDays.length - 1));
+                                            }}
+                                            className="p-2.5 rounded-lg hover:bg-[#1C1C1C] disabled:opacity-20 transition-colors text-[#555]"
+                                        >
+                                            <ChevronLeft className="w-4 h-4" />
+                                        </button>
+                                        <span className="text-xs text-[#555] font-mono min-w-[88px] text-center tabular-nums">{referenceDay || '--'}</span>
+                                        <button
+                                            disabled={dateIndex === 0 || availableDays.length === 0}
+                                            onClick={() => {
+                                                if (!availableDays.length) return;
+                                                setDateIndex((current) => Math.max(current - 1, 0));
+                                            }}
+                                            className="p-2.5 rounded-lg hover:bg-[#1C1C1C] disabled:opacity-20 transition-colors text-[#555]"
+                                        >
+                                            <ChevronRight className="w-4 h-4" />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>

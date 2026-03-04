@@ -479,6 +479,43 @@ h1, h2, h3, h4 {
   transition: width 0.4s ease;
 }
 
+/* Range picker slider */
+.day-range-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(0, 200, 150, 0.22) 0%, rgba(96, 165, 250, 0.24) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.day-range-slider:disabled {
+  opacity: 0.45;
+}
+
+.day-range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  background: #00c896;
+  border: 2px solid #0f0f0f;
+  box-shadow: 0 0 0 3px rgba(0, 200, 150, 0.22);
+  cursor: pointer;
+}
+
+.day-range-slider::-moz-range-thumb {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  background: #00c896;
+  border: 2px solid #0f0f0f;
+  box-shadow: 0 0 0 3px rgba(0, 200, 150, 0.22);
+  cursor: pointer;
+}
+
 /* ========================================
    SCROLL & ANIMATION - Subtle, Functional
    ======================================== */
