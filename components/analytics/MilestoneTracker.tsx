@@ -5,6 +5,8 @@ import { calculateMilestones, generateCalendarHeatmap } from '../../services/ana
 import { Trophy, Target, Calendar, Users, User, BedDouble, Footprints, Flame, TrendingUp, Check } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
 import DetailsModal from './DetailsModal';
+import { useUser } from '../../contexts/UserContext';
+import PrimaryProfileSwitcher from '../PrimaryProfileSwitcher';
 
 interface MilestoneTrackerProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -92,10 +94,18 @@ const formatHistorySpan = (days: number): string => {
 };
 
 const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData }) => {
-    const [selectedUser, setSelectedUser] = useState(0);
+    const { activeProfileId } = useUser();
     const [heatmapMetric, setHeatmapMetric] = useState<HeatmapMetric>('average');
     const [heatmapRange, setHeatmapRange] = useState<HeatmapRange>('1y');
     const [selectedMilestone, setSelectedMilestone] = useState<Milestone | null>(null);
+
+    const selectedUserIdx = useMemo(() => {
+        if (profiles.length === 0) return -1;
+        const idx = profiles.findIndex((profile) => profile.id === activeProfileId);
+        return idx >= 0 ? idx : 0;
+    }, [profiles, activeProfileId]);
+
+    const selectedProfileId = selectedUserIdx >= 0 ? profiles[selectedUserIdx]?.id : null;
 
     const milestones = useMemo(() => {
         const usersDataFormatted = profiles.map((profile, idx) => ({
@@ -110,14 +120,14 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
     }, [profiles, usersData]);
 
     const heatmapData = useMemo(() => {
-        const data = usersData[selectedUser]?.data;
+        const data = selectedUserIdx >= 0 ? usersData[selectedUserIdx]?.data : undefined;
         if (!data) return [];
 
         return generateCalendarHeatmap(data, heatmapMetric);
-    }, [usersData, selectedUser, heatmapMetric]);
+    }, [usersData, selectedUserIdx, heatmapMetric]);
 
     const userMilestones = milestones.filter(m =>
-        m.userId === profiles[selectedUser]?.id || !m.userId
+        m.userId === selectedProfileId || !m.userId
     );
 
     const achievedMilestones = userMilestones.filter(m => m.isAchieved);
@@ -299,7 +309,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
 
     const getMilestoneHistory = (milestone: Milestone) => {
         // Find user data
-        const userId = milestone.userId || profiles[selectedUser]?.id;
+        const userId = milestone.userId || selectedProfileId;
         const userIdx = profiles.findIndex(p => p.id === userId);
         const data = usersData[userIdx]?.data;
 
@@ -377,17 +387,9 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                     Track your journey and celebrate achievements
                 </p>
 
-                <select
-                    value={selectedUser}
-                    onChange={(e) => setSelectedUser(Number(e.target.value))}
-                    className="px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--accent)]"
-                >
-                    {profiles.map((p, idx) => (
-                        <option key={p.id} value={idx}>
-                            {(p.email || 'User').split('@')[0]}
-                        </option>
-                    ))}
-                </select>
+                <PrimaryProfileSwitcher
+                    selectClassName="px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--accent)]"
+                />
             </div>
 
             {/* Achieved Milestones */}

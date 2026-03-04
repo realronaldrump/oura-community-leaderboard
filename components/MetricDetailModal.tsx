@@ -284,11 +284,85 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
 
     const trend = calculateTrend();
 
+    const OPEN_ENDED_RANGE_SENTINELS = new Set([999, 9999, 99999]);
+    const usesMinuteThresholds = ['sleep_duration', 'deep_sleep', 'rem_sleep'].includes(metricType);
+
+    const toThresholdUnits = (value: number) => {
+        if (!usesMinuteThresholds) return value;
+        return isDurationInMinutes ? value : value / 60;
+    };
+
+    const formatThresholdValue = (value: number) => {
+        if (usesMinuteThresholds) {
+            if (value >= 60) {
+                const hours = value / 60;
+                return `${Number.isInteger(hours) ? hours : Number(hours.toFixed(1))}h`;
+            }
+            return `${Math.round(value)}m`;
+        }
+        if (Math.abs(value) >= 1000) return Math.round(value).toLocaleString();
+        return Number.isInteger(value) ? `${value}` : Number(value.toFixed(1)).toString();
+    };
+
+    const formatCategoryRangeLabel = (range: [number, number]) => {
+        const [start, end] = range;
+        const startLabel = formatThresholdValue(start);
+        if (OPEN_ENDED_RANGE_SENTINELS.has(end)) {
+            return usesMinuteThresholds ? `${startLabel}+` : `${startLabel}+ ${effectiveUnit}`;
+        }
+        const endLabel = formatThresholdValue(end);
+        return usesMinuteThresholds ? `${startLabel}-${endLabel}` : `${startLabel}-${endLabel} ${effectiveUnit}`;
+    };
+
     const getCategory = (value: number) => {
-        return config.categories.find(cat => value >= cat.range[0] && value < cat.range[1]) || config.categories[config.categories.length - 1];
+        const comparableValue = toThresholdUnits(value);
+        const match = config.categories.find((cat) => {
+            const upperBound = OPEN_ENDED_RANGE_SENTINELS.has(cat.range[1]) ? Number.POSITIVE_INFINITY : cat.range[1];
+            return comparableValue >= cat.range[0] && comparableValue < upperBound;
+        });
+        if (match) return match;
+
+        const sortedByStart = [...config.categories].sort((a, b) => a.range[0] - b.range[0]);
+        if (comparableValue < sortedByStart[0].range[0]) return sortedByStart[0];
+        return sortedByStart[sortedByStart.length - 1];
     };
 
     const currentCategory = currentValue !== null && currentValue !== undefined ? getCategory(currentValue) : null;
+
+    const categoryBoundaries = Array.from(
+        new Set(config.categories.flatMap((cat) => [cat.range[0], cat.range[1]]))
+    ).sort((a, b) => a - b);
+    const rawAxisMin = categoryBoundaries[0] ?? 0;
+    const rawAxisMax = categoryBoundaries[categoryBoundaries.length - 1] ?? 100;
+    const hasOpenEndedTop = OPEN_ENDED_RANGE_SENTINELS.has(rawAxisMax);
+    const finiteBoundaries = categoryBoundaries.filter((boundary) => !OPEN_ENDED_RANGE_SENTINELS.has(boundary));
+    const finiteAxisMax = finiteBoundaries[finiteBoundaries.length - 1] ?? rawAxisMax;
+    const finitePrevBoundary = finiteBoundaries[finiteBoundaries.length - 2] ?? rawAxisMin;
+    const inferredOpenEndedSpan = Math.max(finiteAxisMax - finitePrevBoundary, 1);
+    const observedMax = historyData.reduce((maxValue, point) => Math.max(maxValue, toThresholdUnits(point.value)), Number.NEGATIVE_INFINITY);
+    const currentOnScale = currentValue !== null && currentValue !== undefined ? toThresholdUnits(currentValue) : null;
+    const axisMin = rawAxisMin;
+    const axisMax = Math.max(
+        axisMin + 1,
+        hasOpenEndedTop
+            ? Math.max(finiteAxisMax + inferredOpenEndedSpan, observedMax, currentOnScale ?? Number.NEGATIVE_INFINITY)
+            : rawAxisMax
+    );
+    const toAxisPercent = (value: number) => {
+        const pct = ((value - axisMin) / (axisMax - axisMin)) * 100;
+        return Math.max(0, Math.min(100, pct));
+    };
+    const markerPercent = currentOnScale !== null ? toAxisPercent(currentOnScale) : null;
+    const axisTickValues = Array.from(new Set([...finiteBoundaries, axisMax])).sort((a, b) => a - b);
+    const currentScaleDisplay = currentOnScale !== null
+        ? `${formatThresholdValue(currentOnScale)}${usesMinuteThresholds ? '' : ` ${effectiveUnit}`}`
+        : null;
+    const markerLabelStyle = (() => {
+        if (markerPercent === null) return null;
+        if (markerPercent <= 8) return { left: '0%', transform: 'translateX(0)' };
+        if (markerPercent >= 92) return { left: '100%', transform: 'translateX(-100%)' };
+        return { left: `${markerPercent}%`, transform: 'translateX(-50%)' };
+    })();
 
     const getPercentile = (value: number) => {
         const sortedValues = historyData.map(d => d.value).sort((a, b) => a - b);
@@ -458,26 +532,91 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
 
                     {/* Category Breakdown */}
                     <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222]">
-                        <h4 className="text-sm font-medium text-[#FAFAFA] mb-4">Category Ranges</h4>
+                        <div className="flex items-start justify-between gap-4 mb-3">
+                            <h4 className="text-sm font-medium text-[#FAFAFA]">Category Ranges</h4>
+                            {currentOnScale !== null && (
+                                <span className="text-[11px] text-[#666666] font-mono">
+                                    Current: {formatThresholdValue(currentOnScale)}{usesMinuteThresholds ? '' : ` ${effectiveUnit}`}
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="mb-4">
+                            <div className="relative h-5">
+                                {axisTickValues.map((tick, idx) => (
+                                    <span
+                                        key={`${tick}-${idx}`}
+                                        className="absolute top-0 text-[10px] text-[#666666] font-mono whitespace-nowrap"
+                                        style={{ left: `${toAxisPercent(tick)}%`, transform: 'translateX(-50%)' }}
+                                    >
+                                        {formatThresholdValue(tick)}
+                                    </span>
+                                ))}
+                            </div>
+                            <div className="relative h-8">
+                                {markerPercent !== null && markerLabelStyle && currentScaleDisplay && (
+                                    <span
+                                        className="absolute top-0 text-[10px] text-[#0C0C0C] font-semibold bg-[#FAFAFA] px-1.5 py-0.5 rounded whitespace-nowrap"
+                                        style={markerLabelStyle}
+                                    >
+                                        {currentScaleDisplay}
+                                    </span>
+                                )}
+                                <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-[#1A1A1A] rounded-full overflow-hidden">
+                                    {axisTickValues.map((tick, idx) => (
+                                        <span
+                                            key={`tick-${tick}-${idx}`}
+                                            className="absolute top-1/2 -translate-y-1/2 h-3 w-px bg-[#333333]"
+                                            style={{ left: `${toAxisPercent(tick)}%` }}
+                                        />
+                                    ))}
+                                    {markerPercent !== null && (
+                                        <span
+                                            className="absolute top-1/2 -translate-y-1/2 h-4 w-[2px] bg-[#FAFAFA]"
+                                            style={{ left: `${markerPercent}%`, transform: 'translateX(-50%)' }}
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="space-y-3">
-                            {config.categories.map((cat, idx) => (
-                                <div key={idx} className="flex items-center gap-3">
-                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }} />
-                                    <div className="flex-1">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <span className="text-sm text-[#A0A0A0]">{cat.label}</span>
-                                            <span className="text-xs text-[#666666] font-mono">{cat.range[0]}-{cat.range[1] === 999 ? '∞' : cat.range[1]} {effectiveUnit}</span>
-                                        </div>
-                                        <div className="h-1.5 bg-[#1A1A1A] rounded-full overflow-hidden">
-                                            <div
-                                                className="h-full rounded-full"
-                                                style={{ width: `${((cat.range[1] - cat.range[0]) / (config.categories.reduce((max, c) => Math.max(max, c.range[1]), 0))) * 100}%`, backgroundColor: cat.color }}
-                                            />
+                            {config.categories.map((cat, idx) => {
+                                const isOpenEndedCategory = OPEN_ENDED_RANGE_SENTINELS.has(cat.range[1]);
+                                const segmentStart = cat.range[0];
+                                const segmentEnd = isOpenEndedCategory ? axisMax : cat.range[1];
+                                const leftPct = toAxisPercent(Math.min(segmentStart, segmentEnd));
+                                const rightPct = toAxisPercent(Math.max(segmentStart, segmentEnd));
+                                const widthPct = Math.max(rightPct - leftPct, 1.5);
+
+                                return (
+                                    <div key={idx} className="flex items-center gap-3">
+                                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex justify-between items-center mb-1 gap-3">
+                                                <span className="text-sm text-[#A0A0A0]">{cat.label}</span>
+                                                <span className="text-xs text-[#666666] font-mono whitespace-nowrap">{formatCategoryRangeLabel(cat.range)}</span>
+                                            </div>
+                                            <div className="relative h-2 bg-[#1A1A1A] rounded-full overflow-hidden">
+                                                <span
+                                                    className="absolute top-0 h-full rounded-full"
+                                                    style={{ left: `${leftPct}%`, width: `${widthPct}%`, backgroundColor: cat.color }}
+                                                />
+                                                {markerPercent !== null && (
+                                                    <span
+                                                        className="absolute top-0 h-full w-[2px] bg-[#FAFAFA]/90"
+                                                        style={{ left: `${markerPercent}%`, transform: 'translateX(-50%)' }}
+                                                    />
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
+                        <p className="text-[11px] text-[#666666] mt-3">
+                            Shared axis: colored segments show each category band, and the white marker shows your current value.
+                        </p>
                     </div>
 
                     {/* Insights */}

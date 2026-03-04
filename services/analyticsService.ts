@@ -6,7 +6,7 @@ import {
 import {
     Streak, StreakType, StreakDefinition, Badge, BadgeTier,
     Pattern, PatternType, CorrelationResult, MetricOption,
-    WhatIfScenario, WhatIfResult, WhatIfReliability, Milestone, MilestoneType,
+    WhatIfScenario, WhatIfResult, WhatIfReliability, WhatIfTargetScore, Milestone, MilestoneType,
     DailySnapshotData, TimelineDataPoint, TimelineInsight,
     CalendarHeatmapDay, UserChallenge, ChallengeDefinition, ChallengeStatus, AutomatedInsight
 } from '../types/analyticsTypes';
@@ -993,6 +993,34 @@ const getReliability = (sampleSize: number, rSquared: number, ciHalfWidth: numbe
     return 'low';
 };
 
+const getTargetScoresByDay = (data: DailyStats, targetScore: WhatIfTargetScore): Map<string, number> => {
+    const scoresByDay = new Map<string, number>();
+    const add = (day: string, score: number | null | undefined) => {
+        if (score == null) return;
+        scoresByDay.set(day, score);
+    };
+
+    switch (targetScore) {
+        case 'readiness':
+            for (const item of data.readiness || []) {
+                add(item.day, item.score);
+            }
+            break;
+        case 'sleep':
+            for (const item of data.sleep || []) {
+                add(item.day, item.score);
+            }
+            break;
+        case 'activity':
+            for (const item of data.activity || []) {
+                add(item.day, item.score);
+            }
+            break;
+    }
+
+    return scoresByDay;
+};
+
 export function simulateWhatIf(
     scenario: WhatIfScenario,
     usersData: Array<{ userId: string; userName: string; data: DailyStats }>
@@ -1020,11 +1048,9 @@ function simulateForUser(
     userName: string,
     data: DailyStats
 ): WhatIfResult | null {
-    const allPairs: Array<{ day: string; metric: number; readiness: number }> = [];
-
-    const readinessByDay = new Map(
-        (data.readiness || []).map(r => [r.day, r.score])
-    );
+    const targetScore: WhatIfTargetScore = scenario.targetScore || 'readiness';
+    const allPairs: Array<{ day: string; metric: number; target: number }> = [];
+    const targetByDay = getTargetScoresByDay(data, targetScore);
 
     const metricValues = getScenarioMetricValues(data, scenario.metric);
 
@@ -1032,10 +1058,10 @@ function simulateForUser(
         const nextDay = new Date(day);
         nextDay.setDate(nextDay.getDate() + 1);
         const nextDayStr = nextDay.toISOString().split('T')[0];
-        const readiness = readinessByDay.get(nextDayStr);
+        const targetValue = targetByDay.get(nextDayStr);
 
-        if (readiness != null) {
-            allPairs.push({ day, metric: value, readiness });
+        if (targetValue != null) {
+            allPairs.push({ day, metric: value, target: targetValue });
         }
     }
 
@@ -1054,31 +1080,31 @@ function simulateForUser(
 
     const trimPercent = scenario.outlierTrimPercent ?? 0.05;
     const winsorizedMetrics = winsorize(pairs.map(p => p.metric), trimPercent);
-    const winsorizedReadiness = winsorize(pairs.map(p => p.readiness), trimPercent);
+    const winsorizedTarget = winsorize(pairs.map(p => p.target), trimPercent);
     const modelPairs = pairs.map((pair, idx) => ({
         day: pair.day,
         metric: winsorizedMetrics[idx],
-        readiness: winsorizedReadiness[idx]
+        target: winsorizedTarget[idx]
     }));
 
     const x = modelPairs.map(p => p.metric);
-    const y = modelPairs.map(p => p.readiness);
+    const y = modelPairs.map(p => p.target);
 
     const xMean = ss.mean(x);
     const sxx = x.reduce((sum, value) => sum + Math.pow(value - xMean, 2), 0);
     if (sxx <= 1e-6) return null;
 
-    const samples = modelPairs.map(p => [p.metric, p.readiness] as [number, number]);
+    const samples = modelPairs.map(p => [p.metric, p.target] as [number, number]);
     const regression = ss.linearRegression(samples);
     const regressionLine = ss.linearRegressionLine(regression);
 
     const currentMetricAverage = xMean;
-    const currentReadiness = ss.mean(y);
+    const currentBaseline = ss.mean(y);
     const adjustedMetricValue = currentMetricAverage + scenario.adjustment;
-    const projectedReadinessRaw = regressionLine(adjustedMetricValue);
-    const projectedReadiness = clamp(projectedReadinessRaw, READINESS_MIN_SCORE, READINESS_MAX_SCORE);
-    const projectedChange = projectedReadiness - currentReadiness;
-    const isCapped = projectedReadinessRaw !== projectedReadiness;
+    const projectedScoreRaw = regressionLine(adjustedMetricValue);
+    const projectedScore = clamp(projectedScoreRaw, READINESS_MIN_SCORE, READINESS_MAX_SCORE);
+    const projectedChange = projectedScore - currentBaseline;
+    const isCapped = projectedScoreRaw !== projectedScore;
 
     let correlation = 0;
     try {
@@ -1091,7 +1117,7 @@ function simulateForUser(
 
     const residuals = modelPairs.map(p => {
         const predicted = regressionLine(p.metric);
-        return p.readiness - predicted;
+        return p.target - predicted;
     });
     const n = modelPairs.length;
     const sumSquaredResiduals = residuals.reduce((sum, value) => sum + (value * value), 0);
@@ -1111,7 +1137,7 @@ function simulateForUser(
         notes.push('Limited sample size; treat this projection as directional.');
     }
     if (Math.abs(correlation) < 0.2 || rSquared < 0.1) {
-        notes.push('Weak historical relationship between this metric and readiness.');
+        notes.push(`Weak historical relationship between this metric and ${targetScore} score.`);
     }
     if (confidenceHalfWidth > 3) {
         notes.push('Wide uncertainty band around the projected change.');
@@ -1120,7 +1146,7 @@ function simulateForUser(
         notes.push('Adjustment extrapolates beyond your observed history.');
     }
     if (isCapped) {
-        notes.push('Projection was capped to stay within the 0-100 readiness range.');
+        notes.push('Projection was capped to stay within the 0-100 score range.');
     }
 
     const reliability = getReliability(pairs.length, rSquared, confidenceHalfWidth);
@@ -1129,11 +1155,12 @@ function simulateForUser(
         userId,
         userName,
         scenario,
+        targetScore,
         projectedChange,
         confidence: confidenceHalfWidth,
         basedOnDays: pairs.length,
-        currentBaseline: currentReadiness,
-        projectedReadiness,
+        currentBaseline,
+        projectedScore,
         confidenceLow,
         confidenceHigh,
         confidenceHalfWidth,

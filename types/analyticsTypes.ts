@@ -142,26 +142,29 @@ export interface WhatIfScenario {
     currentAverage?: number;
     adjustment: number;         // e.g., +30 minutes
     unit: string;               // e.g., "minutes", "steps"
+    targetScore?: WhatIfTargetScore; // Predicted next-day score domain
     lookbackDays?: number | 'all'; // Restrict model to recent days for relevance
     outlierTrimPercent?: number; // Winsorization percent on both tails (0-0.2 typical)
 }
 
 export type WhatIfReliability = 'low' | 'medium' | 'high';
+export type WhatIfTargetScore = 'readiness' | 'sleep' | 'activity';
 
 export interface WhatIfResult {
     userId: string;
     userName: string;
     scenario: WhatIfScenario;
-    projectedChange: number;    // e.g., +8.2 readiness points
+    targetScore: WhatIfTargetScore;
+    projectedChange: number;    // e.g., +8.2 points in target score
     confidence: number;         // Legacy alias: 95% CI half-width of projected change
     basedOnDays: number;        // Sample size
-    currentBaseline: number;    // Current baseline readiness
-    projectedReadiness: number; // Baseline + projectedChange (bounded to score range)
+    currentBaseline: number;    // Current baseline target score
+    projectedScore: number;     // Baseline + projectedChange (bounded to score range)
     confidenceLow: number;      // Lower bound for projected change (95% CI)
     confidenceHigh: number;     // Upper bound for projected change (95% CI)
     confidenceHalfWidth: number; // 95% CI half-width
-    slope: number;              // Change in readiness per 1 unit of metric
-    correlation: number;        // Pearson correlation between metric and next-day readiness
+    slope: number;              // Change in target score per 1 unit of metric
+    correlation: number;        // Pearson correlation between metric and next-day target score
     rSquared: number;           // Coefficient of determination
     reliability: WhatIfReliability;
     notes: string[];

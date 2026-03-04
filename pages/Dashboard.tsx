@@ -22,6 +22,7 @@ import MetricComparisonGroup from '../components/MetricComparisonGroup';
 import ComparisonHeartRateChart from '../components/charts/ComparisonHeartRateChart';
 import AllTimeHistory from '../components/AllTimeHistory';
 import SyncModal from '../components/SyncModal';
+import PrimaryProfileSwitcher from '../components/PrimaryProfileSwitcher';
 import { smartSync, SyncProgress } from '../services/syncService';
 import {
     StreakTracker,
@@ -34,7 +35,8 @@ import {
     ChallengeManager
 } from '../components/analytics';
 import { useAutoSync, formatLastSync } from '../hooks/useAutoSync';
-import { ChevronLeft, ChevronRight, X, RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain, ArrowUpDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain } from 'lucide-react';
+import { getProfileDisplayName } from '../utils/profileName';
 
 const METERS_TO_MILES = 0.000621371;
 const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
@@ -472,12 +474,6 @@ const Dashboard: React.FC = () => {
         return parts.join(' · ');
     };
 
-    const getProfileDisplayName = (profile: { firstName?: string | null; lastName?: string | null; email?: string | null; }) => {
-        return profile.firstName
-            ? `${profile.firstName} ${profile.lastName || ''}`.trim()
-            : (profile.email || 'User').split('@')[0];
-    };
-
     const handleOpenRemoveProfileDialog = (profile: { id: string; firstName?: string | null; lastName?: string | null; email?: string | null; }) => {
         setProfilePendingRemoval({ id: profile.id, name: getProfileDisplayName(profile) });
     };
@@ -677,15 +673,14 @@ const Dashboard: React.FC = () => {
                         <h1 className="text-base font-semibold tracking-tight">{userName}</h1>
                         <span className="text-[#444] text-xs font-mono hidden sm:inline">{formatLastSync(lastSyncTime)}</span>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-2">
+                        <PrimaryProfileSwitcher
+                            className="hidden sm:block"
+                            selectClassName="h-8 text-xs min-w-[9.5rem]"
+                        />
                         <button onClick={handleSyncAllData} disabled={isSyncing} className="p-2 rounded-md hover:bg-[#1C1C1C] text-[#666] hover:text-[#FAFAFA] transition-colors disabled:opacity-40" title="Refresh data">
                             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
                         </button>
-                        {profiles.length > 1 && (
-                            <button onClick={() => setActiveProfileId('')} className="p-2 rounded-md hover:bg-[#1C1C1C] text-[#666] hover:text-[#FAFAFA] transition-colors" title="Switch profile">
-                                <ArrowUpDown className="w-4 h-4" />
-                            </button>
-                        )}
                         <button onClick={login} className="p-2 rounded-md hover:bg-[#1C1C1C] text-[#666] hover:text-[#FAFAFA] transition-colors" title="Add profile">
                             <Plus className="w-4 h-4" />
                         </button>
@@ -693,6 +688,9 @@ const Dashboard: React.FC = () => {
                             <Settings className="w-4 h-4" />
                         </button>
                     </div>
+                </div>
+                <div className="max-w-5xl mx-auto px-4 pb-2 sm:hidden">
+                    <PrimaryProfileSwitcher selectClassName="w-full h-9 text-xs" />
                 </div>
                 <div className="max-w-5xl mx-auto px-4 flex gap-0.5 -mb-px overflow-x-auto">
                     {[

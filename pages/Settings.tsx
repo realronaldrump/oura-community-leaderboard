@@ -3,12 +3,46 @@ import { useUser } from '../contexts/UserContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { fullSync, SyncProgress } from '../services/syncService';
 import SyncModal from '../components/SyncModal';
+import PrimaryProfileSwitcher from '../components/PrimaryProfileSwitcher';
+import { ouraService } from '../services/ouraService';
+import { DailyStats } from '../types';
+import { getProfileDisplayName } from '../utils/profileName';
+
+type QuickCheckStatus = 'idle' | 'running' | 'ok' | 'warning' | 'error';
+
+type QuickCheckState = {
+    status: QuickCheckStatus;
+    message: string;
+    details: string[];
+    checkedAt: string | null;
+};
+
+const QUICK_CHECK_LOOKBACK_DAYS = 3;
+
+const toDay = (date: Date): string => date.toISOString().split('T')[0];
+
+const shiftDay = (day: string, delta: number): string => {
+    const value = new Date(`${day}T00:00:00`);
+    if (Number.isNaN(value.getTime())) return day;
+    value.setDate(value.getDate() + delta);
+    return toDay(value);
+};
+
+const getLatestDay = (items?: Array<{ day?: string }>): string | null => {
+    if (!items?.length) return null;
+
+    return items.reduce<string | null>((latest, item) => {
+        const day = item?.day;
+        if (!day) return latest;
+        return !latest || day > latest ? day : latest;
+    }, null);
+};
 
 const Settings: React.FC = () => {
     const {
         activeProfile,
         profiles,
-        setActiveProfileId,
+        clearActiveProfileSelection,
         login,
         updateProfile,
         getAccessTokenForProfile,
@@ -26,12 +60,24 @@ const Settings: React.FC = () => {
     const [lastName, setLastName] = useState(activeProfile?.lastName || '');
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState('');
+    const [quickCheck, setQuickCheck] = useState<QuickCheckState>({
+        status: 'idle',
+        message: '',
+        details: [],
+        checkedAt: null,
+    });
 
     React.useEffect(() => {
         if (activeProfile) {
             setFirstName(activeProfile.firstName || '');
             setLastName(activeProfile.lastName || '');
         }
+        setQuickCheck({
+            status: 'idle',
+            message: '',
+            details: [],
+            checkedAt: null,
+        });
     }, [activeProfile]);
 
     const handleSaveProfile = async () => {
@@ -79,6 +125,107 @@ const Settings: React.FC = () => {
     };
 
     const handleBackToDashboard = () => { window.history.back(); };
+
+    const handleQuickCheck = async () => {
+        if (!activeProfile) return;
+
+        setQuickCheck({
+            status: 'running',
+            message: 'Checking Oura API and recent metrics...',
+            details: [],
+            checkedAt: null,
+        });
+
+        try {
+            const token = await getAccessTokenForProfile(activeProfile.id);
+            const endDay = toDay(new Date());
+            const startDay = shiftDay(endDay, -QUICK_CHECK_LOOKBACK_DAYS);
+
+            const [sleep, readiness, activity] = await Promise.all([
+                ouraService.getDailySleep(token, startDay, endDay),
+                ouraService.getDailyReadiness(token, startDay, endDay),
+                ouraService.getDailyActivity(token, startDay, endDay),
+            ]);
+
+            const apiLatestDays = {
+                sleep: getLatestDay(sleep),
+                readiness: getLatestDay(readiness),
+                activity: getLatestDay(activity),
+            };
+
+            const cached = queryClient.getQueryData(['dailyStats', activeProfile.id]) as DailyStats | undefined;
+            const localLatestDays = {
+                sleep: getLatestDay(cached?.sleep),
+                readiness: getLatestDay(cached?.readiness),
+                activity: getLatestDay(cached?.activity),
+            };
+
+            const staleMetrics: string[] = [];
+            const noRecentApiData: string[] = [];
+            const metrics: Array<keyof typeof apiLatestDays> = ['sleep', 'readiness', 'activity'];
+
+            metrics.forEach((metric) => {
+                const apiDay = apiLatestDays[metric];
+                const localDay = localLatestDays[metric];
+
+                if (!apiDay) {
+                    noRecentApiData.push(metric);
+                    return;
+                }
+
+                if (!localDay || localDay < apiDay) {
+                    staleMetrics.push(metric);
+                }
+            });
+
+            const details = [
+                `Oura latest days - Sleep: ${apiLatestDays.sleep ?? 'n/a'}, Readiness: ${apiLatestDays.readiness ?? 'n/a'}, Activity: ${apiLatestDays.activity ?? 'n/a'}`,
+                `Local cached days - Sleep: ${localLatestDays.sleep ?? 'n/a'}, Readiness: ${localLatestDays.readiness ?? 'n/a'}, Activity: ${localLatestDays.activity ?? 'n/a'}`,
+            ];
+
+            if (staleMetrics.length > 0) {
+                details.push(`Behind latest Oura data: ${staleMetrics.join(', ')}`);
+            }
+
+            if (noRecentApiData.length > 0) {
+                details.push(`No recent Oura data returned for: ${noRecentApiData.join(', ')}`);
+            }
+
+            let status: QuickCheckStatus = 'ok';
+            let message = 'Oura API is working and cached metrics look up to date.';
+
+            if (!cached) {
+                status = 'warning';
+                message = 'Oura API is working, but this session has no cached metrics loaded yet.';
+            } else if (staleMetrics.length > 0) {
+                status = 'warning';
+                message = 'Oura API is working, but some cached metrics are behind the latest Oura data.';
+            } else if (metrics.every((metric) => !apiLatestDays[metric])) {
+                status = 'warning';
+                message = 'Oura API is working, but no recent daily metrics were returned to compare freshness.';
+            }
+
+            setQuickCheck({
+                status,
+                message,
+                details,
+                checkedAt: new Date().toISOString(),
+            });
+        } catch (error) {
+            const rawMessage = error instanceof Error ? error.message : 'Unknown error';
+            const lower = rawMessage.toLowerCase();
+            const message = (lower.includes('unauthorized') || lower.includes('401'))
+                ? 'Oura check failed: authorization expired. Reconnect your Oura account.'
+                : 'Oura check failed. Please try again.';
+
+            setQuickCheck({
+                status: 'error',
+                message,
+                details: [rawMessage],
+                checkedAt: new Date().toISOString(),
+            });
+        }
+    };
 
     if (!activeProfile) {
         return (
@@ -157,9 +304,21 @@ const Settings: React.FC = () => {
                         <div className="flex justify-between items-center bg-[#0C0C0C] border border-[#222] rounded-md p-4">
                             <div>
                                 <p className="text-[#FAFAFA] font-medium text-sm">Switch Profile</p>
-                                <p className="text-[#666] text-xs mt-1">Currently viewing as {activeProfile.firstName || activeProfile.email}</p>
+                                <p className="text-[#666] text-xs mt-1">Currently viewing as {getProfileDisplayName(activeProfile)}</p>
                             </div>
-                            <button onClick={() => setActiveProfileId('')} className="px-4 py-2 border border-[#333] text-[#FAFAFA] font-medium rounded-md text-sm hover:bg-[#1C1C1C] transition-colors whitespace-nowrap">Switch Profile</button>
+                            {profiles.length > 1 ? (
+                                <div className="flex items-center gap-2">
+                                    <PrimaryProfileSwitcher selectClassName="min-w-[11rem]" />
+                                    <button
+                                        onClick={clearActiveProfileSelection}
+                                        className="px-4 py-2 border border-[#333] text-[#FAFAFA] font-medium rounded-md text-sm hover:bg-[#1C1C1C] transition-colors whitespace-nowrap"
+                                    >
+                                        Manage
+                                    </button>
+                                </div>
+                            ) : (
+                                <p className="text-[#666] text-xs">Add another profile to enable switching.</p>
+                            )}
                         </div>
                     </div>
                 </section>
@@ -179,6 +338,48 @@ const Settings: React.FC = () => {
                             <button onClick={handleFullSync} className="px-4 py-2 border border-[#333] text-[#FAFAFA] font-medium rounded-md text-sm hover:bg-[#1C1C1C] transition-colors whitespace-nowrap">
                                 Sync All Data
                             </button>
+                        </div>
+
+                        <div className="mt-5 pt-5 border-t border-[#222]">
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1">
+                                    <p className="text-[#FAFAFA] font-medium text-sm">Quick API & Freshness Check</p>
+                                    <p className="text-[#666] text-xs mt-1 leading-relaxed">
+                                        Fast verification against Oura `daily_sleep`, `daily_readiness`, and `daily_activity` endpoints over the last {QUICK_CHECK_LOOKBACK_DAYS + 1} days.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={handleQuickCheck}
+                                    disabled={quickCheck.status === 'running'}
+                                    className="px-4 py-2 border border-[#333] text-[#FAFAFA] font-medium rounded-md text-sm hover:bg-[#1C1C1C] transition-colors whitespace-nowrap disabled:opacity-50"
+                                >
+                                    {quickCheck.status === 'running' ? 'Checking...' : 'Run Check'}
+                                </button>
+                            </div>
+
+                            {quickCheck.status !== 'idle' && (
+                                <div
+                                    className={`mt-3 rounded-md border px-3 py-2.5 text-xs ${
+                                        quickCheck.status === 'ok'
+                                            ? 'border-[#00C896]/40 bg-[#00C896]/10 text-[#9AF0D3]'
+                                            : quickCheck.status === 'warning'
+                                                ? 'border-[#F59E0B]/40 bg-[#F59E0B]/10 text-[#FCD34D]'
+                                                : quickCheck.status === 'error'
+                                                    ? 'border-[#F87171]/40 bg-[#F87171]/10 text-[#FCA5A5]'
+                                                    : 'border-[#333] bg-[#0C0C0C] text-[#A0A0A0]'
+                                    }`}
+                                >
+                                    <p className="font-medium">{quickCheck.message}</p>
+                                    {quickCheck.details.map((detail, index) => (
+                                        <p key={`${detail}-${index}`} className="mt-1.5">{detail}</p>
+                                    ))}
+                                    {quickCheck.checkedAt && (
+                                        <p className="mt-2 text-[11px] opacity-80">
+                                            Checked {new Date(quickCheck.checkedAt).toLocaleString()}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </section>

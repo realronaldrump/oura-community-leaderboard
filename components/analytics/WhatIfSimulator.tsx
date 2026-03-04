@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { DailyStats } from '../../types';
-import { WhatIfResult, WhatIfScenario } from '../../types/analyticsTypes';
+import { WhatIfResult, WhatIfScenario, WhatIfTargetScore } from '../../types/analyticsTypes';
 import { simulateWhatIf } from '../../services/analyticsService';
 import {
     Sparkles,
@@ -78,6 +78,12 @@ const LOOKBACK_OPTIONS: Array<{ key: TimeWindowOption; label: string }> = [
     { key: 'all', label: 'All' }
 ];
 
+const TARGET_SCORE_OPTIONS: Array<{ key: WhatIfTargetScore; label: string }> = [
+    { key: 'readiness', label: 'Readiness' },
+    { key: 'sleep', label: 'Sleep' },
+    { key: 'activity', label: 'Activity' }
+];
+
 const OUTLIER_OPTIONS: Array<{ value: number; label: string }> = [
     { value: 0, label: 'No trim' },
     { value: 0.05, label: '5% trim' },
@@ -100,16 +106,19 @@ const formatAdjustment = (value: number, unit: string): string => {
 
 const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }) => {
     const [selectedMetric, setSelectedMetric] = useState(SCENARIO_OPTIONS[0]);
+    const [selectedTargetScore, setSelectedTargetScore] = useState<WhatIfTargetScore>('readiness');
     const [adjustment, setAdjustment] = useState(SCENARIO_OPTIONS[0].defaultAdjustment);
     const [lookbackDays, setLookbackDays] = useState<TimeWindowOption>(90);
     const [outlierTrimPercent, setOutlierTrimPercent] = useState(0.05);
     const [hideLowReliability, setHideLowReliability] = useState(false);
+    const selectedTargetLabel = TARGET_SCORE_OPTIONS.find(option => option.key === selectedTargetScore)?.label || 'Readiness';
 
     const results = useMemo((): WhatIfResult[] => {
         const scenario: WhatIfScenario = {
             metric: selectedMetric.metric,
             adjustment,
             unit: selectedMetric.unit,
+            targetScore: selectedTargetScore,
             lookbackDays,
             outlierTrimPercent
         };
@@ -123,7 +132,7 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
         if (usersDataFormatted.length === 0) return [];
 
         return simulateWhatIf(scenario, usersDataFormatted);
-    }, [profiles, usersData, selectedMetric, adjustment, lookbackDays, outlierTrimPercent]);
+    }, [profiles, usersData, selectedMetric, selectedTargetScore, adjustment, lookbackDays, outlierTrimPercent]);
 
     const visibleResults = useMemo(() => (
         hideLowReliability
@@ -185,12 +194,12 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                     <h3 className="section-header mb-0">What-If Simulator</h3>
                     <InfoTooltip
                         title="What-If Simulation"
-                        description="Project how changing one behavior metric could influence next-day readiness, per user."
-                        calculation="Uses linear regression on matched day pairs (metric day -> next-day readiness), trims outliers, and shows a 95% confidence band for projected change."
+                        description={`Project how changing one behavior metric could influence next-day ${selectedTargetLabel.toLowerCase()} score, per user.`}
+                        calculation={`Uses linear regression on matched day pairs (metric day -> next-day ${selectedTargetLabel.toLowerCase()}), trims outliers, and shows a 95% confidence band for projected change.`}
                     />
                 </div>
                 <p className="text-sm text-[var(--text-muted)]">
-                    Better for directional decisions than exact predictions. Reliability badges show model trust level.
+                    Better for directional decisions than exact predictions. Reliability badges show model trust level for {selectedTargetLabel.toLowerCase()} projections.
                 </p>
             </div>
 
@@ -269,6 +278,26 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                     <div className="space-y-4">
                         <div>
                             <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2 block">
+                                Predict Score
+                            </label>
+                            <div className="inline-flex rounded-xl p-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)]">
+                                {TARGET_SCORE_OPTIONS.map((option) => (
+                                    <button
+                                        key={option.key}
+                                        onClick={() => setSelectedTargetScore(option.key)}
+                                        className={`px-3 min-h-[44px] rounded-lg text-xs font-medium transition-all ${selectedTargetScore === option.key
+                                            ? 'bg-[var(--accent)] text-black'
+                                            : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                                            }`}
+                                    >
+                                        {option.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2 block">
                                 Model Window
                             </label>
                             <div className="inline-flex rounded-xl p-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)]">
@@ -323,11 +352,11 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
             <div className="card p-5 sm:p-6 bg-[var(--accent)]/5 border-[var(--accent)]/20">
                 <div className="flex items-start gap-4">
                     <HelpCircle className="w-7 h-7 text-[var(--accent)] flex-shrink-0 mt-0.5" />
-                    <p className="text-base sm:text-lg text-[var(--text-primary)] leading-relaxed">
+                    <p className="text-base sm:text-lg text-[#F8FAFC] leading-relaxed">
                         If I {adjustment >= 0 ? 'increase' : 'decrease'} my{' '}
-                        <span className="font-semibold">{selectedMetric.label.toLowerCase()}</span> by{' '}
+                        <span className="font-semibold text-[#E5E7EB]">{selectedMetric.label.toLowerCase()}</span> by{' '}
                         <span className="font-bold text-[var(--accent)]">{formatAdjustment(Math.abs(adjustment), selectedMetric.unit)}</span>,
-                        what is the likely effect on next-day readiness?
+                        what is the likely effect on next-day {selectedTargetLabel.toLowerCase()} score?
                     </p>
                 </div>
             </div>
@@ -369,7 +398,7 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                         <h4 className="section-header mb-0">Projected Impact</h4>
                         <InfoTooltip
                             title="Interpreting Impact"
-                            description="Each card shows projected readiness change, uncertainty range, and model reliability."
+                            description={`Each card shows projected ${selectedTargetLabel.toLowerCase()} change, uncertainty range, and model reliability.`}
                             calculation="Solid marker = expected change. Translucent band = 95% confidence interval. Reliability is based on sample size, fit quality (R²), and interval width."
                         />
                     </div>
@@ -397,7 +426,7 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                                         <div>
                                             <h5 className="font-semibold text-[var(--text-primary)]">{result.userName}</h5>
                                             <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                                                Baseline {result.currentBaseline.toFixed(1)} {'->'} Projected {result.projectedReadiness.toFixed(1)}
+                                                {selectedTargetLabel} baseline {result.currentBaseline.toFixed(1)} {'->'} projected {result.projectedScore.toFixed(1)}
                                             </p>
                                         </div>
                                     </div>
@@ -493,7 +522,7 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                     <div className="flex items-start gap-3">
                         <Lightbulb className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
                         <p className="text-sm text-[var(--text-secondary)]">
-                            Individual response differs across users. Prioritize strategies where projected change is positive
+                            Individual response differs across users. Prioritize strategies where projected {selectedTargetLabel.toLowerCase()} change is positive
                             and reliability is at least medium.
                         </p>
                     </div>
@@ -503,7 +532,8 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
             <div className="text-xs text-[var(--text-muted)] text-center p-4 flex items-center justify-center gap-2">
                 <BarChart3 className="w-4 h-4" />
                 <p>
-                    Projections are based on historical associations, not guaranteed causation. Use this to guide experiments, then validate with real outcomes.
+                    Projections are based on historical associations between your selected metric and next-day {selectedTargetLabel.toLowerCase()} score, not guaranteed causation.
+                    Use this to guide experiments, then validate with real outcomes.
                 </p>
             </div>
         </div>

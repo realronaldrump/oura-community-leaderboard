@@ -17,6 +17,7 @@ interface UserContextType {
     activeProfileId: string | null;
     activeProfile: UserProfile | null;
     setActiveProfileId: (id: string | null) => void;
+    clearActiveProfileSelection: () => void;
     addProfile: (options: AddProfileOptions) => Promise<void>;
     removeProfile: (id: string) => Promise<void>;
     updateProfile: (profile: Partial<UserProfile>) => Promise<void>;
@@ -36,9 +37,9 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [profiles, setProfiles] = useState<UserProfile[]>([]);
-    const [activeProfileId, setActiveProfileId] = useState<string | null>(() => {
+    const [activeProfileId, setActiveProfileIdState] = useState<string | null>(() => {
         if (typeof window !== 'undefined') {
-            return localStorage.getItem('active_profile_id');
+            return localStorage.getItem('active_profile_id') || null;
         }
         return null;
     });
@@ -74,6 +75,14 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const retryFirebaseConnection = useCallback(() => {
         setRetryCount(c => c + 1);
+    }, []);
+
+    const setActiveProfileId = useCallback((id: string | null) => {
+        setActiveProfileIdState(id || null);
+    }, []);
+
+    const clearActiveProfileSelection = useCallback(() => {
+        setActiveProfileIdState(null);
     }, []);
 
     useEffect(() => {
@@ -284,6 +293,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             activeProfileId,
             activeProfile,
             setActiveProfileId,
+            clearActiveProfileSelection,
             addProfile,
             removeProfile,
             updateProfile,

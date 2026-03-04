@@ -4,10 +4,13 @@ import { CorrelationResult, MetricOption } from '../../types/analyticsTypes';
 import { calculateCorrelation } from '../../services/analyticsService';
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import html2canvas from 'html2canvas';
-import { BarChart3, Image, Lightbulb, Sparkles, Filter, ChevronDown } from 'lucide-react';
+import { BarChart3, Image, Lightbulb, Sparkles, Filter } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
 import InsightCard from './InsightCard';
 import { generateAutomatedInsights } from '../../services/analyticsService';
+import { useUser } from '../../contexts/UserContext';
+import PrimaryProfileSwitcher from '../PrimaryProfileSwitcher';
+import { getProfileDisplayName } from '../../utils/profileName';
 
 interface CorrelationExplorerProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -25,14 +28,20 @@ const METRIC_OPTIONS = [
 ];
 
 const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, usersData }) => {
-    // Determine the active user (default to first profile)
-    const [selectedUserIdx, setSelectedUserIdx] = useState(0);
+    const { activeProfileId } = useUser();
     const [filterType, setFilterType] = useState<'all' | 'positive_habit' | 'negative_habit'>('all');
 
-    // We only show insights for one user at a time to keep it focused
-    const activeUserId = profiles[selectedUserIdx]?.id;
-    const activeUserName = (profiles[selectedUserIdx]?.email || 'User').split('@')[0];
-    const activeData = usersData[selectedUserIdx]?.data;
+    // Use the globally-selected primary profile; fall back to the first profile.
+    const selectedUserIdx = useMemo(() => {
+        if (profiles.length === 0) return -1;
+        const idx = profiles.findIndex((profile) => profile.id === activeProfileId);
+        return idx >= 0 ? idx : 0;
+    }, [profiles, activeProfileId]);
+
+    const activeProfile = selectedUserIdx >= 0 ? profiles[selectedUserIdx] : null;
+    const activeUserId = activeProfile?.id;
+    const activeUserName = activeProfile ? getProfileDisplayName(activeProfile) : 'User';
+    const activeData = selectedUserIdx >= 0 ? usersData[selectedUserIdx]?.data : undefined;
 
     const insights = useMemo(() => {
         if (!activeData || !activeUserId) return [];
@@ -108,20 +117,9 @@ const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, use
 
                 <div className="flex items-center gap-3">
                     {profiles.length > 1 && (
-                        <div className="relative">
-                            <select
-                                value={selectedUserIdx}
-                                onChange={(e) => setSelectedUserIdx(Number(e.target.value))}
-                                className="appearance-none pl-3 pr-8 py-2 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] hover:bg-white/5 cursor-pointer max-w-[150px] truncate"
-                            >
-                                {profiles.map((p, idx) => (
-                                    <option key={idx} value={idx}>
-                                        Viewing: {(p.email || 'User').split('@')[0]}
-                                    </option>
-                                ))}
-                            </select>
-                            <ChevronDown className="w-4 h-4 text-[var(--text-muted)] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        </div>
+                        <PrimaryProfileSwitcher
+                            selectClassName="pl-3 pr-8 py-2 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] hover:bg-white/5 cursor-pointer max-w-[170px] truncate"
+                        />
                     )}
                 </div>
             </div>
