@@ -7,6 +7,7 @@ import PrimaryProfileSwitcher from '../components/PrimaryProfileSwitcher';
 import { ouraService } from '../services/ouraService';
 import { DailyStats } from '../types';
 import { getProfileDisplayName } from '../utils/profileName';
+import { formatLocalISODate } from '../utils/date';
 
 type QuickCheckStatus = 'idle' | 'running' | 'ok' | 'warning' | 'error';
 
@@ -19,7 +20,7 @@ type QuickCheckState = {
 
 const QUICK_CHECK_LOOKBACK_DAYS = 3;
 
-const toDay = (date: Date): string => date.toISOString().split('T')[0];
+const toDay = (date: Date): string => formatLocalISODate(date);
 
 const shiftDay = (day: string, delta: number): string => {
     const value = new Date(`${day}T00:00:00`);
@@ -36,6 +37,17 @@ const getLatestDay = (items?: Array<{ day?: string }>): string | null => {
         if (!day) return latest;
         return !latest || day > latest ? day : latest;
     }, null);
+};
+
+const findLatestForDay = <T extends { day?: string; timestamp?: string }>(items: T[] | undefined, day?: string): T | undefined => {
+    if (!items?.length || !day) return undefined;
+    return items
+        .filter((item) => item.day === day)
+        .sort((a, b) => {
+            const bTs = b.timestamp ? new Date(b.timestamp).getTime() : Number.NEGATIVE_INFINITY;
+            const aTs = a.timestamp ? new Date(a.timestamp).getTime() : Number.NEGATIVE_INFINITY;
+            return bTs - aTs;
+        })[0];
 };
 
 const buildQuickCheckBaseline = (sleep: any[], readiness: any[], activity: any[]): DailyStats => ({
@@ -221,6 +233,7 @@ const Settings: React.FC = () => {
 
             const staleMetrics: string[] = [];
             const noRecentApiData: string[] = [];
+            const valueMismatches: string[] = [];
             const metrics: Array<keyof typeof apiLatestDays> = ['sleep', 'readiness', 'activity'];
 
             metrics.forEach((metric) => {
@@ -237,6 +250,25 @@ const Settings: React.FC = () => {
                 }
             });
 
+            const apiLatestActivity = findLatestForDay(activity, apiLatestDays.activity || undefined);
+            const localLatestActivity = findLatestForDay(effectiveCached?.activity, localLatestDays.activity || undefined);
+            if (
+                apiLatestDays.activity &&
+                localLatestDays.activity &&
+                apiLatestDays.activity === localLatestDays.activity &&
+                apiLatestActivity &&
+                localLatestActivity
+            ) {
+                const apiSteps = Number(apiLatestActivity.steps ?? 0);
+                const localSteps = Number(localLatestActivity.steps ?? 0);
+                const stepDelta = Math.abs(apiSteps - localSteps);
+                if (stepDelta >= 500) {
+                    valueMismatches.push(
+                        `Activity steps differ on ${apiLatestDays.activity}: cache ${localSteps.toLocaleString()} vs API ${apiSteps.toLocaleString()}`
+                    );
+                }
+            }
+
             const details = [
                 `Oura latest days - Sleep: ${apiLatestDays.sleep ?? 'n/a'}, Readiness: ${apiLatestDays.readiness ?? 'n/a'}, Activity: ${apiLatestDays.activity ?? 'n/a'}`,
                 `Local cached days - Sleep: ${localLatestDays.sleep ?? 'n/a'}, Readiness: ${localLatestDays.readiness ?? 'n/a'}, Activity: ${localLatestDays.activity ?? 'n/a'}`,
@@ -250,6 +282,8 @@ const Settings: React.FC = () => {
                 details.push(`No recent Oura data returned for: ${noRecentApiData.join(', ')}`);
             }
 
+            valueMismatches.forEach((detail) => details.push(detail));
+
             if (hydratedFromQuickCheck) {
                 details.push('Local metric cache was empty and has been hydrated from this quick check.');
             }
@@ -260,9 +294,11 @@ const Settings: React.FC = () => {
             if (hydratedFromQuickCheck) {
                 status = 'ok';
                 message = 'Oura API is working and local metrics cache has been refreshed.';
-            } else if (staleMetrics.length > 0) {
+            } else if (staleMetrics.length > 0 || valueMismatches.length > 0) {
                 status = 'warning';
-                message = 'Oura API is working, but some cached metrics are behind the latest Oura data.';
+                message = valueMismatches.length > 0
+                    ? 'Oura API is working, but cached values differ from the latest API data.'
+                    : 'Oura API is working, but some cached metrics are behind the latest Oura data.';
             } else if (metrics.every((metric) => !apiLatestDays[metric])) {
                 status = 'warning';
                 message = 'Oura API is working, but no recent daily metrics were returned to compare freshness.';

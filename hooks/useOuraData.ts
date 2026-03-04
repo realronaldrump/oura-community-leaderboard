@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ouraService } from '../services/ouraService';
 import { DailyStats } from '../types';
+import { formatLocalISODate } from '../utils/date';
 
 export const FULL_HISTORY_START_DATE = '2016-01-01';
 const INITIAL_RECENT_DAYS = 28;
@@ -17,13 +18,13 @@ type SyncDailyStatsOptions = {
     endDate?: string;
 };
 
-const getToday = (): string => new Date().toISOString().split('T')[0];
+const getToday = (): string => formatLocalISODate();
 
 const shiftDate = (day: string, daysDelta: number): string => {
     const d = new Date(`${day}T00:00:00`);
     if (Number.isNaN(d.getTime())) return day;
     d.setDate(d.getDate() + daysDelta);
-    return d.toISOString().split('T')[0];
+    return formatLocalISODate(d);
 };
 
 const sortByDayDesc = (a: any, b: any): number => {
@@ -60,6 +61,57 @@ const mergeCollection = (existing: any[] = [], incoming: any[] = [], sorter: (a:
         merged.set(key, prev ? { ...prev, ...item } : item);
     });
     return Array.from(merged.values()).sort(sorter);
+};
+
+const toTimestampMs = (value?: string | null): number => {
+    if (!value) return Number.NEGATIVE_INFINITY;
+    const ts = new Date(value).getTime();
+    return Number.isNaN(ts) ? Number.NEGATIVE_INFINITY : ts;
+};
+
+const countDefinedValues = (value: any): number => {
+    if (!value || typeof value !== 'object') return 0;
+    return Object.values(value).reduce((count, entry) => {
+        if (entry == null) return count;
+        if (Array.isArray(entry)) return count + (entry.length > 0 ? 1 : 0);
+        if (typeof entry === 'object') return count + countDefinedValues(entry);
+        return count + 1;
+    }, 0);
+};
+
+const preferDailyItem = (current: any, candidate: any): any => {
+    const currentTs = toTimestampMs(current?.timestamp || current?.updated_at || current?.created_at);
+    const candidateTs = toTimestampMs(candidate?.timestamp || candidate?.updated_at || candidate?.created_at);
+
+    if (candidateTs > currentTs) {
+        return { ...current, ...candidate };
+    }
+    if (candidateTs < currentTs) {
+        return current;
+    }
+
+    const currentDensity = countDefinedValues(current);
+    const candidateDensity = countDefinedValues(candidate);
+    if (candidateDensity >= currentDensity) {
+        return { ...current, ...candidate };
+    }
+
+    return current;
+};
+
+const mergeCollectionByDay = (existing: any[] = [], incoming: any[] = []): any[] => {
+    const byDay = new Map<string, any>();
+    const upsert = (item: any) => {
+        const day = item?.day || item?.summary_date;
+        if (!day) return;
+        const previous = byDay.get(day);
+        byDay.set(day, previous ? preferDailyItem(previous, item) : item);
+    };
+
+    existing.forEach(upsert);
+    incoming.forEach(upsert);
+
+    return Array.from(byDay.values()).sort(sortByDayDesc);
 };
 
 const toNumberOrNull = (value: any): number | null => (value != null ? Number(value) : null);
@@ -132,18 +184,18 @@ const buildDailyStats = (
     enhancedTag: any[], restModePeriod: any[], ringConfiguration: any[],
     cardiovascularAge: any[], vo2Max: any[]
 ): DailyStats => ({
-    sleep: sleep.map(s => ({ ...s, score: toNumberOrNull(s.score) })).sort(sortByDayDesc),
-    readiness: readiness.map(r => ({ ...r, score: toNumberOrNull(r.score) })).sort(sortByDayDesc),
-    activity: activity.map(a => ({
+    sleep: mergeCollectionByDay([], sleep.map(s => ({ ...s, score: toNumberOrNull(s.score) }))),
+    readiness: mergeCollectionByDay([], readiness.map(r => ({ ...r, score: toNumberOrNull(r.score) }))),
+    activity: mergeCollectionByDay([], activity.map(a => ({
         ...a,
         score: toNumberOrNull(a.score),
         steps: a.steps != null ? Number(a.steps) : 0,
         active_calories: a.active_calories != null ? Number(a.active_calories) : 0,
-    })).sort(sortByDayDesc),
+    }))),
     session: sessions.map(s => ({ ...s, average_hrv: toNumberOrNull(s.average_hrv) })).sort(sortByDayDesc),
-    spo2: spo2.sort(sortByDayDesc),
-    stress: stress.sort(sortByDayDesc),
-    resilience: resilience.sort(sortByDayDesc),
+    spo2: mergeCollectionByDay([], spo2),
+    stress: mergeCollectionByDay([], stress),
+    resilience: mergeCollectionByDay([], resilience),
     heartrate: heartrate.sort(sortByTimestampDesc),
     workout: workout.sort(sortByDayDesc),
     guidedSession: guidedSession.sort(sortByDayDesc),
@@ -152,8 +204,8 @@ const buildDailyStats = (
     enhancedTag: enhancedTag.sort(sortByDayDesc),
     restModePeriod: restModePeriod.sort(sortByDayDesc),
     ringConfiguration,
-    cardiovascularAge: cardiovascularAge.sort(sortByDayDesc),
-    vo2Max: vo2Max.sort(sortByDayDesc),
+    cardiovascularAge: mergeCollectionByDay([], cardiovascularAge),
+    vo2Max: mergeCollectionByDay([], vo2Max),
 });
 
 export const fetchDailyStats = async (
@@ -220,13 +272,13 @@ export const fetchDailyStats = async (
 
 const mergeDailyStats = (existingData: DailyStats, incomingData: DailyStats): DailyStats => {
     return {
-        sleep: mergeCollection(existingData.sleep, incomingData.sleep),
-        readiness: mergeCollection(existingData.readiness, incomingData.readiness),
-        activity: mergeCollection(existingData.activity, incomingData.activity),
+        sleep: mergeCollectionByDay(existingData.sleep, incomingData.sleep),
+        readiness: mergeCollectionByDay(existingData.readiness, incomingData.readiness),
+        activity: mergeCollectionByDay(existingData.activity, incomingData.activity),
         session: mergeCollection(existingData.session, incomingData.session),
-        spo2: mergeCollection(existingData.spo2, incomingData.spo2),
-        stress: mergeCollection(existingData.stress, incomingData.stress),
-        resilience: mergeCollection(existingData.resilience, incomingData.resilience),
+        spo2: mergeCollectionByDay(existingData.spo2, incomingData.spo2),
+        stress: mergeCollectionByDay(existingData.stress, incomingData.stress),
+        resilience: mergeCollectionByDay(existingData.resilience, incomingData.resilience),
         heartrate: mergeCollection(existingData.heartrate || [], incomingData.heartrate || [], sortByTimestampDesc),
         workout: mergeCollection(existingData.workout || [], incomingData.workout || []),
         guidedSession: mergeCollection(existingData.guidedSession || [], incomingData.guidedSession || []),
@@ -235,8 +287,8 @@ const mergeDailyStats = (existingData: DailyStats, incomingData: DailyStats): Da
         enhancedTag: mergeCollection(existingData.enhancedTag || [], incomingData.enhancedTag || []),
         restModePeriod: mergeCollection(existingData.restModePeriod || [], incomingData.restModePeriod || []),
         ringConfiguration: mergeCollection(existingData.ringConfiguration || [], incomingData.ringConfiguration || [], sortByTimestampDesc),
-        cardiovascularAge: mergeCollection(existingData.cardiovascularAge || [], incomingData.cardiovascularAge || []),
-        vo2Max: mergeCollection(existingData.vo2Max || [], incomingData.vo2Max || []),
+        cardiovascularAge: mergeCollectionByDay(existingData.cardiovascularAge || [], incomingData.cardiovascularAge || []),
+        vo2Max: mergeCollectionByDay(existingData.vo2Max || [], incomingData.vo2Max || []),
     };
 };
 

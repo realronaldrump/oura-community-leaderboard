@@ -22,6 +22,7 @@ type DateRangePickerProps = {
     onSelectDate: (date: string) => void;
     range?: { start: string; end: string };
     onRangeChange?: (range: { start: string; end: string }) => void;
+    mode?: 'date' | 'range';
     className?: string;
 };
 
@@ -76,12 +77,14 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
     onSelectDate,
     range,
     onRangeChange,
+    mode = 'range',
     className = '',
 }) => {
     const rootRef = useRef<HTMLDivElement>(null);
     const newestDay = dates[0];
     const oldestDay = dates[dates.length - 1];
 
+    const isRangeMode = mode === 'range';
     const [isOpen, setIsOpen] = useState(false);
     const [rangeStart, setRangeStart] = useState(oldestDay || '');
     const [rangeEnd, setRangeEnd] = useState(newestDay || '');
@@ -101,11 +104,11 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
     }, [dates]);
 
     useEffect(() => {
-        if (!range) return;
+        if (!isRangeMode || !range) return;
         setRangeStart((previous) => (previous === range.start ? previous : range.start));
         setRangeEnd((previous) => (previous === range.end ? previous : range.end));
         setYearFilter((previous) => previous || range.start.slice(0, 4));
-    }, [range]);
+    }, [isRangeMode, range]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -132,16 +135,20 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
     }, [isOpen]);
 
     const orderedRange = useMemo(() => {
+        if (!isRangeMode) {
+            return { start: oldestDay || '', end: newestDay || '' };
+        }
         if (!rangeStart || !rangeEnd) {
             return { start: oldestDay || '', end: newestDay || '' };
         }
         return clampRange(rangeStart, rangeEnd);
-    }, [newestDay, oldestDay, rangeEnd, rangeStart]);
+    }, [isRangeMode, newestDay, oldestDay, rangeEnd, rangeStart]);
 
     const rangeDatesDescending = useMemo(() => {
+        if (!isRangeMode) return dates;
         if (!orderedRange.start || !orderedRange.end) return [];
         return dates.filter((day) => day >= orderedRange.start && day <= orderedRange.end);
-    }, [dates, orderedRange.end, orderedRange.start]);
+    }, [dates, isRangeMode, orderedRange.end, orderedRange.start]);
 
     const rangeDatesAscending = useMemo(
         () => [...rangeDatesDescending].reverse(),
@@ -195,6 +202,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
 
     const applyRange = (start: string, end: string) => {
         const ordered = clampRange(start, end);
+        if (!isRangeMode) return;
         setRangeStart(ordered.start);
         setRangeEnd(ordered.end);
         onRangeChange?.(ordered);
@@ -221,6 +229,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
     };
 
     const applyQuickRange = (days: number) => {
+        if (!isRangeMode) return;
         if (!dates.length) return;
         const endDay = dates[0];
         const startIndex = Math.min(days - 1, dates.length - 1);
@@ -230,12 +239,17 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
     };
 
     const applyAllTimeRange = () => {
+        if (!isRangeMode) return;
         if (!dates.length) return;
         applyRange(dates[dates.length - 1], dates[0]);
         setYearFilter(dates[dates.length - 1].slice(0, 4));
     };
 
     const selectMonth = (month: MonthBucket) => {
+        if (!isRangeMode) {
+            onSelectDate(month.newest);
+            return;
+        }
         applyRange(month.oldest, month.newest);
         setYearFilter(month.year);
     };
@@ -249,16 +263,24 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
         if (nextDate) onSelectDate(nextDate);
     };
 
-    const rangeLabel = orderedRange.start && orderedRange.end
-        ? `${formatDayShort(orderedRange.start)} - ${formatDayShort(orderedRange.end)}`
-        : 'Select date range';
+    const rangeLabel = isRangeMode
+        ? (
+            orderedRange.start && orderedRange.end
+                ? `${formatDayShort(orderedRange.start)} - ${formatDayShort(orderedRange.end)}`
+                : 'Select date range'
+        )
+        : (selectedInRange ? formatDayShort(selectedInRange) : 'Select date');
 
     const selectedLabel = selectedInRange ? formatDayLong(selectedInRange) : 'No data available';
 
     const isDisabled = dates.length === 0;
-    const activeMonthKey = orderedRange.start && orderedRange.end
-        ? `${orderedRange.start.slice(0, 7)}-${orderedRange.end.slice(0, 7)}`
-        : '';
+    const activeMonthKey = isRangeMode
+        ? (
+            orderedRange.start && orderedRange.end && orderedRange.start.slice(0, 7) === orderedRange.end.slice(0, 7)
+                ? orderedRange.start.slice(0, 7)
+                : ''
+        )
+        : (selectedInRange?.slice(0, 7) || '');
 
     return (
         <div ref={rootRef} className={`relative ${className}`}>
@@ -278,7 +300,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                     <span className="min-w-0">
                         <span className="mb-0.5 flex items-center gap-1.5 text-[11px] uppercase tracking-[0.15em] text-[#5A5A5A]">
                             <CalendarDays className="h-3.5 w-3.5 text-[#00C896]" />
-                            Range Picker
+                            {isRangeMode ? 'Range Picker' : 'Date Picker'}
                         </span>
                         <span className="block truncate text-sm font-medium leading-tight">{selectedLabel}</span>
                         <span className="block truncate font-mono text-[11px] text-[#7C7C7C]">{rangeLabel}</span>
@@ -299,7 +321,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                             <div>
                                 <p className="text-[11px] uppercase tracking-[0.16em] text-[#5E5E5E]">Navigate History</p>
                                 <p className="text-sm text-[#D8D8D8]">
-                                    {rangeDatesDescending.length.toLocaleString()} days in range
+                                    {rangeDatesDescending.length.toLocaleString()} days {isRangeMode ? 'in range' : 'available'}
                                 </p>
                             </div>
                             <button
@@ -315,50 +337,71 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                             </button>
                         </div>
 
-                        <div className="flex flex-wrap gap-2">
-                            {QUICK_RANGES.map((quickRange) => (
-                                <button
-                                    key={quickRange.key}
-                                    type="button"
-                                    onClick={() => applyQuickRange(quickRange.days)}
-                                    className="min-h-[2.5rem] rounded-lg border border-[#2E2E2E] px-3 py-1.5 text-xs font-medium text-[#CFCFCF] transition-colors hover:border-[#3D3D3D] hover:bg-[#181818]"
-                                >
-                                    Last {quickRange.label}
-                                </button>
-                            ))}
-                            <button
-                                type="button"
-                                onClick={applyAllTimeRange}
-                                className="min-h-[2.5rem] rounded-lg border border-[#2E2E2E] px-3 py-1.5 text-xs font-medium text-[#CFCFCF] transition-colors hover:border-[#3D3D3D] hover:bg-[#181818]"
-                            >
-                                All Time
-                            </button>
-                        </div>
+                        {isRangeMode && (
+                            <>
+                                <div className="flex flex-wrap gap-2">
+                                    {QUICK_RANGES.map((quickRange) => (
+                                        <button
+                                            key={quickRange.key}
+                                            type="button"
+                                            onClick={() => applyQuickRange(quickRange.days)}
+                                            className="min-h-[2.5rem] rounded-lg border border-[#2E2E2E] px-3 py-1.5 text-xs font-medium text-[#CFCFCF] transition-colors hover:border-[#3D3D3D] hover:bg-[#181818]"
+                                        >
+                                            Last {quickRange.label}
+                                        </button>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={applyAllTimeRange}
+                                        className="min-h-[2.5rem] rounded-lg border border-[#2E2E2E] px-3 py-1.5 text-xs font-medium text-[#CFCFCF] transition-colors hover:border-[#3D3D3D] hover:bg-[#181818]"
+                                    >
+                                        All Time
+                                    </button>
+                                </div>
 
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <label className="space-y-1">
+                                        <span className="text-[11px] uppercase tracking-[0.14em] text-[#5F5F5F]">From</span>
+                                        <input
+                                            type="date"
+                                            min={oldestDay}
+                                            max={newestDay}
+                                            value={orderedRange.start}
+                                            onChange={(event) => handleBoundaryChange('start', event.target.value)}
+                                            className="w-full min-h-[2.75rem] rounded-lg border border-[#2D2D2D] bg-[#131313] px-3 text-sm text-[#EFEFEF] outline-none transition-colors focus:border-[#00C89699]"
+                                        />
+                                    </label>
+                                    <label className="space-y-1">
+                                        <span className="text-[11px] uppercase tracking-[0.14em] text-[#5F5F5F]">To</span>
+                                        <input
+                                            type="date"
+                                            min={oldestDay}
+                                            max={newestDay}
+                                            value={orderedRange.end}
+                                            onChange={(event) => handleBoundaryChange('end', event.target.value)}
+                                            className="w-full min-h-[2.75rem] rounded-lg border border-[#2D2D2D] bg-[#131313] px-3 text-sm text-[#EFEFEF] outline-none transition-colors focus:border-[#00C89699]"
+                                        />
+                                    </label>
+                                </div>
+                            </>
+                        )}
+
+                        {!isRangeMode && (
                             <label className="space-y-1">
-                                <span className="text-[11px] uppercase tracking-[0.14em] text-[#5F5F5F]">From</span>
+                                <span className="text-[11px] uppercase tracking-[0.14em] text-[#5F5F5F]">Select Date</span>
                                 <input
                                     type="date"
                                     min={oldestDay}
                                     max={newestDay}
-                                    value={orderedRange.start}
-                                    onChange={(event) => handleBoundaryChange('start', event.target.value)}
+                                    value={selectedInRange || ''}
+                                    onChange={(event) => {
+                                        const closestAvailableDay = findClosestDay(event.target.value, dates);
+                                        if (closestAvailableDay) onSelectDate(closestAvailableDay);
+                                    }}
                                     className="w-full min-h-[2.75rem] rounded-lg border border-[#2D2D2D] bg-[#131313] px-3 text-sm text-[#EFEFEF] outline-none transition-colors focus:border-[#00C89699]"
                                 />
                             </label>
-                            <label className="space-y-1">
-                                <span className="text-[11px] uppercase tracking-[0.14em] text-[#5F5F5F]">To</span>
-                                <input
-                                    type="date"
-                                    min={oldestDay}
-                                    max={newestDay}
-                                    value={orderedRange.end}
-                                    onChange={(event) => handleBoundaryChange('end', event.target.value)}
-                                    className="w-full min-h-[2.75rem] rounded-lg border border-[#2D2D2D] bg-[#131313] px-3 text-sm text-[#EFEFEF] outline-none transition-colors focus:border-[#00C89699]"
-                                />
-                            </label>
-                        </div>
+                        )}
 
                         <div className="space-y-2">
                             <div className="flex items-center justify-between gap-3">
@@ -375,7 +418,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                             </div>
                             <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
                                 {visibleMonths.map((month) => {
-                                    const isMonthActive = activeMonthKey === `${month.key}-${month.key}`;
+                                    const isMonthActive = activeMonthKey === month.key;
                                     return (
                                         <button
                                             key={month.key}

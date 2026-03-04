@@ -1,5 +1,6 @@
 import { FULL_HISTORY_START_DATE, syncDailyStats } from '../hooks/useOuraData';
 import { DailyStats } from '../types';
+import { formatLocalISODate } from '../utils/date';
 
 export interface SyncProgress {
     status: 'idle' | 'syncing' | 'complete' | 'error';
@@ -12,7 +13,7 @@ export interface SyncProgress {
 
 export type SyncProgressCallback = (progress: SyncProgress) => void;
 
-const getToday = () => new Date().toISOString().split('T')[0];
+const getToday = () => formatLocalISODate();
 
 const describeCoverage = (data: DailyStats): { start: string; end: string; days: number } | null => {
     const days = [

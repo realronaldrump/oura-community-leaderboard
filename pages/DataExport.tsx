@@ -3,6 +3,7 @@ import { Download, FileText, Database, TrendingUp, AlertCircle } from 'lucide-re
 import Papa from 'papaparse';
 import { useUser } from '../contexts/UserContext';
 import { fetchDailyStats, FULL_HISTORY_START_DATE } from '../hooks/useOuraData';
+import { formatLocalISODate } from '../utils/date';
 
 const METERS_TO_MILES = 0.000621371;
 const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
@@ -34,7 +35,7 @@ const DataExport: React.FC = () => {
                 const token = await getAccessTokenForProfile(activeProfile.id, { forceRefresh });
                 return fetchDailyStats(token, {
                     start: FULL_HISTORY_START_DATE,
-                    end: new Date().toISOString().split('T')[0]
+                    end: formatLocalISODate()
                 });
             };
 

@@ -11,6 +11,7 @@ import {
   DailyStress,
   DailyResilience
 } from '../types';
+import { formatLocalISODate } from '../utils/date';
 
 type QueryParams = Record<string, string | undefined>;
 type DateWindow = { start: string; end: string };
@@ -47,7 +48,7 @@ class OuraService {
 
   private getDateRange(daysBackOrStart: number | string = 30, end?: string) {
     if (typeof daysBackOrStart === 'string') {
-      const today = new Date().toISOString().split('T')[0];
+      const today = formatLocalISODate();
       return {
         start_date: daysBackOrStart,
         end_date: end || today
@@ -62,8 +63,8 @@ class OuraService {
     pastDate.setDate(pastDate.getDate() - (typeof daysBackOrStart === 'number' ? daysBackOrStart : 30));
 
     return {
-      start_date: pastDate.toISOString().split('T')[0],
-      end_date: tomorrow.toISOString().split('T')[0],
+      start_date: formatLocalISODate(pastDate),
+      end_date: formatLocalISODate(tomorrow),
     };
   }
 
