@@ -215,19 +215,6 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
         }
     };
 
-    const handleBoundaryChange = (boundary: 'start' | 'end', inputValue: string) => {
-        if (!inputValue) return;
-        const closestAvailableDay = findClosestDay(inputValue, dates);
-        if (!closestAvailableDay) return;
-
-        if (boundary === 'start') {
-            applyRange(closestAvailableDay, rangeEnd || newestDay || closestAvailableDay);
-            return;
-        }
-
-        applyRange(rangeStart || oldestDay || closestAvailableDay, closestAvailableDay);
-    };
-
     const applyQuickRange = (days: number) => {
         if (!isRangeMode) return;
         if (!dates.length) return;
@@ -263,15 +250,13 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
         if (nextDate) onSelectDate(nextDate);
     };
 
-    const rangeLabel = isRangeMode
+    const triggerLabel = isRangeMode
         ? (
             orderedRange.start && orderedRange.end
-                ? `${formatDayShort(orderedRange.start)} - ${formatDayShort(orderedRange.end)}`
-                : 'Select date range'
+                ? `${formatDayShort(orderedRange.start)} – ${formatDayShort(orderedRange.end)}`
+                : 'Select range'
         )
-        : (selectedInRange ? formatDayShort(selectedInRange) : 'Select date');
-
-    const selectedLabel = selectedInRange ? formatDayLong(selectedInRange) : 'No data available';
+        : (selectedInRange ? formatDayLong(selectedInRange) : 'Select date');
 
     const isDisabled = dates.length === 0;
     const activeMonthKey = isRangeMode
@@ -282,141 +267,146 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
         )
         : (selectedInRange?.slice(0, 7) || '');
 
+    // Determine which quick range pill is active
+    const activeQuickRange = useMemo(() => {
+        if (!isRangeMode || !orderedRange.start || !orderedRange.end || !dates.length) return '';
+        const endDay = dates[0];
+        if (orderedRange.end !== endDay) return '';
+        for (const qr of QUICK_RANGES) {
+            const startIndex = Math.min(qr.days - 1, dates.length - 1);
+            if (orderedRange.start === dates[startIndex]) return qr.key;
+        }
+        if (orderedRange.start === dates[dates.length - 1] && orderedRange.end === dates[0]) return 'all';
+        return '';
+    }, [isRangeMode, orderedRange, dates]);
+
     return (
         <div ref={rootRef} className={`relative ${className}`}>
+            {/* ── Trigger ── */}
             <button
                 type="button"
                 disabled={isDisabled}
                 onClick={() => setIsOpen((open) => !open)}
-                className={`group w-full sm:w-[18.5rem] min-h-[2.75rem] rounded-xl border px-3 py-2 text-left transition-all ${
+                className={`group flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-all ${
                     isDisabled
                         ? 'cursor-not-allowed border-[#2A2A2A] bg-[#141414] text-[#555]'
-                        : 'border-[#2B2B2B] bg-[#141414] hover:border-[#3A3A3A] hover:bg-[#181818] text-[#FAFAFA]'
+                        : 'border-[#2B2B2B] bg-[#141414] hover:border-[#3A3A3A] hover:bg-[#181818] text-[#E0E0E0]'
                 }`}
                 aria-expanded={isOpen}
                 aria-haspopup="dialog"
             >
-                <span className="flex items-center justify-between gap-3">
-                    <span className="min-w-0">
-                        <span className="mb-0.5 flex items-center gap-1.5 text-[11px] uppercase tracking-[0.15em] text-[#5A5A5A]">
-                            <CalendarDays className="h-3.5 w-3.5 text-[#00C896]" />
-                            {isRangeMode ? 'Range Picker' : 'Date Picker'}
-                        </span>
-                        <span className="block truncate text-sm font-medium leading-tight">{selectedLabel}</span>
-                        <span className="block truncate font-mono text-[11px] text-[#7C7C7C]">{rangeLabel}</span>
-                    </span>
-                    <ChevronDown className={`h-4 w-4 shrink-0 text-[#888] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                </span>
+                <CalendarDays className="h-3.5 w-3.5 shrink-0 text-[#00C896]" />
+                <span className="truncate font-medium">{triggerLabel}</span>
+                <ChevronDown className={`ml-auto h-3.5 w-3.5 shrink-0 text-[#666] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
+            {/* ── Dropdown ── */}
             {isOpen && (
                 <div
                     role="dialog"
-                    aria-label="Date range picker"
-                    className="absolute right-0 z-50 mt-3 w-[min(92vw,32rem)] overflow-hidden rounded-2xl border border-[#2C2C2C] bg-[#0F0F0F]/95 shadow-[0_20px_40px_rgba(0,0,0,0.5)] backdrop-blur"
+                    aria-label="Date picker"
+                    className="date-picker-panel absolute right-0 z-50 mt-2 w-[min(90vw,26rem)] overflow-hidden rounded-xl border border-[#2C2C2C] bg-[#111111] shadow-[0_16px_48px_rgba(0,0,0,0.55)]"
                 >
-                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(0,200,150,0.12),transparent_45%)]" />
-                    <div className="relative space-y-4 p-4 sm:p-5">
-                        <div className="flex items-start justify-between gap-3">
-                            <div>
-                                <p className="text-[11px] uppercase tracking-[0.16em] text-[#5E5E5E]">Navigate History</p>
-                                <p className="text-sm text-[#D8D8D8]">
-                                    {rangeDatesDescending.length.toLocaleString()} days {isRangeMode ? 'in range' : 'available'}
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (!newestDay) return;
-                                    onSelectDate(newestDay);
-                                    setIsOpen(false);
-                                }}
-                                className="min-h-[2.75rem] rounded-lg border border-[#2F2F2F] px-3 py-2 text-xs font-medium text-[#D4D4D4] transition-colors hover:border-[#00C89666] hover:text-[#FAFAFA]"
-                            >
-                                Jump to Latest
-                            </button>
-                        </div>
+                    {/* Accent top edge */}
+                    <div className="h-[2px] bg-gradient-to-r from-[#00C896]/60 via-[#00C896]/20 to-transparent" />
 
+                    <div className="space-y-3 p-4">
+                        {/* ── Range mode: quick ranges + range summary ── */}
                         {isRangeMode && (
                             <>
-                                <div className="flex flex-wrap gap-2">
+                                {/* Quick range pills */}
+                                <div className="flex items-center gap-1.5">
                                     {QUICK_RANGES.map((quickRange) => (
                                         <button
                                             key={quickRange.key}
                                             type="button"
                                             onClick={() => applyQuickRange(quickRange.days)}
-                                            className="min-h-[2.5rem] rounded-lg border border-[#2E2E2E] px-3 py-1.5 text-xs font-medium text-[#CFCFCF] transition-colors hover:border-[#3D3D3D] hover:bg-[#181818]"
+                                            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                                                activeQuickRange === quickRange.key
+                                                    ? 'bg-[#00C896]/15 text-[#00C896] border border-[#00C896]/30'
+                                                    : 'bg-[#1A1A1A] text-[#999] border border-[#252525] hover:border-[#333] hover:text-[#CCC]'
+                                            }`}
                                         >
-                                            Last {quickRange.label}
+                                            {quickRange.label}
                                         </button>
                                     ))}
                                     <button
                                         type="button"
                                         onClick={applyAllTimeRange}
-                                        className="min-h-[2.5rem] rounded-lg border border-[#2E2E2E] px-3 py-1.5 text-xs font-medium text-[#CFCFCF] transition-colors hover:border-[#3D3D3D] hover:bg-[#181818]"
+                                        className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                                            activeQuickRange === 'all'
+                                                ? 'bg-[#00C896]/15 text-[#00C896] border border-[#00C896]/30'
+                                                : 'bg-[#1A1A1A] text-[#999] border border-[#252525] hover:border-[#333] hover:text-[#CCC]'
+                                        }`}
                                     >
-                                        All Time
+                                        All
                                     </button>
+                                    <span className="ml-auto text-[11px] text-[#555] font-mono tabular-nums">
+                                        {rangeDatesDescending.length}d
+                                    </span>
                                 </div>
 
-                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                    <label className="space-y-1">
-                                        <span className="text-[11px] uppercase tracking-[0.14em] text-[#5F5F5F]">From</span>
-                                        <input
-                                            type="date"
-                                            min={oldestDay}
-                                            max={newestDay}
-                                            value={orderedRange.start}
-                                            onChange={(event) => handleBoundaryChange('start', event.target.value)}
-                                            className="w-full min-h-[2.75rem] rounded-lg border border-[#2D2D2D] bg-[#131313] px-3 text-sm text-[#EFEFEF] outline-none transition-colors focus:border-[#00C89699]"
-                                        />
-                                    </label>
-                                    <label className="space-y-1">
-                                        <span className="text-[11px] uppercase tracking-[0.14em] text-[#5F5F5F]">To</span>
-                                        <input
-                                            type="date"
-                                            min={oldestDay}
-                                            max={newestDay}
-                                            value={orderedRange.end}
-                                            onChange={(event) => handleBoundaryChange('end', event.target.value)}
-                                            className="w-full min-h-[2.75rem] rounded-lg border border-[#2D2D2D] bg-[#131313] px-3 text-sm text-[#EFEFEF] outline-none transition-colors focus:border-[#00C89699]"
-                                        />
-                                    </label>
+                                {/* Range summary line */}
+                                <div className="flex items-center gap-2 rounded-lg bg-[#181818] border border-[#222] px-3 py-2 text-xs">
+                                    <span className="text-[#777]">From</span>
+                                    <span className="font-medium text-[#D0D0D0]">{orderedRange.start ? formatDayShort(orderedRange.start) : '—'}</span>
+                                    <span className="text-[#444]">→</span>
+                                    <span className="text-[#777]">To</span>
+                                    <span className="font-medium text-[#D0D0D0]">{orderedRange.end ? formatDayShort(orderedRange.end) : '—'}</span>
                                 </div>
                             </>
                         )}
 
+                        {/* ── Date mode: single date input ── */}
                         {!isRangeMode && (
-                            <label className="space-y-1">
-                                <span className="text-[11px] uppercase tracking-[0.14em] text-[#5F5F5F]">Select Date</span>
-                                <input
-                                    type="date"
-                                    min={oldestDay}
-                                    max={newestDay}
-                                    value={selectedInRange || ''}
-                                    onChange={(event) => {
-                                        const closestAvailableDay = findClosestDay(event.target.value, dates);
-                                        if (closestAvailableDay) onSelectDate(closestAvailableDay);
-                                    }}
-                                    className="w-full min-h-[2.75rem] rounded-lg border border-[#2D2D2D] bg-[#131313] px-3 text-sm text-[#EFEFEF] outline-none transition-colors focus:border-[#00C89699]"
-                                />
-                            </label>
+                            <input
+                                type="date"
+                                min={oldestDay}
+                                max={newestDay}
+                                value={selectedInRange || ''}
+                                onChange={(event) => {
+                                    const closestAvailableDay = findClosestDay(event.target.value, dates);
+                                    if (closestAvailableDay) onSelectDate(closestAvailableDay);
+                                }}
+                                className="w-full rounded-lg border border-[#2D2D2D] bg-[#181818] px-3 py-2 text-sm text-[#EFEFEF] outline-none transition-colors focus:border-[#00C896]/60"
+                            />
                         )}
 
+                        {/* ── Month grid ── */}
                         <div className="space-y-2">
-                            <div className="flex items-center justify-between gap-3">
-                                <p className="text-[11px] uppercase tracking-[0.14em] text-[#5F5F5F]">Jump by Month</p>
-                                <select
-                                    value={yearFilter}
-                                    onChange={(event) => setYearFilter(event.target.value)}
-                                    className="min-h-[2.5rem] rounded-lg border border-[#2D2D2D] bg-[#131313] px-3 text-xs text-[#EAEAEA] outline-none focus:border-[#00C89699]"
-                                >
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1">
                                     {availableYears.map((year) => (
-                                        <option key={year} value={year}>{year}</option>
+                                        <button
+                                            key={year}
+                                            type="button"
+                                            onClick={() => setYearFilter(year)}
+                                            className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                                                yearFilter === year
+                                                    ? 'bg-[#222] text-[#EAEAEA]'
+                                                    : 'text-[#666] hover:text-[#AAA]'
+                                            }`}
+                                        >
+                                            {year}
+                                        </button>
                                     ))}
-                                </select>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (!newestDay) return;
+                                        onSelectDate(newestDay);
+                                        if (isRangeMode) {
+                                            applyRange(oldestDay || newestDay, newestDay);
+                                        }
+                                        setIsOpen(false);
+                                    }}
+                                    className="text-[11px] text-[#00C896]/70 hover:text-[#00C896] transition-colors font-medium"
+                                >
+                                    Latest
+                                </button>
                             </div>
-                            <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
+                            <div className="grid grid-cols-4 gap-1.5">
                                 {visibleMonths.map((month) => {
                                     const isMonthActive = activeMonthKey === month.key;
                                     return (
@@ -424,25 +414,22 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                                             key={month.key}
                                             type="button"
                                             onClick={() => selectMonth(month)}
-                                            className={`min-h-[2.5rem] rounded-lg border px-2 py-1.5 text-left transition-colors ${
+                                            className={`rounded-lg px-2 py-2 text-left transition-colors ${
                                                 isMonthActive
-                                                    ? 'border-[#00C89699] bg-[#00C8961A] text-[#E8FFF7]'
-                                                    : 'border-[#2D2D2D] bg-[#131313] text-[#C9C9C9] hover:border-[#3E3E3E]'
+                                                    ? 'bg-[#00C896]/12 text-[#B0F0DB]'
+                                                    : 'bg-[#161616] text-[#999] hover:bg-[#1E1E1E] hover:text-[#CCC]'
                                             }`}
                                         >
                                             <span className="block text-xs font-medium">{month.label}</span>
-                                            <span className="font-mono text-[10px] text-[#757575]">{month.dayCount}d</span>
+                                            <span className="text-[10px] text-[#555] font-mono">{month.dayCount}d</span>
                                         </button>
                                     );
                                 })}
                             </div>
                         </div>
 
-                        <div className="rounded-xl border border-[#2A2A2A] bg-[#121212] p-3">
-                            <div className="mb-2 flex items-center justify-between gap-2 text-[11px] text-[#7A7A7A]">
-                                <span className="font-mono">{rangeDatesAscending[0] || '--'}</span>
-                                <span className="font-mono">{rangeDatesAscending[rangeDatesAscending.length - 1] || '--'}</span>
-                            </div>
+                        {/* ── Day slider ── */}
+                        <div className="rounded-lg bg-[#161616] border border-[#222] px-3 py-2.5">
                             <input
                                 type="range"
                                 min={0}
@@ -452,10 +439,12 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                                 className="day-range-slider w-full"
                                 disabled={rangeDatesAscending.length <= 1}
                             />
-                            <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-[#8A8A8A]">
-                                <span>Oldest</span>
-                                <span className="font-medium text-[#DADADA]">{selectedInRange ? formatDayShort(selectedInRange) : '--'}</span>
-                                <span>Newest</span>
+                            <div className="mt-1.5 flex items-center justify-between text-[10px]">
+                                <span className="text-[#555]">{rangeDatesAscending[0] ? formatDayShort(rangeDatesAscending[0]) : '—'}</span>
+                                <span className="font-medium text-[#D0D0D0] text-[11px]">
+                                    {selectedInRange ? formatDayShort(selectedInRange) : '—'}
+                                </span>
+                                <span className="text-[#555]">{rangeDatesAscending.length > 0 ? formatDayShort(rangeDatesAscending[rangeDatesAscending.length - 1]) : '—'}</span>
                             </div>
                         </div>
                     </div>

@@ -42,6 +42,9 @@ import { formatLocalISODate } from '../utils/date';
 
 const METERS_TO_MILES = 0.000621371;
 const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
+const DEFAULT_DAILY_STATS_STALE_MS = 1000 * 60 * 60;
+const LIVE_DAILY_STATS_STALE_MS = 1000 * 60 * 5;
+const LIVE_DAILY_STATS_REFETCH_MS = 1000 * 60 * 5;
 type DayRange = { start: string; end: string };
 
 const filterByDayRange = <T extends { day?: string }>(items: T[] | undefined, range: DayRange | null): T[] => {
@@ -89,19 +92,6 @@ const findLatestByDay = <T extends { day?: string; timestamp?: string }>(items: 
         .sort((a, b) => toTimestampMs(b.timestamp) - toTimestampMs(a.timestamp))[0];
 };
 
-const findLatestAtOrBeforeDay = <T extends { day?: string; timestamp?: string }>(items: T[] | undefined, day?: string): T | undefined => {
-    if (!items?.length) return undefined;
-    const scoped = day
-        ? items.filter((item) => item.day && item.day <= day)
-        : items.filter((item) => item.day);
-    if (scoped.length === 0) return undefined;
-    return [...scoped].sort((a, b) => {
-        const dayCmp = (b.day || '').localeCompare(a.day || '');
-        if (dayCmp !== 0) return dayCmp;
-        return toTimestampMs(b.timestamp) - toTimestampMs(a.timestamp);
-    })[0];
-};
-
 const sessionBelongsToDay = (session: SleepSession, day: string): boolean => {
     if (session.day === day) return true;
     if (!session.bedtime_end) return false;
@@ -111,38 +101,6 @@ const sessionBelongsToDay = (session: SleepSession, day: string): boolean => {
 const getSessionsForDay = (sessions: SleepSession[] | undefined, day?: string): SleepSession[] => {
     if (!sessions?.length || !day) return [];
     return sessions.filter((session) => sessionBelongsToDay(session, day));
-};
-
-const getSessionAnchorDay = (session: SleepSession): string | undefined => {
-    if (session.bedtime_end) {
-        const parsed = new Date(session.bedtime_end);
-        if (!Number.isNaN(parsed.getTime())) {
-            return formatLocalISODate(parsed);
-        }
-    }
-    return session.day;
-};
-
-const getSessionsAtOrBeforeDay = (sessions: SleepSession[] | undefined, day?: string): SleepSession[] => {
-    if (!sessions?.length) return [];
-    const withAnchor = sessions
-        .map((session) => ({ session, anchorDay: getSessionAnchorDay(session) }))
-        .filter((entry): entry is { session: SleepSession; anchorDay: string } => Boolean(entry.anchorDay));
-
-    if (withAnchor.length === 0) return [];
-
-    const scoped = day
-        ? withAnchor.filter((entry) => entry.anchorDay <= day)
-        : withAnchor;
-    if (scoped.length === 0) return [];
-
-    const latestDay = scoped.reduce((latest, entry) =>
-        entry.anchorDay > latest ? entry.anchorDay : latest,
-    scoped[0].anchorDay);
-
-    return scoped
-        .filter((entry) => entry.anchorDay === latestDay)
-        .map((entry) => entry.session);
 };
 
 const pickBestSession = (sessions: SleepSession[]): SleepSession | undefined => {
@@ -279,7 +237,14 @@ const Dashboard: React.FC = () => {
                     throw error;
                 }
             },
-            staleTime: 1000 * 60 * 60,
+            staleTime: viewMode === 'today' && p.id === activeProfile?.id
+                ? LIVE_DAILY_STATS_STALE_MS
+                : DEFAULT_DAILY_STATS_STALE_MS,
+            refetchInterval: viewMode === 'today' && p.id === activeProfile?.id
+                ? LIVE_DAILY_STATS_REFETCH_MS
+                : false,
+            refetchIntervalInBackground: false,
+            refetchOnWindowFocus: viewMode === 'today' && p.id === activeProfile?.id ? 'always' : true,
         }))
     });
 
@@ -406,10 +371,7 @@ const Dashboard: React.FC = () => {
 
     const findSessionForDay = (day?: string) => {
         const exact = getSessionsForDay(sessionHistory, day);
-        if (exact.length > 0) {
-            return pickBestSession(exact);
-        }
-        return pickBestSession(getSessionsAtOrBeforeDay(sessionHistory, day));
+        return pickBestSession(exact);
     };
 
     const scoreAnchorDay = availableDays[dateIndex];
@@ -420,13 +382,13 @@ const Dashboard: React.FC = () => {
         if (nextIndex >= 0) setDateIndex(nextIndex);
     };
 
-    const currentSleep = findLatestByDay(sleepHistory, referenceDay) || findLatestAtOrBeforeDay(sleepHistory, referenceDay);
-    const currentReadiness = findLatestByDay(readinessHistory, referenceDay) || findLatestAtOrBeforeDay(readinessHistory, referenceDay);
-    const currentActivity = findLatestByDay(activityHistory, referenceDay) || findLatestAtOrBeforeDay(activityHistory, referenceDay);
+    const currentSleep = findLatestByDay(sleepHistory, referenceDay);
+    const currentReadiness = findLatestByDay(readinessHistory, referenceDay);
+    const currentActivity = findLatestByDay(activityHistory, referenceDay);
     const currentSession = findSessionForDay(referenceDay);
-    const currentSpo2 = findLatestByDay(spo2History, referenceDay) || findLatestAtOrBeforeDay(spo2History, referenceDay);
-    const currentStress = findLatestByDay(stressHistory, referenceDay) || findLatestAtOrBeforeDay(stressHistory, referenceDay);
-    const currentResilience = findLatestByDay(resilienceHistory, referenceDay) || findLatestAtOrBeforeDay(resilienceHistory, referenceDay);
+    const currentSpo2 = findLatestByDay(spo2History, referenceDay);
+    const currentStress = findLatestByDay(stressHistory, referenceDay);
+    const currentResilience = findLatestByDay(resilienceHistory, referenceDay);
     const bodyTempDeviationF = currentReadiness?.temperature_deviation != null
         ? currentReadiness.temperature_deviation * CELSIUS_DELTA_TO_FAHRENHEIT_DELTA
         : null;
@@ -648,12 +610,40 @@ const Dashboard: React.FC = () => {
         () => (p2Data?.heartrate || []).filter((point) => isInCompareWindow(point.timestamp)),
         [p2Data?.heartrate, compareDay, previousCompareDay]
     );
-    const p1Sleep = findLatestByDay(p1Data?.sleep || [], compareDay) || findLatestAtOrBeforeDay(p1Data?.sleep || [], compareDay);
-    const p1Readiness = findLatestByDay(p1Data?.readiness || [], compareDay) || findLatestAtOrBeforeDay(p1Data?.readiness || [], compareDay);
-    const p2Sleep = findLatestByDay(p2Data?.sleep || [], compareDay) || findLatestAtOrBeforeDay(p2Data?.sleep || [], compareDay);
-    const p2Readiness = findLatestByDay(p2Data?.readiness || [], compareDay) || findLatestAtOrBeforeDay(p2Data?.readiness || [], compareDay);
-    const p1Session = pickBestSession(getSessionsForDay(p1Data?.session, compareDay)) || pickBestSession(getSessionsAtOrBeforeDay(p1Data?.session, compareDay));
-    const p2Session = pickBestSession(getSessionsForDay(p2Data?.session, compareDay)) || pickBestSession(getSessionsAtOrBeforeDay(p2Data?.session, compareDay));
+    const p1Sleep = findLatestByDay(p1Data?.sleep || [], compareDay);
+    const p1Readiness = findLatestByDay(p1Data?.readiness || [], compareDay);
+    const p2Sleep = findLatestByDay(p2Data?.sleep || [], compareDay);
+    const p2Readiness = findLatestByDay(p2Data?.readiness || [], compareDay);
+    const p1Session = pickBestSession(getSessionsForDay(p1Data?.session, compareDay));
+    const p2Session = pickBestSession(getSessionsForDay(p2Data?.session, compareDay));
+
+    useEffect(() => {
+        if (!activeProfile?.id || viewMode !== 'today') return;
+        if (referenceDay !== formatLocalISODate()) return;
+        queryClient.invalidateQueries({ queryKey: ['dailyStats', activeProfile.id], exact: true });
+    }, [activeProfile?.id, queryClient, referenceDay, viewMode]);
+
+    useEffect(() => {
+        if (!profiles.length) return;
+        let timer: ReturnType<typeof window.setTimeout> | null = null;
+
+        const scheduleMidnightInvalidation = () => {
+            const now = new Date();
+            const nextMidnight = new Date(now);
+            nextMidnight.setHours(24, 0, 5, 0);
+            const delayMs = Math.max(nextMidnight.getTime() - now.getTime(), 1000);
+
+            timer = window.setTimeout(() => {
+                queryClient.invalidateQueries({ queryKey: ['dailyStats'] });
+                scheduleMidnightInvalidation();
+            }, delayMs);
+        };
+
+        scheduleMidnightInvalidation();
+        return () => {
+            if (timer !== null) window.clearTimeout(timer);
+        };
+    }, [profiles.length, queryClient]);
 
     const userName = activeProfile?.firstName || activeProfile?.email?.split('@')[0] || 'there';
 
