@@ -1,11 +1,11 @@
 const OURA_TOKEN_URL = 'https://api.ouraring.com/oauth/token';
 
-const getOAuthConfig = () => {
-    const clientId = process.env.OURA_CLIENT_ID;
-    const clientSecret = process.env.OURA_CLIENT_SECRET;
+const getOAuthConfig = (): { clientId: string; clientSecret: string } | null => {
+    const clientId = process.env.OURA_CLIENT_ID?.trim() || '';
+    const clientSecret = process.env.OURA_CLIENT_SECRET?.trim() || '';
 
     if (!clientId || !clientSecret) {
-        throw new Error('Missing OURA_CLIENT_ID or OURA_CLIENT_SECRET environment variable.');
+        return null;
     }
 
     return { clientId, clientSecret };
@@ -22,7 +22,16 @@ export default async function handler(req: any, res: any) {
     }
 
     try {
-        const { clientId, clientSecret } = getOAuthConfig();
+        const config = getOAuthConfig();
+        if (!config) {
+            sendJson(res, 500, {
+                error: 'missing_oauth_config',
+                details: 'Set OURA_CLIENT_ID and OURA_CLIENT_SECRET in the server environment.',
+            });
+            return;
+        }
+
+        const { clientId, clientSecret } = config;
         const { code, redirectUri } = req.body || {};
         const effectiveRedirectUri = redirectUri || process.env.OURA_REDIRECT_URI;
 
