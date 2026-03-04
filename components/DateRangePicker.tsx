@@ -1,19 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, ChevronDown } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
 type QuickRange = {
     key: string;
     label: string;
     days: number;
-};
-
-type MonthBucket = {
-    key: string;
-    label: string;
-    year: string;
-    newest: string;
-    oldest: string;
-    dayCount: number;
 };
 
 type DateRangePickerProps = {
@@ -24,9 +15,11 @@ type DateRangePickerProps = {
     onRangeChange?: (range: { start: string; end: string }) => void;
     mode?: 'date' | 'range';
     className?: string;
+    showStepper?: boolean;
 };
 
 const QUICK_RANGES: QuickRange[] = [
+    { key: '7d', label: '7D', days: 7 },
     { key: '30d', label: '30D', days: 30 },
     { key: '90d', label: '90D', days: 90 },
     { key: '1y', label: '1Y', days: 365 },
@@ -34,16 +27,17 @@ const QUICK_RANGES: QuickRange[] = [
 
 const toDateMs = (isoDay: string): number => new Date(`${isoDay}T12:00:00`).getTime();
 
+const formatDayLong = (isoDay: string): string => (
+    new Date(`${isoDay}T12:00:00`).toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+    })
+);
+
 const formatDayShort = (isoDay: string): string => (
     new Date(`${isoDay}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-);
-
-const formatDayLong = (isoDay: string): string => (
-    new Date(`${isoDay}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
-);
-
-const formatMonthLabel = (monthKey: string): string => (
-    new Date(`${monthKey}-01T12:00:00`).toLocaleDateString('en-US', { month: 'short' })
 );
 
 const clampRange = (start: string, end: string): { start: string; end: string } => {
@@ -52,7 +46,7 @@ const clampRange = (start: string, end: string): { start: string; end: string } 
 };
 
 const findClosestDay = (targetDay: string, dates: string[]): string | undefined => {
-    if (dates.length === 0) return undefined;
+    if (!targetDay || dates.length === 0) return undefined;
     if (dates.includes(targetDay)) return targetDay;
 
     const targetMs = toDateMs(targetDay);
@@ -79,36 +73,36 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
     onRangeChange,
     mode = 'range',
     className = '',
+    showStepper = false,
 }) => {
     const rootRef = useRef<HTMLDivElement>(null);
-    const newestDay = dates[0];
-    const oldestDay = dates[dates.length - 1];
-
+    const newestDay = dates[0] || '';
+    const oldestDay = dates[dates.length - 1] || '';
     const isRangeMode = mode === 'range';
     const [isOpen, setIsOpen] = useState(false);
-    const [rangeStart, setRangeStart] = useState(oldestDay || '');
-    const [rangeEnd, setRangeEnd] = useState(newestDay || '');
-    const [yearFilter, setYearFilter] = useState(newestDay?.slice(0, 4) || '');
+
+    const fallbackRange = useMemo(
+        () => ({ start: oldestDay, end: newestDay }),
+        [newestDay, oldestDay]
+    );
+
+    const effectiveRange = useMemo(() => {
+        if (!isRangeMode || !dates.length) return fallbackRange;
+
+        const inputStart = range?.start || fallbackRange.start;
+        const inputEnd = range?.end || fallbackRange.end;
+        const closestStart = findClosestDay(inputStart, dates) || oldestDay;
+        const closestEnd = findClosestDay(inputEnd, dates) || newestDay;
+        return clampRange(closestStart, closestEnd);
+    }, [dates, fallbackRange, isRangeMode, newestDay, oldestDay, range?.end, range?.start]);
+
+    const [draftStart, setDraftStart] = useState(effectiveRange.start);
+    const [draftEnd, setDraftEnd] = useState(effectiveRange.end);
 
     useEffect(() => {
-        if (!dates.length) {
-            setRangeStart('');
-            setRangeEnd('');
-            setYearFilter('');
-            return;
-        }
-
-        setRangeStart((previous) => (previous && dates.includes(previous) ? previous : dates[dates.length - 1]));
-        setRangeEnd((previous) => (previous && dates.includes(previous) ? previous : dates[0]));
-        setYearFilter((previous) => previous || dates[0].slice(0, 4));
-    }, [dates]);
-
-    useEffect(() => {
-        if (!isRangeMode || !range) return;
-        setRangeStart((previous) => (previous === range.start ? previous : range.start));
-        setRangeEnd((previous) => (previous === range.end ? previous : range.end));
-        setYearFilter((previous) => previous || range.start.slice(0, 4));
-    }, [isRangeMode, range]);
+        setDraftStart(effectiveRange.start);
+        setDraftEnd(effectiveRange.end);
+    }, [effectiveRange.end, effectiveRange.start]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -119,335 +113,274 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
             }
         };
 
-        const handleKeyDown = (event: KeyboardEvent) => {
+        const handleEscape = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
                 setIsOpen(false);
             }
         };
 
         document.addEventListener('mousedown', handlePointerDown);
-        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keydown', handleEscape);
 
         return () => {
             document.removeEventListener('mousedown', handlePointerDown);
-            document.removeEventListener('keydown', handleKeyDown);
+            document.removeEventListener('keydown', handleEscape);
         };
     }, [isOpen]);
 
-    const orderedRange = useMemo(() => {
-        if (!isRangeMode) {
-            return { start: oldestDay || '', end: newestDay || '' };
-        }
-        if (!rangeStart || !rangeEnd) {
-            return { start: oldestDay || '', end: newestDay || '' };
-        }
-        return clampRange(rangeStart, rangeEnd);
-    }, [isRangeMode, newestDay, oldestDay, rangeEnd, rangeStart]);
+    const normalizedDraftRange = useMemo(() => {
+        if (!isRangeMode) return fallbackRange;
+        if (!draftStart || !draftEnd) return effectiveRange;
+        return clampRange(draftStart, draftEnd);
+    }, [draftEnd, draftStart, effectiveRange, fallbackRange, isRangeMode]);
 
-    const rangeDatesDescending = useMemo(() => {
+    const scopedDates = useMemo(() => {
         if (!isRangeMode) return dates;
-        if (!orderedRange.start || !orderedRange.end) return [];
-        return dates.filter((day) => day >= orderedRange.start && day <= orderedRange.end);
-    }, [dates, isRangeMode, orderedRange.end, orderedRange.start]);
+        if (!normalizedDraftRange.start || !normalizedDraftRange.end) return [];
+        return dates.filter((day) => day >= normalizedDraftRange.start && day <= normalizedDraftRange.end);
+    }, [dates, isRangeMode, normalizedDraftRange.end, normalizedDraftRange.start]);
 
-    const rangeDatesAscending = useMemo(
-        () => [...rangeDatesDescending].reverse(),
-        [rangeDatesDescending]
-    );
-
-    const activeDay = selectedDate && dates.includes(selectedDate) ? selectedDate : newestDay;
-    const selectedInRange = activeDay && rangeDatesDescending.includes(activeDay) ? activeDay : rangeDatesDescending[0];
+    const activeDay = useMemo(() => {
+        if (dates.length === 0) return '';
+        if (selectedDate && dates.includes(selectedDate)) {
+            if (!isRangeMode || scopedDates.includes(selectedDate)) return selectedDate;
+        }
+        if (scopedDates.length > 0) return scopedDates[0];
+        return newestDay;
+    }, [dates, isRangeMode, newestDay, scopedDates, selectedDate]);
 
     useEffect(() => {
-        if (!selectedInRange) return;
-        if (selectedDate === selectedInRange) return;
-        onSelectDate(selectedInRange);
-    }, [onSelectDate, selectedDate, selectedInRange]);
+        if (!activeDay) return;
+        if (selectedDate === activeDay) return;
+        onSelectDate(activeDay);
+    }, [activeDay, onSelectDate, selectedDate]);
 
-    const monthBuckets = useMemo<MonthBucket[]>(() => {
-        const monthMap = new Map<string, MonthBucket>();
+    const commitRange = (startInput: string, endInput: string) => {
+        if (!isRangeMode || !dates.length) return;
 
-        dates.forEach((day) => {
-            const monthKey = day.slice(0, 7);
-            const existing = monthMap.get(monthKey);
+        const nextStart = findClosestDay(startInput, dates) || oldestDay;
+        const nextEnd = findClosestDay(endInput, dates) || newestDay;
+        const ordered = clampRange(nextStart, nextEnd);
 
-            if (!existing) {
-                monthMap.set(monthKey, {
-                    key: monthKey,
-                    label: formatMonthLabel(monthKey),
-                    year: day.slice(0, 4),
-                    newest: day,
-                    oldest: day,
-                    dayCount: 1,
-                });
-                return;
-            }
-
-            existing.oldest = day;
-            existing.dayCount += 1;
-        });
-
-        return Array.from(monthMap.values()).sort((a, b) => b.key.localeCompare(a.key));
-    }, [dates]);
-
-    const availableYears = useMemo(() => {
-        const years = new Set(monthBuckets.map((month) => month.year));
-        return Array.from(years).sort((a, b) => Number(b) - Number(a));
-    }, [monthBuckets]);
-
-    const visibleMonths = useMemo(
-        () => monthBuckets.filter((month) => month.year === yearFilter),
-        [monthBuckets, yearFilter]
-    );
-
-    const applyRange = (start: string, end: string) => {
-        const ordered = clampRange(start, end);
-        if (!isRangeMode) return;
-        setRangeStart(ordered.start);
-        setRangeEnd(ordered.end);
+        setDraftStart(ordered.start);
+        setDraftEnd(ordered.end);
         onRangeChange?.(ordered);
 
-        const nextRangeDates = dates.filter((day) => day >= ordered.start && day <= ordered.end);
-        if (!nextRangeDates.length) return;
+        const nextScopedDates = dates.filter((day) => day >= ordered.start && day <= ordered.end);
+        if (!nextScopedDates.length) return;
 
-        if (!selectedDate || !nextRangeDates.includes(selectedDate)) {
-            onSelectDate(nextRangeDates[0]);
+        const nextActiveDay = selectedDate && nextScopedDates.includes(selectedDate)
+            ? selectedDate
+            : nextScopedDates[0];
+
+        if (nextActiveDay && nextActiveDay !== selectedDate) {
+            onSelectDate(nextActiveDay);
         }
     };
 
     const applyQuickRange = (days: number) => {
-        if (!isRangeMode) return;
         if (!dates.length) return;
-        const endDay = dates[0];
         const startIndex = Math.min(days - 1, dates.length - 1);
-        const startDay = dates[startIndex];
-        applyRange(startDay, endDay);
-        setYearFilter(startDay.slice(0, 4));
+        const start = dates[startIndex];
+        const end = dates[0];
+        commitRange(start, end);
     };
 
-    const applyAllTimeRange = () => {
-        if (!isRangeMode) return;
+    const applyFullRange = () => {
         if (!dates.length) return;
-        applyRange(dates[dates.length - 1], dates[0]);
-        setYearFilter(dates[dates.length - 1].slice(0, 4));
+        commitRange(oldestDay, newestDay);
     };
 
-    const selectMonth = (month: MonthBucket) => {
-        if (!isRangeMode) {
-            onSelectDate(month.newest);
-            return;
+    const activeQuickRange = useMemo(() => {
+        if (!isRangeMode || !dates.length) return '';
+        if (normalizedDraftRange.end !== newestDay) return '';
+
+        for (const quickRange of QUICK_RANGES) {
+            const startIndex = Math.min(quickRange.days - 1, dates.length - 1);
+            if (normalizedDraftRange.start === dates[startIndex]) {
+                return quickRange.key;
+            }
         }
-        applyRange(month.oldest, month.newest);
-        setYearFilter(month.year);
-    };
 
-    const sliderIndex = selectedInRange
-        ? Math.max(0, rangeDatesAscending.indexOf(selectedInRange))
-        : Math.max(0, rangeDatesAscending.length - 1);
+        if (normalizedDraftRange.start === oldestDay && normalizedDraftRange.end === newestDay) {
+            return 'all';
+        }
 
-    const handleSliderChange = (value: number) => {
-        const nextDate = rangeDatesAscending[value];
-        if (nextDate) onSelectDate(nextDate);
+        return '';
+    }, [dates, isRangeMode, newestDay, normalizedDraftRange.end, normalizedDraftRange.start, oldestDay]);
+
+    const activeIndex = activeDay ? scopedDates.indexOf(activeDay) : -1;
+    const canStepOlder = activeIndex >= 0 && activeIndex < scopedDates.length - 1;
+    const canStepNewer = activeIndex > 0;
+
+    const stepDate = (direction: 'older' | 'newer') => {
+        if (activeIndex < 0) return;
+
+        if (direction === 'older' && canStepOlder) {
+            onSelectDate(scopedDates[activeIndex + 1]);
+        }
+
+        if (direction === 'newer' && canStepNewer) {
+            onSelectDate(scopedDates[activeIndex - 1]);
+        }
     };
 
     const triggerLabel = isRangeMode
         ? (
-            orderedRange.start && orderedRange.end
-                ? `${formatDayShort(orderedRange.start)} – ${formatDayShort(orderedRange.end)}`
+            normalizedDraftRange.start && normalizedDraftRange.end
+                ? `${formatDayShort(normalizedDraftRange.start)} - ${formatDayShort(normalizedDraftRange.end)}`
                 : 'Select range'
         )
-        : (selectedInRange ? formatDayLong(selectedInRange) : 'Select date');
+        : (activeDay ? formatDayLong(activeDay) : 'Select date');
 
     const isDisabled = dates.length === 0;
-    const activeMonthKey = isRangeMode
-        ? (
-            orderedRange.start && orderedRange.end && orderedRange.start.slice(0, 7) === orderedRange.end.slice(0, 7)
-                ? orderedRange.start.slice(0, 7)
-                : ''
-        )
-        : (selectedInRange?.slice(0, 7) || '');
-
-    // Determine which quick range pill is active
-    const activeQuickRange = useMemo(() => {
-        if (!isRangeMode || !orderedRange.start || !orderedRange.end || !dates.length) return '';
-        const endDay = dates[0];
-        if (orderedRange.end !== endDay) return '';
-        for (const qr of QUICK_RANGES) {
-            const startIndex = Math.min(qr.days - 1, dates.length - 1);
-            if (orderedRange.start === dates[startIndex]) return qr.key;
-        }
-        if (orderedRange.start === dates[dates.length - 1] && orderedRange.end === dates[0]) return 'all';
-        return '';
-    }, [isRangeMode, orderedRange, dates]);
+    const recentDates = dates.slice(0, 18);
 
     return (
         <div ref={rootRef} className={`relative ${className}`}>
-            {/* ── Trigger ── */}
             <button
                 type="button"
                 disabled={isDisabled}
                 onClick={() => setIsOpen((open) => !open)}
-                className={`group flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-all ${
-                    isDisabled
-                        ? 'cursor-not-allowed border-[#2A2A2A] bg-[#141414] text-[#555]'
-                        : 'border-[#2B2B2B] bg-[#141414] hover:border-[#3A3A3A] hover:bg-[#181818] text-[#E0E0E0]'
-                }`}
+                className={`date-picker-trigger group ${isDisabled ? 'is-disabled' : ''}`}
                 aria-expanded={isOpen}
                 aria-haspopup="dialog"
             >
-                <CalendarDays className="h-3.5 w-3.5 shrink-0 text-[#00C896]" />
+                <CalendarDays className="h-4 w-4 shrink-0 text-[var(--accent)]" />
                 <span className="truncate font-medium">{triggerLabel}</span>
-                <ChevronDown className={`ml-auto h-3.5 w-3.5 shrink-0 text-[#666] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`ml-auto h-4 w-4 shrink-0 text-[var(--text-muted)] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
-            {/* ── Dropdown ── */}
+            {showStepper && (
+                <div className="mt-2 flex items-center justify-end gap-1.5">
+                    <button
+                        type="button"
+                        onClick={() => stepDate('older')}
+                        disabled={!canStepOlder}
+                        className="date-picker-step"
+                        aria-label="Select older date"
+                    >
+                        <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <span className="min-w-[7.25rem] text-center font-mono text-xs text-[var(--text-muted)] tabular-nums">
+                        {activeDay || '--'}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => stepDate('newer')}
+                        disabled={!canStepNewer}
+                        className="date-picker-step"
+                        aria-label="Select newer date"
+                    >
+                        <ChevronRight className="h-4 w-4" />
+                    </button>
+                </div>
+            )}
+
             {isOpen && (
                 <div
                     role="dialog"
-                    aria-label="Date picker"
-                    className="date-picker-panel absolute right-0 z-50 mt-2 w-[min(90vw,26rem)] overflow-hidden rounded-xl border border-[#2C2C2C] bg-[#111111] shadow-[0_16px_48px_rgba(0,0,0,0.55)]"
+                    aria-label={isRangeMode ? 'Date range picker' : 'Date picker'}
+                    className="date-picker-panel absolute right-0 z-50 mt-2 w-[min(92vw,22rem)] rounded-xl border border-[var(--border-default)] bg-[var(--bg-raised)] p-3 shadow-[0_18px_44px_rgba(0,0,0,0.45)]"
                 >
-                    {/* Accent top edge */}
-                    <div className="h-[2px] bg-gradient-to-r from-[#00C896]/60 via-[#00C896]/20 to-transparent" />
-
-                    <div className="space-y-3 p-4">
-                        {/* ── Range mode: quick ranges + range summary ── */}
-                        {isRangeMode && (
-                            <>
-                                {/* Quick range pills */}
-                                <div className="flex items-center gap-1.5">
-                                    {QUICK_RANGES.map((quickRange) => (
-                                        <button
-                                            key={quickRange.key}
-                                            type="button"
-                                            onClick={() => applyQuickRange(quickRange.days)}
-                                            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                                                activeQuickRange === quickRange.key
-                                                    ? 'bg-[#00C896]/15 text-[#00C896] border border-[#00C896]/30'
-                                                    : 'bg-[#1A1A1A] text-[#999] border border-[#252525] hover:border-[#333] hover:text-[#CCC]'
-                                            }`}
-                                        >
-                                            {quickRange.label}
-                                        </button>
-                                    ))}
+                    {isRangeMode ? (
+                        <div className="space-y-3">
+                            <div className="flex flex-wrap gap-1.5">
+                                {QUICK_RANGES.map((quickRange) => (
                                     <button
+                                        key={quickRange.key}
                                         type="button"
-                                        onClick={applyAllTimeRange}
-                                        className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                                            activeQuickRange === 'all'
-                                                ? 'bg-[#00C896]/15 text-[#00C896] border border-[#00C896]/30'
-                                                : 'bg-[#1A1A1A] text-[#999] border border-[#252525] hover:border-[#333] hover:text-[#CCC]'
-                                        }`}
+                                        onClick={() => applyQuickRange(quickRange.days)}
+                                        className={`date-picker-chip ${activeQuickRange === quickRange.key ? 'is-active' : ''}`}
                                     >
-                                        All
+                                        {quickRange.label}
                                     </button>
-                                    <span className="ml-auto text-[11px] text-[#555] font-mono tabular-nums">
-                                        {rangeDatesDescending.length}d
-                                    </span>
-                                </div>
-
-                                {/* Range summary line */}
-                                <div className="flex items-center gap-2 rounded-lg bg-[#181818] border border-[#222] px-3 py-2 text-xs">
-                                    <span className="text-[#777]">From</span>
-                                    <span className="font-medium text-[#D0D0D0]">{orderedRange.start ? formatDayShort(orderedRange.start) : '—'}</span>
-                                    <span className="text-[#444]">→</span>
-                                    <span className="text-[#777]">To</span>
-                                    <span className="font-medium text-[#D0D0D0]">{orderedRange.end ? formatDayShort(orderedRange.end) : '—'}</span>
-                                </div>
-                            </>
-                        )}
-
-                        {/* ── Date mode: single date input ── */}
-                        {!isRangeMode && (
-                            <input
-                                type="date"
-                                min={oldestDay}
-                                max={newestDay}
-                                value={selectedInRange || ''}
-                                onChange={(event) => {
-                                    const closestAvailableDay = findClosestDay(event.target.value, dates);
-                                    if (closestAvailableDay) onSelectDate(closestAvailableDay);
-                                }}
-                                className="w-full rounded-lg border border-[#2D2D2D] bg-[#181818] px-3 py-2 text-sm text-[#EFEFEF] outline-none transition-colors focus:border-[#00C896]/60"
-                            />
-                        )}
-
-                        {/* ── Month grid ── */}
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-1">
-                                    {availableYears.map((year) => (
-                                        <button
-                                            key={year}
-                                            type="button"
-                                            onClick={() => setYearFilter(year)}
-                                            className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
-                                                yearFilter === year
-                                                    ? 'bg-[#222] text-[#EAEAEA]'
-                                                    : 'text-[#666] hover:text-[#AAA]'
-                                            }`}
-                                        >
-                                            {year}
-                                        </button>
-                                    ))}
-                                </div>
+                                ))}
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        if (!newestDay) return;
-                                        onSelectDate(newestDay);
-                                        if (isRangeMode) {
-                                            applyRange(oldestDay || newestDay, newestDay);
-                                        }
-                                        setIsOpen(false);
+                                    onClick={applyFullRange}
+                                    className={`date-picker-chip ${activeQuickRange === 'all' ? 'is-active' : ''}`}
+                                >
+                                    All
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <label className="date-picker-field">
+                                    <span>Start</span>
+                                    <input
+                                        type="date"
+                                        min={oldestDay}
+                                        max={newestDay}
+                                        value={normalizedDraftRange.start}
+                                        onChange={(event) => commitRange(event.target.value, normalizedDraftRange.end)}
+                                    />
+                                </label>
+                                <label className="date-picker-field">
+                                    <span>End</span>
+                                    <input
+                                        type="date"
+                                        min={oldestDay}
+                                        max={newestDay}
+                                        value={normalizedDraftRange.end}
+                                        onChange={(event) => commitRange(normalizedDraftRange.start, event.target.value)}
+                                    />
+                                </label>
+                            </div>
+
+                            <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+                                <span className="font-medium text-[var(--text-primary)]">{scopedDates.length.toLocaleString()} days</span>
+                                {' '}from {formatDayShort(normalizedDraftRange.start)} to {formatDayShort(normalizedDraftRange.end)}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            <label className="date-picker-field">
+                                <span>Day</span>
+                                <input
+                                    type="date"
+                                    min={oldestDay}
+                                    max={newestDay}
+                                    value={activeDay}
+                                    onChange={(event) => {
+                                        const nextDay = findClosestDay(event.target.value, dates);
+                                        if (nextDay) onSelectDate(nextDay);
                                     }}
-                                    className="text-[11px] text-[#00C896]/70 hover:text-[#00C896] transition-colors font-medium"
+                                />
+                            </label>
+
+                            <div className="flex flex-wrap gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => newestDay && onSelectDate(newestDay)}
+                                    className="date-picker-chip"
                                 >
                                     Latest
                                 </button>
+                                <button
+                                    type="button"
+                                    onClick={() => oldestDay && onSelectDate(oldestDay)}
+                                    className="date-picker-chip"
+                                >
+                                    Oldest
+                                </button>
                             </div>
-                            <div className="grid grid-cols-4 gap-1.5">
-                                {visibleMonths.map((month) => {
-                                    const isMonthActive = activeMonthKey === month.key;
-                                    return (
-                                        <button
-                                            key={month.key}
-                                            type="button"
-                                            onClick={() => selectMonth(month)}
-                                            className={`rounded-lg px-2 py-2 text-left transition-colors ${
-                                                isMonthActive
-                                                    ? 'bg-[#00C896]/12 text-[#B0F0DB]'
-                                                    : 'bg-[#161616] text-[#999] hover:bg-[#1E1E1E] hover:text-[#CCC]'
-                                            }`}
-                                        >
-                                            <span className="block text-xs font-medium">{month.label}</span>
-                                            <span className="text-[10px] text-[#555] font-mono">{month.dayCount}d</span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
 
-                        {/* ── Day slider ── */}
-                        <div className="rounded-lg bg-[#161616] border border-[#222] px-3 py-2.5">
-                            <input
-                                type="range"
-                                min={0}
-                                max={Math.max(0, rangeDatesAscending.length - 1)}
-                                value={sliderIndex}
-                                onChange={(event) => handleSliderChange(Number(event.target.value))}
-                                className="day-range-slider w-full"
-                                disabled={rangeDatesAscending.length <= 1}
-                            />
-                            <div className="mt-1.5 flex items-center justify-between text-[10px]">
-                                <span className="text-[#555]">{rangeDatesAscending[0] ? formatDayShort(rangeDatesAscending[0]) : '—'}</span>
-                                <span className="font-medium text-[#D0D0D0] text-[11px]">
-                                    {selectedInRange ? formatDayShort(selectedInRange) : '—'}
-                                </span>
-                                <span className="text-[#555]">{rangeDatesAscending.length > 0 ? formatDayShort(rangeDatesAscending[rangeDatesAscending.length - 1]) : '—'}</span>
+                            <div className="grid max-h-56 grid-cols-1 gap-1.5 overflow-auto pr-1 sm:grid-cols-2">
+                                {recentDates.map((date) => (
+                                    <button
+                                        key={date}
+                                        type="button"
+                                        onClick={() => onSelectDate(date)}
+                                        className={`date-picker-day ${date === activeDay ? 'is-active' : ''}`}
+                                    >
+                                        <span className="truncate">{formatDayLong(date)}</span>
+                                        <span className="font-mono text-[10px] text-[var(--text-muted)]">{date}</span>
+                                    </button>
+                                ))}
                             </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             )}
         </div>

@@ -1,9 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DailyStats } from '../../types';
-import { TimelineDataPoint, TimelineInsight } from '../../types/analyticsTypes';
 import { generateTimelineData } from '../../services/analyticsService';
-import { Clock, BedDouble, Activity, Heart, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Clock, BedDouble, Activity, Heart } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
+import DateRangePicker from '../DateRangePicker';
 
 interface TimelineViewProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -27,7 +27,14 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
         return [...dates].sort().reverse().slice(0, 30);
     }, [usersData]);
 
-    const { dataPoints, insights } = useMemo(() => {
+    useEffect(() => {
+        if (!availableDates.length) return;
+        if (!availableDates.includes(selectedDate)) {
+            setSelectedDate(availableDates[0]);
+        }
+    }, [availableDates, selectedDate]);
+
+    const { insights } = useMemo(() => {
         const usersDataFormatted = profiles.map((profile, idx) => ({
             userId: profile.id,
             userName: (profile.email || 'User').split('@')[0],
@@ -86,60 +93,28 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
     return (
         <div className="space-y-6">
             {/* Date Selector */}
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <h3 className="section-header mb-0">24-Hour Timeline</h3>
-                    <InfoTooltip
-                        title="24-Hour Timeline"
-                        description="Visualize when each user slept during the day. Compare sleep timing patterns side-by-side."
-                        calculation="Sleep periods are shown on a Noon-to-Noon axis (12 PM previous day to 12 PM selected day) to display sessions continuously."
-                    />
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                        <h3 className="section-header mb-0">24-Hour Timeline</h3>
+                        <InfoTooltip
+                            title="24-Hour Timeline"
+                            description="Visualize when each user slept during the day. Compare sleep timing patterns side-by-side."
+                            calculation="Sleep periods are shown on a Noon-to-Noon axis (12 PM previous day to 12 PM selected day) to display sessions continuously."
+                        />
+                    </div>
+                    <p className="text-sm text-[var(--text-muted)]">
+                        Compare daily patterns across users
+                    </p>
                 </div>
-                <p className="text-sm text-[var(--text-muted)] mt-1">
-                    Compare daily patterns across users
-                </p>
-
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => {
-                            const idx = availableDates.indexOf(selectedDate);
-                            if (idx < availableDates.length - 1) {
-                                setSelectedDate(availableDates[idx + 1]);
-                            }
-                        }}
-                        disabled={availableDates.indexOf(selectedDate) >= availableDates.length - 1}
-                        className="p-2 rounded-lg hover:bg-[var(--bg-hover)] disabled:opacity-30 transition-all"
-                    >
-                        <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <select
-                        value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
-                        className="px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--accent)]"
-                    >
-                        {availableDates.map(date => (
-                            <option key={date} value={date}>
-                                {new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
-                                    weekday: 'short',
-                                    month: 'short',
-                                    day: 'numeric'
-                                })}
-                            </option>
-                        ))}
-                    </select>
-                    <button
-                        onClick={() => {
-                            const idx = availableDates.indexOf(selectedDate);
-                            if (idx > 0) {
-                                setSelectedDate(availableDates[idx - 1]);
-                            }
-                        }}
-                        disabled={availableDates.indexOf(selectedDate) <= 0}
-                        className="p-2 rounded-lg hover:bg-[var(--bg-hover)] disabled:opacity-30 transition-all"
-                    >
-                        <ChevronRight className="w-4 h-4" />
-                    </button>
-                </div>
+                <DateRangePicker
+                    mode="date"
+                    dates={availableDates}
+                    selectedDate={selectedDate}
+                    onSelectDate={setSelectedDate}
+                    showStepper
+                    className="w-full lg:w-auto lg:shrink-0"
+                />
             </div>
 
             {/* Insights */}

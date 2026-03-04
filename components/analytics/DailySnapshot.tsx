@@ -1,10 +1,11 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DailyStats, formatDuration } from '../../types';
 import { DailySnapshotData } from '../../types/analyticsTypes';
 import { generateDailySnapshot, CHALLENGE_DEFINITIONS } from '../../services/analyticsService';
 import html2canvas from 'html2canvas';
-import { Camera, ChevronLeft, ChevronRight, Image, Pin, BedDouble, Zap, Flame, Footprints, Clock, Trophy, Crown } from 'lucide-react';
+import { Camera, Image, Pin, BedDouble, Zap, Flame, Footprints, Clock, Trophy, Crown } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
+import DateRangePicker from '../DateRangePicker';
 
 interface DailySnapshotProps {
     profiles: Array<{ id: string; email?: string | null; challenges?: any[] }>;
@@ -32,6 +33,18 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
         return [...dates].sort().reverse().slice(0, 60);
     }, [usersData]);
 
+    useEffect(() => {
+        if (!availableDates.length) return;
+        if (!availableDates.includes(selectedDate)) {
+            setSelectedDate(availableDates[0]);
+        }
+    }, [availableDates, selectedDate]);
+
+    const activeDate = useMemo(
+        () => (availableDates.includes(selectedDate) ? selectedDate : (availableDates[0] || '')),
+        [availableDates, selectedDate]
+    );
+
     const snapshot = useMemo((): DailySnapshotData | null => {
         const usersDataFormatted = profiles.map((profile, idx) => ({
             userId: profile.id,
@@ -39,21 +52,22 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
             data: usersData[idx]?.data as DailyStats
         })).filter(u => u.data);
 
-        if (usersDataFormatted.length === 0) return null;
+        if (usersDataFormatted.length === 0 || !activeDate) return null;
 
-        const snap = generateDailySnapshot(selectedDate, usersDataFormatted);
+        const snap = generateDailySnapshot(activeDate, usersDataFormatted);
         snap.note = note || undefined;
         return snap;
-    }, [profiles, usersData, selectedDate, note]);
+    }, [activeDate, note, profiles, usersData]);
 
     const formattedSelectedDate = useMemo(() => {
-        return new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', {
+        if (!activeDate) return 'No date selected';
+        return new Date(activeDate + 'T12:00:00').toLocaleDateString('en-US', {
             weekday: 'long',
             month: 'long',
             day: 'numeric',
             year: 'numeric'
         });
-    }, [selectedDate]);
+    }, [activeDate]);
 
     const rankedUsers = useMemo(() => {
         if (!snapshot) return [];
@@ -76,7 +90,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
             });
 
             const link = document.createElement('a');
-            link.download = `daily-snapshot-${selectedDate}.png`;
+            link.download = `daily-snapshot-${activeDate || 'snapshot'}.png`;
             link.href = canvas.toDataURL('image/png');
             link.click();
         } catch (err) {
@@ -97,7 +111,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
         }
     };
 
-    const isPinned = pinnedSnapshots.some(s => s.date === selectedDate);
+    const isPinned = activeDate ? pinnedSnapshots.some(s => s.date === activeDate) : false;
 
     const getCategoryIcon = (category: string) => {
         switch (category) {
@@ -126,60 +140,28 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <h3 className="section-header mb-0">Daily Snapshot</h3>
-                    <InfoTooltip
-                        title="Daily Snapshot"
-                        description="A shareable card summarizing the day's performance for all users. Perfect for sharing progress or friendly competition."
-                        calculation="Aggregates sleep, readiness, and activity scores. Highlights are automatically awarded to the user with the highest score in each category."
-                    />
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                        <h3 className="section-header mb-0">Daily Snapshot</h3>
+                        <InfoTooltip
+                            title="Daily Snapshot"
+                            description="A shareable card summarizing the day's performance for all users. Perfect for sharing progress or friendly competition."
+                            calculation="Aggregates sleep, readiness, and activity scores. Highlights are automatically awarded to the user with the highest score in each category."
+                        />
+                    </div>
+                    <p className="text-sm text-[var(--text-muted)]">
+                        Create shareable daily comparison cards
+                    </p>
                 </div>
-                <p className="text-sm text-[var(--text-muted)] mt-1">
-                    Create shareable daily comparison cards
-                </p>
-
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => {
-                            const idx = availableDates.indexOf(selectedDate);
-                            if (idx < availableDates.length - 1) {
-                                setSelectedDate(availableDates[idx + 1]);
-                            }
-                        }}
-                        disabled={availableDates.indexOf(selectedDate) >= availableDates.length - 1}
-                        className="p-2 rounded-lg hover:bg-[var(--bg-hover)] disabled:opacity-30 transition-all"
-                    >
-                        <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <select
-                        value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
-                        className="px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--accent)]"
-                    >
-                        {availableDates.map(date => (
-                            <option key={date} value={date}>
-                                {new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
-                                    weekday: 'short',
-                                    month: 'short',
-                                    day: 'numeric'
-                                })}
-                            </option>
-                        ))}
-                    </select>
-                    <button
-                        onClick={() => {
-                            const idx = availableDates.indexOf(selectedDate);
-                            if (idx > 0) {
-                                setSelectedDate(availableDates[idx - 1]);
-                            }
-                        }}
-                        disabled={availableDates.indexOf(selectedDate) <= 0}
-                        className="p-2 rounded-lg hover:bg-[var(--bg-hover)] disabled:opacity-30 transition-all"
-                    >
-                        <ChevronRight className="w-4 h-4" />
-                    </button>
-                </div>
+                <DateRangePicker
+                    mode="date"
+                    dates={availableDates}
+                    selectedDate={activeDate}
+                    onSelectDate={setSelectedDate}
+                    showStepper
+                    className="w-full lg:w-auto lg:shrink-0"
+                />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -218,7 +200,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                                         const challengeDefinition = activeChallenge
                                             ? CHALLENGE_DEFINITIONS.find(d => d.id === activeChallenge.challengeId)
                                             : undefined;
-                                        const hitTarget = Boolean(activeChallenge?.history?.[selectedDate]);
+                                        const hitTarget = Boolean(activeChallenge?.history?.[activeDate]);
 
                                         return (
                                             <div
@@ -405,7 +387,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                             <button
                                 key={snap.date}
                                 onClick={() => setSelectedDate(snap.date)}
-                                className={`card p-3 text-left hover:border-[var(--accent)]/50 transition-all ${selectedDate === snap.date ? 'border-[var(--accent)]/50 bg-[var(--accent)]/5' : ''
+                                className={`card p-3 text-left hover:border-[var(--accent)]/50 transition-all ${activeDate === snap.date ? 'border-[var(--accent)]/50 bg-[var(--accent)]/5' : ''
                                     }`}
                             >
                                 <p className="text-xs text-[var(--text-muted)]">

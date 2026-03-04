@@ -36,7 +36,7 @@ import {
     ChallengeManager
 } from '../components/analytics';
 import { useAutoSync, formatLastSync } from '../hooks/useAutoSync';
-import { ChevronLeft, ChevronRight, X, RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain } from 'lucide-react';
+import { X, RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain } from 'lucide-react';
 import { getProfileDisplayName } from '../utils/profileName';
 import { formatLocalISODate } from '../utils/date';
 
@@ -88,22 +88,10 @@ const toTimestampMs = (value?: string | null): number => {
 const isIsoDay = (value: unknown): value is string =>
     typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 
-const extractDayFromTimestamp = (value?: string | null): string[] => {
-    if (!value) return [];
-    const days = new Set<string>();
-
+const toIsoDayFromTimestamp = (value?: string | null): string | null => {
+    if (!value) return null;
     const rawPrefix = value.slice(0, 10);
-    if (isIsoDay(rawPrefix)) {
-        days.add(rawPrefix);
-    }
-
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) {
-        days.add(formatLocalISODate(parsed));
-        days.add(parsed.toISOString().slice(0, 10));
-    }
-
-    return Array.from(days);
+    return isIsoDay(rawPrefix) ? rawPrefix : null;
 };
 
 const shiftIsoDay = (day: string, deltaDays: number): string => {
@@ -113,41 +101,54 @@ const shiftIsoDay = (day: string, deltaDays: number): string => {
     return formatLocalISODate(parsed);
 };
 
-const getDailyItemCandidateDays = (item: { day?: string; timestamp?: string }): Set<string> => {
-    const days = new Set<string>();
-    if (isIsoDay(item.day)) {
-        days.add(item.day);
-    }
-    extractDayFromTimestamp(item.timestamp).forEach((day) => days.add(day));
-    return days;
-};
+const isScoreReady = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value);
 
 const findLatestByDay = <T extends { day?: string; timestamp?: string }>(items: T[] | undefined, day?: string): T | undefined => {
     if (!items?.length || !day) return undefined;
     return items
-        .filter((item) => getDailyItemCandidateDays(item).has(day))
+        .filter((item) => item.day === day)
         .sort((a, b) => toTimestampMs(b.timestamp) - toTimestampMs(a.timestamp))[0];
 };
 
-const sessionBelongsToDay = (session: SleepSession, day: string): boolean => {
-    const candidates = new Set<string>();
+const getScoredDays = <T extends { day?: string; score?: number | null }>(items: T[] | undefined): Set<string> =>
+    new Set(
+        (items || [])
+            .filter((item) => isIsoDay(item.day) && isScoreReady(item.score))
+            .map((item) => item.day as string)
+    );
+
+const getSessionCandidateDays = (session: SleepSession): Set<string> => {
+    const days = new Set<string>();
 
     if (isIsoDay(session.day)) {
-        candidates.add(session.day);
+        days.add(session.day);
     }
 
-    extractDayFromTimestamp(session.bedtime_start).forEach((candidate) => candidates.add(candidate));
-    const bedtimeEndCandidates = extractDayFromTimestamp(session.bedtime_end);
-    bedtimeEndCandidates.forEach((candidate) => candidates.add(candidate));
-
-    // Oura sleep sessions can be anchored to sleep start day while "today" cards
-    // represent the wake-up day. If bedtime_end is absent, include next day as a
-    // bounded fallback for overnight sleep records.
-    if (!bedtimeEndCandidates.length && isIsoDay(session.day) && (session.type === 'sleep' || session.type === 'long_sleep')) {
-        candidates.add(shiftIsoDay(session.day, 1));
+    const bedtimeStartDay = toIsoDayFromTimestamp(session.bedtime_start);
+    if (bedtimeStartDay) {
+        days.add(bedtimeStartDay);
     }
 
-    return candidates.has(day);
+    const bedtimeEndDay = toIsoDayFromTimestamp(session.bedtime_end);
+    if (bedtimeEndDay) {
+        days.add(bedtimeEndDay);
+    }
+
+    // Oura sleep day can roll over at 6 pm local time. Include next day as bounded
+    // fallback for sessions that contribute to next-day daily scores.
+    if (
+        isIsoDay(session.day) &&
+        (session.type === 'sleep' || session.type === 'long_sleep' || session.type === 'late_nap')
+    ) {
+        days.add(shiftIsoDay(session.day, 1));
+    }
+
+    return days;
+};
+
+const sessionBelongsToDay = (session: SleepSession, day: string): boolean => {
+    return getSessionCandidateDays(session).has(day);
 };
 
 const getSessionsForDay = (sessions: SleepSession[] | undefined, day?: string): SleepSession[] => {
@@ -170,9 +171,9 @@ const pickBestSession = (sessions: SleepSession[]): SleepSession | undefined => 
 const getMostRecentComparableDay = (data?: DailyStats): string | undefined => {
     if (!data) return undefined;
 
-    const sleepDays = new Set((data.sleep || []).map((item) => item.day).filter(Boolean));
-    const readinessDays = new Set((data.readiness || []).map((item) => item.day).filter(Boolean));
-    const activityDays = new Set((data.activity || []).map((item) => item.day).filter(Boolean));
+    const sleepDays = getScoredDays(data.sleep);
+    const readinessDays = getScoredDays(data.readiness);
+    const activityDays = getScoredDays(data.activity);
 
     const allDays = new Set<string>([
         ...sleepDays,
@@ -401,6 +402,37 @@ const Dashboard: React.FC = () => {
         return Array.from(daySet).sort((a, b) => b.localeCompare(a));
     }, [activityHistory, readinessHistory, sleepHistory]);
 
+    const sleepScoreDays = useMemo(() => getScoredDays(sleepHistory), [sleepHistory]);
+    const readinessScoreDays = useMemo(() => getScoredDays(readinessHistory), [readinessHistory]);
+    const activityScoreDays = useMemo(() => getScoredDays(activityHistory), [activityHistory]);
+
+    const sleepSessionDays = useMemo(() => {
+        const daySet = new Set<string>();
+        sessionHistory.forEach((session) => {
+            if (session.type === 'deleted') return;
+            getSessionCandidateDays(session).forEach((day) => daySet.add(day));
+        });
+        return daySet;
+    }, [sessionHistory]);
+
+    const todayReferenceDays = useMemo(() => {
+        const completeDays = availableDays.filter((day) =>
+            sleepScoreDays.has(day) &&
+            readinessScoreDays.has(day) &&
+            activityScoreDays.has(day) &&
+            sleepSessionDays.has(day)
+        );
+
+        // Oura exposes different data types on different timelines.
+        // For the Today view, only offer days with complete score + sleep detail coverage.
+        return completeDays.length > 0 ? completeDays : availableDays;
+    }, [activityScoreDays, availableDays, readinessScoreDays, sleepScoreDays, sleepSessionDays]);
+
+    const hasIncompleteTodayCoverage = useMemo(() => {
+        const today = formatLocalISODate();
+        return availableDays.includes(today) && !todayReferenceDays.includes(today);
+    }, [availableDays, todayReferenceDays]);
+
     const effectiveTrendsRange = useMemo<DayRange | null>(() => {
         if (!availableDays.length) return null;
         const newest = availableDays[0];
@@ -435,6 +467,18 @@ const Dashboard: React.FC = () => {
         const exact = getSessionsForDay(sessionHistory, day);
         return pickBestSession(exact);
     };
+
+    useEffect(() => {
+        if (viewMode !== 'today') return;
+        if (!todayReferenceDays.length || !availableDays.length) return;
+        const selectedDay = availableDays[dateIndex];
+        if (selectedDay && todayReferenceDays.includes(selectedDay)) return;
+
+        const fallbackIndex = availableDays.indexOf(todayReferenceDays[0]);
+        if (fallbackIndex >= 0 && fallbackIndex !== dateIndex) {
+            setDateIndex(fallbackIndex);
+        }
+    }, [availableDays, dateIndex, todayReferenceDays, viewMode]);
 
     const scoreAnchorDay = availableDays[dateIndex];
     const referenceDay = scoreAnchorDay;
@@ -612,9 +656,9 @@ const Dashboard: React.FC = () => {
     const completeDaySetFromStats = (data?: DailyStats): Set<string> => {
         if (!data) return new Set<string>();
 
-        const sleepDays = new Set((data.sleep || []).map((item) => item.day).filter(Boolean));
-        const readinessDays = new Set((data.readiness || []).map((item) => item.day).filter(Boolean));
-        const activityDays = new Set((data.activity || []).map((item) => item.day).filter(Boolean));
+        const sleepDays = getScoredDays(data.sleep);
+        const readinessDays = getScoredDays(data.readiness);
+        const activityDays = getScoredDays(data.activity);
 
         return new Set(
             Array.from(sleepDays).filter((day) => readinessDays.has(day) && activityDays.has(day))
@@ -639,15 +683,15 @@ const Dashboard: React.FC = () => {
         }
 
         const p1AnyDays = new Set<string>([
-            ...(p1Data.sleep || []).map((item) => item.day),
-            ...(p1Data.readiness || []).map((item) => item.day),
-            ...(p1Data.activity || []).map((item) => item.day),
-        ].filter(Boolean));
+            ...getScoredDays(p1Data.sleep),
+            ...getScoredDays(p1Data.readiness),
+            ...getScoredDays(p1Data.activity),
+        ]);
         const p2AnyDays = new Set<string>([
-            ...(p2Data.sleep || []).map((item) => item.day),
-            ...(p2Data.readiness || []).map((item) => item.day),
-            ...(p2Data.activity || []).map((item) => item.day),
-        ].filter(Boolean));
+            ...getScoredDays(p2Data.sleep),
+            ...getScoredDays(p2Data.readiness),
+            ...getScoredDays(p2Data.activity),
+        ]);
 
         return Array.from(p1AnyDays).filter((day) => p2AnyDays.has(day)).sort((a, b) => b.localeCompare(a));
     }, [p1Data, p2Data]);
@@ -1062,37 +1106,20 @@ const Dashboard: React.FC = () => {
                                     <p className="text-[#777] text-sm leading-relaxed">
                                         {getDailyInsight()}
                                     </p>
+                                    {hasIncompleteTodayCoverage && (
+                                        <p className="mt-2 text-xs text-[#A0A0A0]">
+                                            Today&apos;s Oura data is still syncing. Showing your latest complete day.
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="w-full sm:w-auto shrink-0 mt-1 space-y-2">
                                     <DateRangePicker
                                         mode="date"
-                                        dates={availableDays}
+                                        dates={todayReferenceDays}
                                         selectedDate={referenceDay}
                                         onSelectDate={handleSelectReferenceDay}
+                                        showStepper
                                     />
-                                    <div className="flex items-center justify-end gap-0.5">
-                                        <button
-                                            disabled={dateIndex >= availableDays.length - 1 || availableDays.length === 0}
-                                            onClick={() => {
-                                                if (!availableDays.length) return;
-                                                setDateIndex((current) => Math.min(current + 1, availableDays.length - 1));
-                                            }}
-                                            className="p-2.5 rounded-lg hover:bg-[#1C1C1C] disabled:opacity-20 transition-colors text-[#555]"
-                                        >
-                                            <ChevronLeft className="w-4 h-4" />
-                                        </button>
-                                        <span className="text-xs text-[#555] font-mono min-w-[88px] text-center tabular-nums">{referenceDay || '--'}</span>
-                                        <button
-                                            disabled={dateIndex === 0 || availableDays.length === 0}
-                                            onClick={() => {
-                                                if (!availableDays.length) return;
-                                                setDateIndex((current) => Math.max(current - 1, 0));
-                                            }}
-                                            className="p-2.5 rounded-lg hover:bg-[#1C1C1C] disabled:opacity-20 transition-colors text-[#555]"
-                                        >
-                                            <ChevronRight className="w-4 h-4" />
-                                        </button>
-                                    </div>
                                 </div>
                             </div>
                         </div>
