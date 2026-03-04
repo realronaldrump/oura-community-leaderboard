@@ -30,6 +30,7 @@ class OuraService {
   private unavailableTimestamps = new Map<string, number>();
   private readonly unavailableCacheKey = 'oura_unavailable_endpoints_v2';
   private readonly maxWindowDays = 90;
+  private readonly maxConcurrentWindowRequests = 2;
 
   constructor() {
     this.loadUnavailableCache();
@@ -302,19 +303,30 @@ class OuraService {
     options?: { optional?: boolean; windowDays?: number }
   ): Promise<T[]> {
     const windows = this.splitDateRange(startDate, endDate, options?.windowDays ?? this.maxWindowDays);
-    const results: T[] = [];
+    const chunksByWindow: T[][] = new Array(windows.length);
+    let nextWindowIndex = 0;
 
-    for (const window of windows) {
-      const chunk = await this.fetchPaginated<T>(
-        token,
-        endpoint,
-        { start_date: window.start, end_date: window.end },
-        { optional: options?.optional }
-      );
-      results.push(...chunk);
-    }
+    const worker = async () => {
+      while (true) {
+        const index = nextWindowIndex;
+        nextWindowIndex += 1;
+        if (index >= windows.length) return;
 
-    return results;
+        const window = windows[index];
+        chunksByWindow[index] = await this.fetchPaginated<T>(
+          token,
+          endpoint,
+          { start_date: window.start, end_date: window.end },
+          { optional: options?.optional }
+        );
+      }
+    };
+
+    const maxWorkersForRequest = options?.optional ? 1 : this.maxConcurrentWindowRequests;
+    const workerCount = Math.min(maxWorkersForRequest, windows.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+    return chunksByWindow.flat();
   }
 
   async getPersonalInfo(token: string): Promise<UserProfile> {

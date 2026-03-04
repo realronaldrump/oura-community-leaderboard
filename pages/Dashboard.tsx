@@ -156,7 +156,19 @@ const Dashboard: React.FC = () => {
                 await markProfileSyncSuccess(p.id);
                 return fullHistory;
             },
+            initialData: () => {
+                const existingAllTime = queryClient.getQueryData(['allTimeStats', p.id]) as DailyStats | undefined;
+                if (existingAllTime) return existingAllTime;
+                return queryClient.getQueryData(['dailyStats', p.id]) as DailyStats | undefined;
+            },
+            initialDataUpdatedAt: () => {
+                const allTimeState = queryClient.getQueryState<DailyStats>(['allTimeStats', p.id]);
+                if (allTimeState?.data) return allTimeState.dataUpdatedAt;
+                return 0;
+            },
+            placeholderData: (previousData) => previousData,
             staleTime: 1000 * 60 * 60 * 24,
+            refetchOnWindowFocus: false,
             enabled: viewMode === 'trends' || viewMode === 'insights',
         }))
     });
@@ -978,12 +990,13 @@ const Dashboard: React.FC = () => {
 
 // Insights sub-view
 const InsightsView: React.FC<{ profiles: any[]; userQueries: any[]; allTimeQueries: any[] }> = ({ profiles, userQueries, allTimeQueries }) => {
-    const [tab, setTab] = useState<'timeline' | 'correlation' | 'streaks' | 'patterns' | 'milestones' | 'snapshot'>('timeline');
+    const [tab, setTab] = useState<'timeline' | 'correlation' | 'whatif' | 'streaks' | 'patterns' | 'milestones' | 'snapshot'>('timeline');
     return (
         <div className="pt-6 space-y-6">
             <div className="flex flex-wrap gap-1.5">
                 {([
                     { key: 'timeline', label: '24h Timeline' }, { key: 'correlation', label: 'Correlations' },
+                    { key: 'whatif', label: 'What-If' },
                     { key: 'streaks', label: 'Streaks' }, { key: 'patterns', label: 'Patterns' },
                     { key: 'milestones', label: 'Milestones' }, { key: 'snapshot', label: 'Snapshot' },
                 ] as const).map(t => (
@@ -992,6 +1005,7 @@ const InsightsView: React.FC<{ profiles: any[]; userQueries: any[]; allTimeQueri
             </div>
             {tab === 'timeline' && <TimelineView profiles={profiles} usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
             {tab === 'correlation' && <CorrelationExplorer profiles={profiles} usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
+            {tab === 'whatif' && <WhatIfSimulator profiles={profiles} usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
             {tab === 'streaks' && <StreakTracker profiles={profiles} usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
             {tab === 'patterns' && <PatternDetector profiles={profiles} usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
             {tab === 'milestones' && <MilestoneTracker profiles={profiles} usersData={allTimeQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}

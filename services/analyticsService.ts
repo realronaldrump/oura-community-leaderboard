@@ -6,7 +6,7 @@ import {
 import {
     Streak, StreakType, StreakDefinition, Badge, BadgeTier,
     Pattern, PatternType, CorrelationResult, MetricOption,
-    WhatIfScenario, WhatIfResult, Milestone, MilestoneType,
+    WhatIfScenario, WhatIfResult, WhatIfReliability, Milestone, MilestoneType,
     DailySnapshotData, TimelineDataPoint, TimelineInsight,
     CalendarHeatmapDay, UserChallenge, ChallengeDefinition, ChallengeStatus, AutomatedInsight
 } from '../types/analyticsTypes';
@@ -966,6 +966,33 @@ function isMetricPositive(metricKey: string): boolean {
 // WHAT-IF SIMULATOR
 // ============================================
 
+const READINESS_MIN_SCORE = 0;
+const READINESS_MAX_SCORE = 100;
+const WHAT_IF_MIN_DAYS = 14;
+const WHAT_IF_DEFAULT_LOOKBACK_DAYS = 120;
+
+const clamp = (value: number, min: number, max: number): number =>
+    Math.min(max, Math.max(min, value));
+
+const toUtcDayMs = (day: string): number => new Date(`${day}T12:00:00Z`).getTime();
+
+const winsorize = (values: number[], trimPercent: number): number[] => {
+    if (values.length === 0) return [];
+    const safeTrim = clamp(trimPercent, 0, 0.2);
+    if (safeTrim === 0) return [...values];
+
+    const sorted = [...values].sort((a, b) => a - b);
+    const low = ss.quantileSorted(sorted, safeTrim);
+    const high = ss.quantileSorted(sorted, 1 - safeTrim);
+    return values.map((value) => clamp(value, low, high));
+};
+
+const getReliability = (sampleSize: number, rSquared: number, ciHalfWidth: number): WhatIfReliability => {
+    if (sampleSize >= 60 && rSquared >= 0.35 && ciHalfWidth <= 2) return 'high';
+    if (sampleSize >= 30 && rSquared >= 0.15 && ciHalfWidth <= 4) return 'medium';
+    return 'low';
+};
+
 export function simulateWhatIf(
     scenario: WhatIfScenario,
     usersData: Array<{ userId: string; userName: string; data: DailyStats }>
@@ -979,7 +1006,12 @@ export function simulateWhatIf(
         }
     }
 
-    return results.sort((a, b) => b.projectedChange - a.projectedChange);
+    return results.sort((a, b) => {
+        const reliabilityOrder: Record<WhatIfReliability, number> = { high: 3, medium: 2, low: 1 };
+        const reliabilityDelta = reliabilityOrder[b.reliability] - reliabilityOrder[a.reliability];
+        if (reliabilityDelta !== 0) return reliabilityDelta;
+        return b.projectedChange - a.projectedChange;
+    });
 }
 
 function simulateForUser(
@@ -988,8 +1020,7 @@ function simulateForUser(
     userName: string,
     data: DailyStats
 ): WhatIfResult | null {
-    // Get the metric values and corresponding next-day readiness
-    const pairs: Array<{ metric: number; readiness: number }> = [];
+    const allPairs: Array<{ day: string; metric: number; readiness: number }> = [];
 
     const readinessByDay = new Map(
         (data.readiness || []).map(r => [r.day, r.score])
@@ -1004,40 +1035,114 @@ function simulateForUser(
         const readiness = readinessByDay.get(nextDayStr);
 
         if (readiness != null) {
-            pairs.push({ metric: value, readiness });
+            allPairs.push({ day, metric: value, readiness });
         }
     }
 
-    if (pairs.length < 14) return null;
+    const lookbackDays = scenario.lookbackDays === 'all'
+        ? 'all'
+        : (scenario.lookbackDays ?? WHAT_IF_DEFAULT_LOOKBACK_DAYS);
 
-    // Calculate linear regression
-    const x = pairs.map(p => p.metric);
-    const y = pairs.map(p => p.readiness);
+    const pairs = (() => {
+        if (allPairs.length === 0 || lookbackDays === 'all' || lookbackDays <= 0) return [...allPairs];
+        const latestDayMs = allPairs.reduce((maxMs, pair) => Math.max(maxMs, toUtcDayMs(pair.day)), 0);
+        const cutoffMs = latestDayMs - ((lookbackDays - 1) * 86_400_000);
+        return allPairs.filter(pair => toUtcDayMs(pair.day) >= cutoffMs);
+    })();
 
-    const regression = ss.linearRegression(pairs.map(p => [p.metric, p.readiness]));
-    const currentAvg = ss.mean(x);
+    if (pairs.length < WHAT_IF_MIN_DAYS) return null;
+
+    const trimPercent = scenario.outlierTrimPercent ?? 0.05;
+    const winsorizedMetrics = winsorize(pairs.map(p => p.metric), trimPercent);
+    const winsorizedReadiness = winsorize(pairs.map(p => p.readiness), trimPercent);
+    const modelPairs = pairs.map((pair, idx) => ({
+        day: pair.day,
+        metric: winsorizedMetrics[idx],
+        readiness: winsorizedReadiness[idx]
+    }));
+
+    const x = modelPairs.map(p => p.metric);
+    const y = modelPairs.map(p => p.readiness);
+
+    const xMean = ss.mean(x);
+    const sxx = x.reduce((sum, value) => sum + Math.pow(value - xMean, 2), 0);
+    if (sxx <= 1e-6) return null;
+
+    const samples = modelPairs.map(p => [p.metric, p.readiness] as [number, number]);
+    const regression = ss.linearRegression(samples);
+    const regressionLine = ss.linearRegressionLine(regression);
+
+    const currentMetricAverage = xMean;
     const currentReadiness = ss.mean(y);
-
-    // Project the change
-    const newMetricValue = currentAvg + scenario.adjustment;
-    const projectedReadiness = regression.m * newMetricValue + regression.b;
+    const adjustedMetricValue = currentMetricAverage + scenario.adjustment;
+    const projectedReadinessRaw = regressionLine(adjustedMetricValue);
+    const projectedReadiness = clamp(projectedReadinessRaw, READINESS_MIN_SCORE, READINESS_MAX_SCORE);
     const projectedChange = projectedReadiness - currentReadiness;
+    const isCapped = projectedReadinessRaw !== projectedReadiness;
 
-    // Calculate confidence (standard error)
-    const residuals = pairs.map(p => {
-        const predicted = regression.m * p.metric + regression.b;
+    let correlation = 0;
+    try {
+        correlation = ss.sampleCorrelation(x, y);
+    } catch {
+        correlation = 0;
+    }
+    const rawRSquared = ss.rSquared(samples, regressionLine);
+    const rSquared = Number.isFinite(rawRSquared) ? rawRSquared : 0;
+
+    const residuals = modelPairs.map(p => {
+        const predicted = regressionLine(p.metric);
         return p.readiness - predicted;
     });
-    const confidence = ss.standardDeviation(residuals);
+    const n = modelPairs.length;
+    const sumSquaredResiduals = residuals.reduce((sum, value) => sum + (value * value), 0);
+    const residualStandardError = n > 2 ? Math.sqrt(sumSquaredResiduals / (n - 2)) : 0;
+    const z = 1.96;
+    const confidenceHalfWidth =
+        residualStandardError > 0
+            ? z * residualStandardError * Math.abs(adjustedMetricValue - currentMetricAverage) / Math.sqrt(sxx)
+            : 0;
+    const confidenceLow = projectedChange - confidenceHalfWidth;
+    const confidenceHigh = projectedChange + confidenceHalfWidth;
+
+    const metricMin = ss.min(x);
+    const metricMax = ss.max(x);
+    const notes: string[] = [];
+    if (pairs.length < 30) {
+        notes.push('Limited sample size; treat this projection as directional.');
+    }
+    if (Math.abs(correlation) < 0.2 || rSquared < 0.1) {
+        notes.push('Weak historical relationship between this metric and readiness.');
+    }
+    if (confidenceHalfWidth > 3) {
+        notes.push('Wide uncertainty band around the projected change.');
+    }
+    if (adjustedMetricValue < metricMin || adjustedMetricValue > metricMax) {
+        notes.push('Adjustment extrapolates beyond your observed history.');
+    }
+    if (isCapped) {
+        notes.push('Projection was capped to stay within the 0-100 readiness range.');
+    }
+
+    const reliability = getReliability(pairs.length, rSquared, confidenceHalfWidth);
 
     return {
         userId,
         userName,
         scenario,
         projectedChange,
-        confidence,
+        confidence: confidenceHalfWidth,
         basedOnDays: pairs.length,
-        currentBaseline: currentReadiness
+        currentBaseline: currentReadiness,
+        projectedReadiness,
+        confidenceLow,
+        confidenceHigh,
+        confidenceHalfWidth,
+        slope: regression.m,
+        correlation,
+        rSquared,
+        reliability,
+        notes,
+        isCapped
     };
 }
 

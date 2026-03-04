@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DailyStats } from '../types';
 import {
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Line, ComposedChart
@@ -6,11 +6,11 @@ import {
 
 interface AllTimeHistoryProps {
     profiles: { id: string; email?: string | null }[];
-    userQueries: { data: DailyStats | undefined }[];
+    userQueries: { data: DailyStats | undefined; isFetching?: boolean; isPending?: boolean }[];
 }
 
 interface HistoryEntry {
-    id: string; // Unique ID for key (timestamp + userId)
+    id: string;
     userId: string;
     userName: string;
     date: Date;
@@ -29,6 +29,9 @@ type Smoothing = 'raw' | '3d' | '7d' | '14d';
 const parseOuraDay = (day: string): Date => new Date(`${day}T12:00:00`);
 const compareNames = (a: string, b: string): number =>
     a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
+const TABLE_PAGE_SIZE = 250;
+const countAvailableScores = (sleep: number, readiness: number, activity: number): number =>
+    Number(sleep > 0) + Number(readiness > 0) + Number(activity > 0);
 
 const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }) => {
     const [sortField, setSortField] = useState<SortField>('date');
@@ -36,51 +39,72 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
     const [chartMetric, setChartMetric] = useState<'sleep' | 'readiness' | 'activity' | 'average'>('average');
     const [filterUser, setFilterUser] = useState<string>('all');
 
-    // New Filters
-    const [dateRange, setDateRange] = useState<DateRange>('all');
+    const [dateRange, setDateRange] = useState<DateRange>('90d');
     const [showCommonDatesOnly, setShowCommonDatesOnly] = useState(false);
     const [smoothing, setSmoothing] = useState<Smoothing>('3d');
+    const [visibleRows, setVisibleRows] = useState(TABLE_PAGE_SIZE);
+    const isHistoryFetching = userQueries.some(query => query.isFetching || query.isPending);
 
-    // 1. Flatten Data
     const rawData = useMemo(() => {
-        const entries: HistoryEntry[] = [];
+        const entriesByUserDay = new Map<string, HistoryEntry>();
 
         profiles.forEach((profile, idx) => {
             const data = userQueries[idx]?.data;
             if (!data) return;
 
-            // Iterate through sleep data as the anchor
-            data.sleep.forEach((sleepDay) => {
+            const userName = (profile.email || 'User').split('@')[0];
+            const readinessByDay = new Map<string, number>();
+            const activityByDay = new Map<string, number>();
+
+            data.readiness.forEach((readinessDay) => {
+                readinessByDay.set(readinessDay.day, Number(readinessDay.score) || 0);
+            });
+            data.activity.forEach((activityDay) => {
+                activityByDay.set(activityDay.day, Number(activityDay.score) || 0);
+            });
+
+            data.sleep.forEach((sleepDay, sleepIndex) => {
                 const dayStr = sleepDay.day;
-                const readinessDay = data.readiness.find(d => d.day === dayStr);
-                const activityDay = data.activity.find(d => d.day === dayStr);
+                if (!dayStr) return;
 
                 const sScore = Number(sleepDay.score) || 0;
-                const rScore = Number(readinessDay?.score) || 0;
-                const aScore = Number(activityDay?.score) || 0;
+                const rScore = readinessByDay.get(dayStr) || 0;
+                const aScore = activityByDay.get(dayStr) || 0;
+                const average = Math.round((sScore + rScore + aScore) / 3);
+                const entryKey = `${profile.id}:${dayStr}`;
 
-                entries.push({
-                    id: `${profile.id}-${dayStr}`,
+                const nextEntry: HistoryEntry = {
+                    id: `${profile.id}-${dayStr}-${sleepDay.id || sleepIndex}`,
                     userId: profile.id,
-                    userName: (profile.email || 'User').split('@')[0],
+                    userName,
                     date: parseOuraDay(dayStr),
                     dateStr: dayStr,
                     sleep: sScore,
                     readiness: rScore,
                     activity: aScore,
-                    average: Math.round((sScore + rScore + aScore) / 3)
-                });
+                    average
+                };
+
+                const previous = entriesByUserDay.get(entryKey);
+                if (!previous) {
+                    entriesByUserDay.set(entryKey, nextEntry);
+                    return;
+                }
+
+                const previousCompleteness = countAvailableScores(previous.sleep, previous.readiness, previous.activity);
+                const nextCompleteness = countAvailableScores(nextEntry.sleep, nextEntry.readiness, nextEntry.activity);
+                if (nextCompleteness >= previousCompleteness) {
+                    entriesByUserDay.set(entryKey, nextEntry);
+                }
             });
         });
 
-        return entries;
+        return Array.from(entriesByUserDay.values());
     }, [profiles, userQueries]);
 
-    // 2. Filter Data (Date Range & Common Dates)
     const filteredData = useMemo(() => {
-        let data = [...rawData];
+        let data = rawData;
 
-        // A. Date Range Filter
         if (dateRange !== 'all') {
             const now = new Date();
             const cutoff = new Date();
@@ -91,89 +115,84 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                 case '90d': cutoff.setDate(now.getDate() - 90); break;
                 case '1y': cutoff.setFullYear(now.getFullYear() - 1); break;
             }
-
-            // Set to beginning of that day
             cutoff.setHours(0, 0, 0, 0);
-
             data = data.filter(d => d.date >= cutoff);
         }
 
-        // B. Common Dates Only Filter
-        if (showCommonDatesOnly && profiles.length > 1) {
-            // Find dates that exist for ALL selected profiles (if filtering by user, this toggle is less relevant, but let's respect global context)
-            // But usually "Common Dates" implies intersection of ALL available profiles in the dataset
-
-            const userDates = new Map<string, Set<string>>();
-            profiles.forEach(p => userDates.set(p.id, new Set()));
-
-            data.forEach(d => {
-                userDates.get(d.userId)?.add(d.dateStr);
-            });
-
-            // Find intersection
-            let commonDates: Set<string> | null = null;
-            userDates.forEach((dates) => {
-                if (commonDates === null) {
-                    commonDates = new Set(dates);
-                } else {
-                    commonDates = new Set([...commonDates].filter(x => dates.has(x)));
-                }
-            });
-
-            if (commonDates) {
-                data = data.filter(d => commonDates!.has(d.dateStr));
-            }
-        }
-
-        // C. Filter by User (for Table primarily, but affects chart if we want)
-        // The Chart usually shows ALL valid users so you can compare. 
-        // The table definitely needs to respect filterUser.
-        // Let's decide: Chart shows all allowed by filterUser.
         if (filterUser !== 'all') {
             data = data.filter(d => d.userId === filterUser);
         }
 
-        return data;
-    }, [rawData, dateRange, showCommonDatesOnly, filterUser, profiles]);
+        if (showCommonDatesOnly) {
+            const activeUserIds = Array.from(new Set(data.map(entry => entry.userId)));
+            if (activeUserIds.length > 1) {
+                const datesByUser = new Map<string, Set<string>>();
+                activeUserIds.forEach((userId) => datesByUser.set(userId, new Set()));
 
-    // 3. Sort Data (for Table)
+                data.forEach((entry) => {
+                    datesByUser.get(entry.userId)?.add(entry.dateStr);
+                });
+
+                let commonDates: Set<string> | null = null;
+                datesByUser.forEach((dates) => {
+                    if (commonDates == null) {
+                        commonDates = new Set(dates);
+                        return;
+                    }
+                    commonDates = new Set(Array.from(commonDates).filter(date => dates.has(date)));
+                });
+
+                if (commonDates && commonDates.size > 0) {
+                    const safeCommonDates = commonDates;
+                    data = data.filter(entry => safeCommonDates.has(entry.dateStr));
+                } else {
+                    data = [];
+                }
+            }
+        }
+
+        return data;
+    }, [rawData, dateRange, showCommonDatesOnly, filterUser]);
+
     const tableData = useMemo(() => {
-        return [...filteredData].sort((a, b) => {
+        const direction = sortDirection === 'asc' ? 1 : -1;
+        const sorted = [...filteredData];
+
+        sorted.sort((a, b) => {
             let primary = 0;
 
             if (sortField === 'date') {
-                // Oura day strings are YYYY-MM-DD; lexical compare is chronological and timezone-safe.
                 primary = a.dateStr.localeCompare(b.dateStr);
             } else if (sortField === 'userName') {
                 primary = compareNames(a.userName, b.userName);
             } else {
-                const numA = Number(a[sortField]);
-                const numB = Number(b[sortField]);
-                const safeA = Number.isFinite(numA) ? numA : Number.NEGATIVE_INFINITY;
-                const safeB = Number.isFinite(numB) ? numB : Number.NEGATIVE_INFINITY;
-                primary = safeA - safeB;
+                const numericField: Extract<SortField, 'sleep' | 'readiness' | 'activity' | 'average'> = sortField;
+                primary = a[numericField] - b[numericField];
             }
 
             if (primary !== 0) {
-                return sortDirection === 'asc' ? primary : -primary;
+                return direction * primary;
             }
 
-            // Deterministic tie-breakers prevent "random-looking" jumps on repeated sorts.
             const tieDate = b.dateStr.localeCompare(a.dateStr);
             if (tieDate !== 0) return tieDate;
             const tieName = compareNames(a.userName, b.userName);
             if (tieName !== 0) return tieName;
-            const tieSleep = b.sleep - a.sleep;
-            if (tieSleep !== 0) return tieSleep;
-            const tieReadiness = b.readiness - a.readiness;
-            if (tieReadiness !== 0) return tieReadiness;
-            const tieActivity = b.activity - a.activity;
-            if (tieActivity !== 0) return tieActivity;
-            const tieAverage = b.average - a.average;
-            if (tieAverage !== 0) return tieAverage;
-            return 0;
+            return a.id.localeCompare(b.id);
         });
+
+        return sorted;
     }, [filteredData, sortField, sortDirection]);
+
+    const visibleTableData = useMemo(
+        () => tableData.slice(0, visibleRows),
+        [tableData, visibleRows]
+    );
+    const hasMoreTableRows = visibleRows < tableData.length;
+
+    useEffect(() => {
+        setVisibleRows(TABLE_PAGE_SIZE);
+    }, [sortField, sortDirection, filterUser, dateRange, showCommonDatesOnly]);
 
     const getInitialSortDirection = (field: SortField): SortDirection =>
         field === 'userName' ? 'asc' : 'desc';
@@ -257,7 +276,12 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                 <div className="flex flex-col gap-6">
                     {/* Header Controls */}
                     <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                        <h3 className="text-xl font-bold">History Visualization</h3>
+                        <div>
+                            <h3 className="text-xl font-bold">History Visualization</h3>
+                            {isHistoryFetching && (
+                                <p className="text-xs text-text-muted mt-1">Syncing older history in the background...</p>
+                            )}
+                        </div>
 
                         <div className="flex flex-wrap items-center gap-4">
                             {/* Date Range */}
@@ -448,7 +472,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-dashboard-border">
-                            {tableData.map((entry) => (
+                            {visibleTableData.map((entry) => (
                                 <tr key={entry.id} className="hover:bg-white/5 transition-colors text-sm">
                                     <td className="p-4 font-mono text-text-secondary">{entry.dateStr}</td>
                                     <td className="p-4 font-medium text-text-primary">{entry.userName}</td>
@@ -471,13 +495,26 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                                     <td className="p-4 text-center font-bold font-mono">{entry.average}</td>
                                 </tr>
                             ))}
-                            {tableData.length === 0 && (
+                            {visibleTableData.length === 0 && (
                                 <tr>
                                     <td colSpan={6} className="p-8 text-center text-text-muted">No data available for the selected range.</td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
+                </div>
+                <div className="p-3 border-t border-dashboard-border bg-white/[0.03] flex items-center justify-between gap-3">
+                    <p className="text-xs text-text-muted">
+                        Showing {visibleTableData.length.toLocaleString()} of {tableData.length.toLocaleString()} rows
+                    </p>
+                    {hasMoreTableRows && (
+                        <button
+                            onClick={() => setVisibleRows((prev) => prev + TABLE_PAGE_SIZE)}
+                            className="px-3 py-1.5 text-xs font-medium rounded-md bg-white/5 hover:bg-white/10 text-text-primary transition-colors"
+                        >
+                            Load More
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
