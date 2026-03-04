@@ -390,6 +390,7 @@ const Dashboard: React.FC = () => {
     }, [profiles, profileHealthById]);
 
     const [dateIndex, setDateIndex] = useState(0);
+    const [todayOverrideDay, setTodayOverrideDay] = useState<string | null>(null);
     const [trendsRange, setTrendsRange] = useState<DayRange | null>(null);
 
     const sleepHistory = activeData?.sleep || [];
@@ -408,6 +409,7 @@ const Dashboard: React.FC = () => {
         activityHistory.forEach((item) => item.day && daySet.add(item.day));
         return Array.from(daySet).sort((a, b) => b.localeCompare(a));
     }, [activityHistory, readinessHistory, sleepHistory]);
+    const todayIsoDay = formatLocalISODate();
 
     const sleepScoreDays = useMemo(() => getScoredDays(sleepHistory), [sleepHistory]);
     const readinessScoreDays = useMemo(() => getScoredDays(readinessHistory), [readinessHistory]);
@@ -435,10 +437,14 @@ const Dashboard: React.FC = () => {
         return completeDays.length > 0 ? completeDays : availableDays;
     }, [activityScoreDays, availableDays, readinessScoreDays, sleepScoreDays, sleepSessionDays]);
 
+    const todayPickerDays = useMemo(() => {
+        if (todayReferenceDays.includes(todayIsoDay)) return todayReferenceDays;
+        return [todayIsoDay, ...todayReferenceDays];
+    }, [todayIsoDay, todayReferenceDays]);
+
     const hasIncompleteTodayCoverage = useMemo(() => {
-        const today = formatLocalISODate();
-        return availableDays.includes(today) && !todayReferenceDays.includes(today);
-    }, [availableDays, todayReferenceDays]);
+        return !todayReferenceDays.includes(todayIsoDay);
+    }, [todayIsoDay, todayReferenceDays]);
 
     const effectiveTrendsRange = useMemo<DayRange | null>(() => {
         if (!availableDays.length) return null;
@@ -461,6 +467,7 @@ const Dashboard: React.FC = () => {
 
     useEffect(() => {
         setDateIndex(0);
+        setTodayOverrideDay(null);
     }, [activeProfile?.id]);
 
     useEffect(() => {
@@ -477,22 +484,46 @@ const Dashboard: React.FC = () => {
 
     useEffect(() => {
         if (viewMode !== 'today') return;
-        if (!todayReferenceDays.length || !availableDays.length) return;
-        const selectedDay = availableDays[dateIndex];
-        if (selectedDay && todayReferenceDays.includes(selectedDay)) return;
+        if (!todayPickerDays.length) return;
 
-        const fallbackIndex = availableDays.indexOf(todayReferenceDays[0]);
-        if (fallbackIndex >= 0 && fallbackIndex !== dateIndex) {
-            setDateIndex(fallbackIndex);
+        const selectedDay = todayOverrideDay || availableDays[dateIndex];
+        if (selectedDay && todayPickerDays.includes(selectedDay)) return;
+
+        const nextDay = todayPickerDays[0];
+        const fallbackIndex = availableDays.indexOf(nextDay);
+        if (fallbackIndex >= 0) {
+            if (fallbackIndex !== dateIndex) setDateIndex(fallbackIndex);
+            if (todayOverrideDay) setTodayOverrideDay(null);
+            return;
         }
-    }, [availableDays, dateIndex, todayReferenceDays, viewMode]);
 
-    const scoreAnchorDay = availableDays[dateIndex];
-    const referenceDay = scoreAnchorDay;
+        setTodayOverrideDay(nextDay);
+    }, [availableDays, dateIndex, todayOverrideDay, todayPickerDays, viewMode]);
+
+    useEffect(() => {
+        if (!todayOverrideDay) return;
+        const resolvedIndex = availableDays.indexOf(todayOverrideDay);
+        if (resolvedIndex >= 0) {
+            setDateIndex(resolvedIndex);
+            setTodayOverrideDay(null);
+        }
+    }, [availableDays, todayOverrideDay]);
+
+    const scoreAnchorDay = availableDays[dateIndex] || todayPickerDays[0];
+    const referenceDay = viewMode === 'today'
+        ? (todayOverrideDay || scoreAnchorDay)
+        : scoreAnchorDay;
 
     const handleSelectReferenceDay = (day: string) => {
         const nextIndex = availableDays.indexOf(day);
-        if (nextIndex >= 0) setDateIndex(nextIndex);
+        if (nextIndex >= 0) {
+            setDateIndex(nextIndex);
+            if (todayOverrideDay) setTodayOverrideDay(null);
+            return;
+        }
+        if (viewMode === 'today') {
+            setTodayOverrideDay(day);
+        }
     };
 
     const currentSleep = findLatestByDay(sleepHistory, referenceDay);
@@ -1115,14 +1146,16 @@ const Dashboard: React.FC = () => {
                                     </p>
                                     {hasIncompleteTodayCoverage && (
                                         <p className="mt-2 text-xs text-[#A0A0A0]">
-                                            Today&apos;s Oura data is still syncing. Showing your latest complete day.
+                                            {referenceDay === todayIsoDay
+                                                ? 'Today&apos;s Oura data is still syncing. Some metrics may be unavailable yet.'
+                                                : 'Today&apos;s Oura data is still syncing. Showing your latest complete day.'}
                                         </p>
                                     )}
                                 </div>
                                 <div className="w-full sm:w-auto shrink-0 mt-1 space-y-2">
                                     <DateRangePicker
                                         mode="date"
-                                        dates={todayReferenceDays}
+                                        dates={todayPickerDays}
                                         selectedDate={referenceDay}
                                         onSelectDate={handleSelectReferenceDay}
                                         showStepper
