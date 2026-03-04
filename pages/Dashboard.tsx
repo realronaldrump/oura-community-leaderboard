@@ -85,17 +85,69 @@ const toTimestampMs = (value?: string | null): number => {
     return Number.isNaN(ts) ? Number.NEGATIVE_INFINITY : ts;
 };
 
+const isIsoDay = (value: unknown): value is string =>
+    typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+const extractDayFromTimestamp = (value?: string | null): string[] => {
+    if (!value) return [];
+    const days = new Set<string>();
+
+    const rawPrefix = value.slice(0, 10);
+    if (isIsoDay(rawPrefix)) {
+        days.add(rawPrefix);
+    }
+
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+        days.add(formatLocalISODate(parsed));
+        days.add(parsed.toISOString().slice(0, 10));
+    }
+
+    return Array.from(days);
+};
+
+const shiftIsoDay = (day: string, deltaDays: number): string => {
+    const parsed = new Date(`${day}T12:00:00`);
+    if (Number.isNaN(parsed.getTime())) return day;
+    parsed.setDate(parsed.getDate() + deltaDays);
+    return formatLocalISODate(parsed);
+};
+
+const getDailyItemCandidateDays = (item: { day?: string; timestamp?: string }): Set<string> => {
+    const days = new Set<string>();
+    if (isIsoDay(item.day)) {
+        days.add(item.day);
+    }
+    extractDayFromTimestamp(item.timestamp).forEach((day) => days.add(day));
+    return days;
+};
+
 const findLatestByDay = <T extends { day?: string; timestamp?: string }>(items: T[] | undefined, day?: string): T | undefined => {
     if (!items?.length || !day) return undefined;
     return items
-        .filter((item) => item.day === day)
+        .filter((item) => getDailyItemCandidateDays(item).has(day))
         .sort((a, b) => toTimestampMs(b.timestamp) - toTimestampMs(a.timestamp))[0];
 };
 
 const sessionBelongsToDay = (session: SleepSession, day: string): boolean => {
-    if (session.day === day) return true;
-    if (!session.bedtime_end) return false;
-    return formatLocalISODate(new Date(session.bedtime_end)) === day;
+    const candidates = new Set<string>();
+
+    if (isIsoDay(session.day)) {
+        candidates.add(session.day);
+    }
+
+    extractDayFromTimestamp(session.bedtime_start).forEach((candidate) => candidates.add(candidate));
+    const bedtimeEndCandidates = extractDayFromTimestamp(session.bedtime_end);
+    bedtimeEndCandidates.forEach((candidate) => candidates.add(candidate));
+
+    // Oura sleep sessions can be anchored to sleep start day while "today" cards
+    // represent the wake-up day. If bedtime_end is absent, include next day as a
+    // bounded fallback for overnight sleep records.
+    if (!bedtimeEndCandidates.length && isIsoDay(session.day) && (session.type === 'sleep' || session.type === 'long_sleep')) {
+        candidates.add(shiftIsoDay(session.day, 1));
+    }
+
+    return candidates.has(day);
 };
 
 const getSessionsForDay = (sessions: SleepSession[] | undefined, day?: string): SleepSession[] => {
