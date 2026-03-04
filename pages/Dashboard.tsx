@@ -477,6 +477,15 @@ const Dashboard: React.FC = () => {
         { label: 'Timing', value: currentSleep.contributors.timing, color: '#10b981', key: 'timing' },
     ] : [];
 
+    const activityContributors = currentActivity?.contributors ? [
+        { label: 'Meet Daily Targets', value: currentActivity.contributors.meet_daily_targets, color: '#22c55e', key: 'meet_daily_targets' },
+        { label: 'Move Every Hour', value: currentActivity.contributors.move_every_hour, color: '#14b8a6', key: 'move_every_hour' },
+        { label: 'Recovery Time', value: currentActivity.contributors.recovery_time, color: '#60a5fa', key: 'recovery_time' },
+        { label: 'Stay Active', value: currentActivity.contributors.stay_active, color: '#f59e0b', key: 'stay_active' },
+        { label: 'Training Frequency', value: currentActivity.contributors.training_frequency, color: '#a855f7', key: 'training_frequency' },
+        { label: 'Training Volume', value: currentActivity.contributors.training_volume, color: '#f97316', key: 'training_volume' },
+    ] : [];
+
     const getMetricHistoryData = (metricType: string, days: number = 30, data?: DailyStats) => {
         const dataSource = data || activeData;
         if (!dataSource) return [];
@@ -1237,9 +1246,10 @@ const Dashboard: React.FC = () => {
                                 <Brain className="w-4 h-4 text-[#777]" />
                                 <h3>Score Contributors</h3>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                                 <ContributorsBreakdown title="Readiness" contributors={readinessContributors} />
                                 <ContributorsBreakdown title="Sleep" contributors={sleepContributors} />
+                                <ContributorsBreakdown title="Activity" contributors={activityContributors} />
                             </div>
                         </section>
                     </div>
