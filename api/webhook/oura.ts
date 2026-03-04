@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
-import { getAdminFirestore } from '../_lib/firebaseAdmin';
+import { getAdminFirestore } from '../_lib/firebaseAdmin.js';
 
 const WEBHOOK_SIGNALS_COLLECTION = 'webhookSignals';
 const CLIENT_ID_HEADER = 'x-client-id';
