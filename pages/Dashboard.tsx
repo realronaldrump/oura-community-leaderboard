@@ -41,6 +41,39 @@ import { getProfileDisplayName } from '../utils/profileName';
 
 const METERS_TO_MILES = 0.000621371;
 const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
+type DayRange = { start: string; end: string };
+
+const filterByDayRange = <T extends { day?: string }>(items: T[] | undefined, range: DayRange | null): T[] => {
+    if (!items || items.length === 0) return [];
+    if (!range) return items;
+    return items.filter((item) => Boolean(item.day && item.day >= range.start && item.day <= range.end));
+};
+
+const filterHeartRateByDayRange = (items: HeartRate[] | undefined, range: DayRange | null): HeartRate[] => {
+    if (!items || items.length === 0) return [];
+    if (!range) return items;
+    return items.filter((item) => {
+        const day = item.timestamp?.slice(0, 10);
+        return Boolean(day && day >= range.start && day <= range.end);
+    });
+};
+
+const filterDailyStatsByDayRange = (data: DailyStats | undefined, range: DayRange | null): DailyStats | undefined => {
+    if (!data) return undefined;
+    if (!range) return data;
+    return {
+        ...data,
+        sleep: filterByDayRange(data.sleep, range),
+        readiness: filterByDayRange(data.readiness, range),
+        activity: filterByDayRange(data.activity, range),
+        session: filterByDayRange(data.session, range),
+        spo2: filterByDayRange(data.spo2, range),
+        stress: filterByDayRange(data.stress, range),
+        resilience: filterByDayRange(data.resilience, range),
+        heartrate: filterHeartRateByDayRange(data.heartrate, range),
+        workout: filterByDayRange(data.workout, range),
+    };
+};
 
 const Dashboard: React.FC = () => {
     const {
@@ -176,37 +209,8 @@ const Dashboard: React.FC = () => {
         }))
     });
 
-    const leaderboardData = useMemo(() => {
-        return profiles.map((p, idx) => {
-            const query = userQueries[idx];
-            const data = query.data;
-            if (!data) return null;
-            const { sleep, readiness, activity, session } = data;
-            const lastSleep = sleep[0];
-            const lastReadiness = readiness[0];
-            const lastActivity = activity[0];
-            const lastSession = lastSleep ? session.find(s => s.day === lastSleep.day) : null;
-            const sScore = Number(lastSleep?.score) || 0;
-            const rScore = Number(lastReadiness?.score) || 0;
-            const aScore = Number(lastActivity?.score) || 0;
-            return {
-                id: p.id,
-                name: p.firstName || (p.email || 'User').split('@')[0],
-                readiness: rScore, sleep: sScore, activity: aScore,
-                steps: lastActivity?.steps,
-                activeCalories: lastActivity?.active_calories,
-                sleepDuration: lastSession?.total_sleep_duration ?? lastSession?.time_in_bed ?? null,
-                averageHrv: lastSession?.average_hrv ?? null,
-                restingHeartRate: lastSession?.lowest_heart_rate ?? null,
-                average: Math.round((sScore + rScore + aScore) / 3),
-                isCurrentUser: p.id === activeProfile?.id
-            } as LeaderboardEntry;
-        }).filter((e): e is LeaderboardEntry => e !== null).sort((a, b) => b.average - a.average);
-    }, [profiles, userQueries, activeProfile?.id]);
-
     const activeUserQuery = userQueries.find((_, idx) => profiles[idx].id === activeProfile?.id);
     const activeData = activeUserQuery?.data as DailyStats | undefined;
-    const hrData = activeData?.heartrate || [];
 
     const profileHealthById = useMemo(() => {
         const staleThresholdMs = 18 * 60 * 60 * 1000;
@@ -250,33 +254,68 @@ const Dashboard: React.FC = () => {
     }, [profiles, profileHealthById]);
 
     const [dateIndex, setDateIndex] = useState(0);
+    const [dateRange, setDateRange] = useState<DayRange | null>(null);
 
-    const sleepHistory = activeData?.sleep || [];
-    const readinessHistory = activeData?.readiness || [];
-    const activityHistory = activeData?.activity || [];
-    const sessionHistory = activeData?.session || [];
-    const spo2History = activeData?.spo2 || [];
-    const stressHistory = activeData?.stress || [];
-    const resilienceHistory = activeData?.resilience || [];
+    const fullSleepHistory = activeData?.sleep || [];
+    const fullReadinessHistory = activeData?.readiness || [];
+    const fullActivityHistory = activeData?.activity || [];
 
     const availableDays = useMemo(() => {
         const daySet = new Set<string>();
-        sleepHistory.forEach((item) => item.day && daySet.add(item.day));
-        readinessHistory.forEach((item) => item.day && daySet.add(item.day));
-        activityHistory.forEach((item) => item.day && daySet.add(item.day));
+        fullSleepHistory.forEach((item) => item.day && daySet.add(item.day));
+        fullReadinessHistory.forEach((item) => item.day && daySet.add(item.day));
+        fullActivityHistory.forEach((item) => item.day && daySet.add(item.day));
         return Array.from(daySet).sort((a, b) => b.localeCompare(a));
-    }, [activityHistory, readinessHistory, sleepHistory]);
+    }, [fullActivityHistory, fullReadinessHistory, fullSleepHistory]);
+
+    const effectiveDateRange = useMemo<DayRange | null>(() => {
+        if (!availableDays.length) return null;
+        const newest = availableDays[0];
+        const oldest = availableDays[availableDays.length - 1];
+
+        if (!dateRange) {
+            return { start: oldest, end: newest };
+        }
+
+        let start = dateRange.start;
+        let end = dateRange.end;
+        if (start < oldest) start = oldest;
+        if (start > newest) start = newest;
+        if (end < oldest) end = oldest;
+        if (end > newest) end = newest;
+        if (start > end) [start, end] = [end, start];
+        return { start, end };
+    }, [availableDays, dateRange]);
+
+    const scopedAvailableDays = useMemo(() => {
+        if (!effectiveDateRange) return availableDays;
+        return availableDays.filter((day) => day >= effectiveDateRange.start && day <= effectiveDateRange.end);
+    }, [availableDays, effectiveDateRange]);
+
+    const activeDataInRange = useMemo(
+        () => filterDailyStatsByDayRange(activeData, effectiveDateRange),
+        [activeData, effectiveDateRange]
+    );
+
+    const sleepHistory = activeDataInRange?.sleep || [];
+    const readinessHistory = activeDataInRange?.readiness || [];
+    const activityHistory = activeDataInRange?.activity || [];
+    const sessionHistory = activeDataInRange?.session || [];
+    const spo2History = activeDataInRange?.spo2 || [];
+    const stressHistory = activeDataInRange?.stress || [];
+    const resilienceHistory = activeDataInRange?.resilience || [];
+    const hrData = activeDataInRange?.heartrate || [];
 
     useEffect(() => {
         setDateIndex(0);
     }, [activeProfile?.id]);
 
     useEffect(() => {
-        const lastIndex = Math.max(availableDays.length - 1, 0);
+        const lastIndex = Math.max(scopedAvailableDays.length - 1, 0);
         if (dateIndex > lastIndex) {
             setDateIndex(lastIndex);
         }
-    }, [availableDays.length, dateIndex]);
+    }, [scopedAvailableDays.length, dateIndex]);
 
     const findByDay = <T extends { day?: string }>(items: T[], day?: string): T | undefined => {
         if (!day) return undefined;
@@ -301,11 +340,11 @@ const Dashboard: React.FC = () => {
         return pickBestSession(sessionHistory.filter(s => s.day === day));
     };
 
-    const scoreAnchorDay = availableDays[dateIndex];
+    const scoreAnchorDay = scopedAvailableDays[dateIndex];
     const referenceDay = scoreAnchorDay;
 
     const handleSelectReferenceDay = (day: string) => {
-        const nextIndex = availableDays.indexOf(day);
+        const nextIndex = scopedAvailableDays.indexOf(day);
         if (nextIndex >= 0) setDateIndex(nextIndex);
     };
 
@@ -343,7 +382,7 @@ const Dashboard: React.FC = () => {
     ] : [];
 
     const getMetricHistoryData = (metricType: string, days: number = 30, data?: DailyStats) => {
-        const dataSource = data || activeData;
+        const dataSource = data || activeDataInRange;
         if (!dataSource) return [];
         const { session: sh, activity: ah, spo2: sp, stress: st, resilience: rl } = dataSource;
 
@@ -401,7 +440,8 @@ const Dashboard: React.FC = () => {
         // Show modal immediately with currently available data
         const allTimeQueryKey = ['allTimeStats', activeProfile.id] as const;
         const cachedAllTime = queryClient.getQueryData(allTimeQueryKey) as DailyStats | undefined;
-        const bestAvailable = cachedAllTime || activeData;
+        const scopedCachedAllTime = filterDailyStatsByDayRange(cachedAllTime, effectiveDateRange);
+        const bestAvailable = scopedCachedAllTime || activeDataInRange;
         const historyData = bestAvailable
             ? getMetricHistoryData(metricType, bestAvailable.session?.length || 0, bestAvailable)
             : [];
@@ -419,16 +459,69 @@ const Dashboard: React.FC = () => {
         }
     };
 
+    const scopedUsersData = useMemo(
+        () => userQueries.map((query) => filterDailyStatsByDayRange(query.data as DailyStats | undefined, effectiveDateRange)),
+        [userQueries, effectiveDateRange]
+    );
+
+    const scopedAllTimeData = useMemo(
+        () => allTimeQueries.map((query) => filterDailyStatsByDayRange(query.data as DailyStats | undefined, effectiveDateRange)),
+        [allTimeQueries, effectiveDateRange]
+    );
+
+    const leaderboardData = useMemo(() => {
+        return profiles.map((p, idx) => {
+            const data = scopedUsersData[idx];
+            if (!data) return null;
+            const { sleep, readiness, activity, session } = data;
+            const lastSleep = sleep[0];
+            const lastReadiness = readiness[0];
+            const lastActivity = activity[0];
+            const lastSession = lastSleep ? session.find(s => s.day === lastSleep.day) : null;
+            const sScore = Number(lastSleep?.score) || 0;
+            const rScore = Number(lastReadiness?.score) || 0;
+            const aScore = Number(lastActivity?.score) || 0;
+            return {
+                id: p.id,
+                name: p.firstName || (p.email || 'User').split('@')[0],
+                readiness: rScore, sleep: sScore, activity: aScore,
+                steps: lastActivity?.steps,
+                activeCalories: lastActivity?.active_calories,
+                sleepDuration: lastSession?.total_sleep_duration ?? lastSession?.time_in_bed ?? null,
+                averageHrv: lastSession?.average_hrv ?? null,
+                restingHeartRate: lastSession?.lowest_heart_rate ?? null,
+                average: Math.round((sScore + rScore + aScore) / 3),
+                isCurrentUser: p.id === activeProfile?.id
+            } as LeaderboardEntry;
+        }).filter((e): e is LeaderboardEntry => e !== null).sort((a, b) => b.average - a.average);
+    }, [profiles, scopedUsersData, activeProfile?.id]);
+
     // Versus data
     const compareEntries = leaderboardData.slice(0, 2);
-    const p1Data = userQueries.find((_, idx) => profiles[idx]?.id === compareEntries[0]?.id)?.data as DailyStats | undefined;
-    const p2Data = userQueries.find((_, idx) => profiles[idx]?.id === compareEntries[1]?.id)?.data as DailyStats | undefined;
+    const p1Data = scopedUsersData[profiles.findIndex((p) => p.id === compareEntries[0]?.id)];
+    const p2Data = scopedUsersData[profiles.findIndex((p) => p.id === compareEntries[1]?.id)];
     const p1Hr = p1Data?.heartrate || [];
     const p2Hr = p2Data?.heartrate || [];
     const p1Sleep = p1Data?.sleep[0]; const p1Readiness = p1Data?.readiness[0]; const p1Session = p1Data?.session[0];
     const p2Sleep = p2Data?.sleep[0]; const p2Readiness = p2Data?.readiness[0]; const p2Session = p2Data?.session[0];
     const compareProfileA = profiles.find((p) => p.id === compareEntries[0]?.id);
     const compareProfileB = profiles.find((p) => p.id === compareEntries[1]?.id);
+    const scopedAllTimeQueriesForHistory = useMemo(
+        () => allTimeQueries.map((query, idx) => ({
+            data: scopedAllTimeData[idx],
+            isFetching: query.isFetching,
+            isPending: query.isPending,
+        })),
+        [allTimeQueries, scopedAllTimeData]
+    );
+    const scopedUserDataForInsights = useMemo(
+        () => scopedUsersData.map((data) => ({ data })),
+        [scopedUsersData]
+    );
+    const scopedAllTimeDataForInsights = useMemo(
+        () => scopedAllTimeData.map((data) => ({ data })),
+        [scopedAllTimeData]
+    );
 
     const userName = activeProfile?.firstName || activeProfile?.email?.split('@')[0] || 'there';
 
@@ -440,6 +533,12 @@ const Dashboard: React.FC = () => {
         if (d.toDateString() === today.toDateString()) return 'Today';
         if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
         return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    };
+    const formatRangeLabel = (range: DayRange | null): string => {
+        if (!range) return 'All available dates';
+        const start = new Date(`${range.start}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const end = new Date(`${range.end}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        return `${start} - ${end}`;
     };
 
     const getStressLabel = (summary: string | null | undefined) => {
@@ -771,13 +870,15 @@ const Dashboard: React.FC = () => {
                                         dates={availableDays}
                                         selectedDate={referenceDay}
                                         onSelectDate={handleSelectReferenceDay}
+                                        range={effectiveDateRange || undefined}
+                                        onRangeChange={(nextRange) => setDateRange(nextRange)}
                                     />
                                     <div className="flex items-center justify-end gap-0.5">
                                         <button
-                                            disabled={dateIndex >= availableDays.length - 1 || availableDays.length === 0}
+                                            disabled={dateIndex >= scopedAvailableDays.length - 1 || scopedAvailableDays.length === 0}
                                             onClick={() => {
-                                                if (!availableDays.length) return;
-                                                setDateIndex((current) => Math.min(current + 1, availableDays.length - 1));
+                                                if (!scopedAvailableDays.length) return;
+                                                setDateIndex((current) => Math.min(current + 1, scopedAvailableDays.length - 1));
                                             }}
                                             className="p-2.5 rounded-lg hover:bg-[#1C1C1C] disabled:opacity-20 transition-colors text-[#555]"
                                         >
@@ -785,9 +886,9 @@ const Dashboard: React.FC = () => {
                                         </button>
                                         <span className="text-xs text-[#555] font-mono min-w-[88px] text-center tabular-nums">{referenceDay || '--'}</span>
                                         <button
-                                            disabled={dateIndex === 0 || availableDays.length === 0}
+                                            disabled={dateIndex === 0 || scopedAvailableDays.length === 0}
                                             onClick={() => {
-                                                if (!availableDays.length) return;
+                                                if (!scopedAvailableDays.length) return;
                                                 setDateIndex((current) => Math.max(current - 1, 0));
                                             }}
                                             className="p-2.5 rounded-lg hover:bg-[#1C1C1C] disabled:opacity-20 transition-colors text-[#555]"
@@ -959,6 +1060,19 @@ const Dashboard: React.FC = () => {
                 {/* ======== COMPARE VIEW ======== */}
                 {viewMode === 'compare' && compareEntries.length >= 2 && (
                     <div className="space-y-6 pt-6">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <p className="text-[11px] uppercase tracking-[0.14em] text-[#666]">Compare Window</p>
+                                <p className="text-sm text-[#A0A0A0]">{formatRangeLabel(effectiveDateRange)}</p>
+                            </div>
+                            <DateRangePicker
+                                dates={availableDays}
+                                selectedDate={referenceDay}
+                                onSelectDate={handleSelectReferenceDay}
+                                range={effectiveDateRange || undefined}
+                                onRangeChange={(nextRange) => setDateRange(nextRange)}
+                            />
+                        </div>
                         <div className="bg-[#141414] border border-[#222] rounded-lg p-5 flex items-center justify-between">
                             <div className="text-center flex-1">
                                 <p className="text-sm font-semibold text-[#60A5FA]">{compareEntries[0].name.split('@')[0]}</p>
@@ -1017,10 +1131,44 @@ const Dashboard: React.FC = () => {
                 )}
 
                 {/* ======== TRENDS VIEW ======== */}
-                {viewMode === 'trends' && <div className="pt-6"><AllTimeHistory profiles={profiles} userQueries={allTimeQueries} /></div>}
+                {viewMode === 'trends' && (
+                    <div className="pt-6 space-y-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <p className="text-[11px] uppercase tracking-[0.14em] text-[#666]">Date Scope</p>
+                                <p className="text-sm text-[#A0A0A0]">{formatRangeLabel(effectiveDateRange)}</p>
+                            </div>
+                            <DateRangePicker
+                                dates={availableDays}
+                                selectedDate={referenceDay}
+                                onSelectDate={handleSelectReferenceDay}
+                                range={effectiveDateRange || undefined}
+                                onRangeChange={(nextRange) => setDateRange(nextRange)}
+                            />
+                        </div>
+                        <AllTimeHistory profiles={profiles} userQueries={scopedAllTimeQueriesForHistory} />
+                    </div>
+                )}
 
                 {/* ======== INSIGHTS VIEW ======== */}
-                {viewMode === 'insights' && <InsightsView profiles={profiles} userQueries={userQueries} allTimeQueries={allTimeQueries} />}
+                {viewMode === 'insights' && (
+                    <div className="pt-6 space-y-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <p className="text-[11px] uppercase tracking-[0.14em] text-[#666]">Date Scope</p>
+                                <p className="text-sm text-[#A0A0A0]">{formatRangeLabel(effectiveDateRange)}</p>
+                            </div>
+                            <DateRangePicker
+                                dates={availableDays}
+                                selectedDate={referenceDay}
+                                onSelectDate={handleSelectReferenceDay}
+                                range={effectiveDateRange || undefined}
+                                onRangeChange={(nextRange) => setDateRange(nextRange)}
+                            />
+                        </div>
+                        <InsightsView profiles={profiles} userQueries={scopedUserDataForInsights} allTimeQueries={scopedAllTimeDataForInsights} />
+                    </div>
+                )}
 
                 {/* ======== EXPORT VIEW ======== */}
                 {viewMode === 'export' && <div className="pt-6"><DataExport /></div>}
@@ -1032,6 +1180,11 @@ const Dashboard: React.FC = () => {
 // Insights sub-view
 const InsightsView: React.FC<{ profiles: any[]; userQueries: any[]; allTimeQueries: any[] }> = ({ profiles, userQueries, allTimeQueries }) => {
     const [tab, setTab] = useState<'timeline' | 'correlation' | 'whatif' | 'streaks' | 'patterns' | 'milestones' | 'snapshot'>('timeline');
+    const recentUsersData = userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }));
+    const historicalUsersData = profiles.map((_: any, idx: number) => ({
+        data: (allTimeQueries[idx]?.data as DailyStats | undefined) ?? (userQueries[idx]?.data as DailyStats | undefined)
+    }));
+
     return (
         <div className="pt-6 space-y-6">
             <div className="flex flex-wrap gap-1.5">
@@ -1044,13 +1197,13 @@ const InsightsView: React.FC<{ profiles: any[]; userQueries: any[]; allTimeQueri
                     <button key={t.key} onClick={() => setTab(t.key)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${tab === t.key ? 'bg-[#222] text-[#FAFAFA]' : 'text-[#666] hover:text-[#A0A0A0] hover:bg-[#1C1C1C]'}`}>{t.label}</button>
                 ))}
             </div>
-            {tab === 'timeline' && <TimelineView profiles={profiles} usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
-            {tab === 'correlation' && <CorrelationExplorer profiles={profiles} usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
-            {tab === 'whatif' && <WhatIfSimulator profiles={profiles} usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
-            {tab === 'streaks' && <StreakTracker profiles={profiles} usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
-            {tab === 'patterns' && <PatternDetector profiles={profiles} usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
-            {tab === 'milestones' && <MilestoneTracker profiles={profiles} usersData={allTimeQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
-            {tab === 'snapshot' && <DailySnapshot profiles={profiles} usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))} />}
+            {tab === 'timeline' && <TimelineView profiles={profiles} usersData={recentUsersData} />}
+            {tab === 'correlation' && <CorrelationExplorer profiles={profiles} usersData={recentUsersData} />}
+            {tab === 'whatif' && <WhatIfSimulator profiles={profiles} usersData={historicalUsersData} />}
+            {tab === 'streaks' && <StreakTracker profiles={profiles} usersData={recentUsersData} />}
+            {tab === 'patterns' && <PatternDetector profiles={profiles} usersData={recentUsersData} />}
+            {tab === 'milestones' && <MilestoneTracker profiles={profiles} usersData={historicalUsersData} />}
+            {tab === 'snapshot' && <DailySnapshot profiles={profiles} usersData={recentUsersData} />}
         </div>
     );
 };

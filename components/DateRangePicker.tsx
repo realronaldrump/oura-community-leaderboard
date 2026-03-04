@@ -20,6 +20,8 @@ type DateRangePickerProps = {
     dates: string[];
     selectedDate?: string;
     onSelectDate: (date: string) => void;
+    range?: { start: string; end: string };
+    onRangeChange?: (range: { start: string; end: string }) => void;
     className?: string;
 };
 
@@ -72,6 +74,8 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
     dates,
     selectedDate,
     onSelectDate,
+    range,
+    onRangeChange,
     className = '',
 }) => {
     const rootRef = useRef<HTMLDivElement>(null);
@@ -95,6 +99,13 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
         setRangeEnd((previous) => (previous && dates.includes(previous) ? previous : dates[0]));
         setYearFilter((previous) => previous || dates[0].slice(0, 4));
     }, [dates]);
+
+    useEffect(() => {
+        if (!range) return;
+        setRangeStart((previous) => (previous === range.start ? previous : range.start));
+        setRangeEnd((previous) => (previous === range.end ? previous : range.end));
+        setYearFilter((previous) => previous || range.start.slice(0, 4));
+    }, [range]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -186,6 +197,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
         const ordered = clampRange(start, end);
         setRangeStart(ordered.start);
         setRangeEnd(ordered.end);
+        onRangeChange?.(ordered);
 
         const nextRangeDates = dates.filter((day) => day >= ordered.start && day <= ordered.end);
         if (!nextRangeDates.length) return;
