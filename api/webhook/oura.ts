@@ -6,6 +6,8 @@ const WEBHOOK_SIGNALS_COLLECTION = 'webhookSignals';
 const CLIENT_ID_HEADER = 'x-client-id';
 const SIGNATURE_HEADER = 'x-oura-signature';
 const TIMESTAMP_HEADER = 'x-oura-timestamp';
+const DEFAULT_FIREBASE_PROJECT_ID = 'oura-friends';
+const DEFAULT_FIREBASE_WEB_API_KEY = 'AIzaSyA4BVUaIQ2vgX2AaSL3lIhmsctgEuRBtNc';
 
 type OuraWebhookEvent = {
     event_type?: string;
@@ -17,6 +19,15 @@ type OuraWebhookEvent = {
 
 const sendJson = (res: any, status: number, payload: Record<string, unknown>) => {
     res.status(status).setHeader('Content-Type', 'application/json').send(JSON.stringify(payload));
+};
+
+const parseJsonResponse = async (response: Response): Promise<any> => {
+    const raw = await response.text();
+    try {
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return { raw };
+    }
 };
 
 const readRawBody = (req: any): Promise<string> =>
@@ -52,6 +63,99 @@ const validateClientId = (req: any): boolean => {
     if (!expectedClientId) return true;
     const receivedClientId = String(req.headers?.[CLIENT_ID_HEADER] || '').trim();
     return receivedClientId.length === 0 || receivedClientId === expectedClientId;
+};
+
+const getPublicFirestoreConfig = () => {
+    const projectId =
+        process.env.FIREBASE_PUBLIC_PROJECT_ID?.trim()
+        || process.env.VITE_FIREBASE_PROJECT_ID?.trim()
+        || DEFAULT_FIREBASE_PROJECT_ID;
+    const apiKey =
+        process.env.FIREBASE_PUBLIC_API_KEY?.trim()
+        || process.env.VITE_FIREBASE_API_KEY?.trim()
+        || DEFAULT_FIREBASE_WEB_API_KEY;
+    return { projectId, apiKey };
+};
+
+const toFirestoreFields = (params: {
+    userId: string;
+    lastEventAt: string;
+    nowIso: string;
+    event: OuraWebhookEvent;
+}) => {
+    const { userId, lastEventAt, nowIso, event } = params;
+    return {
+        ouraUserId: { stringValue: userId },
+        lastEventAt: { stringValue: lastEventAt },
+        lastReceivedAt: { stringValue: nowIso },
+        lastEventType: { stringValue: event.event_type || 'update' },
+        lastDataType: { stringValue: event.data_type || 'unknown' },
+        lastObjectId: event.object_id ? { stringValue: event.object_id } : { nullValue: null },
+        // Keep updateCount monotonic for client-side signal deduping.
+        updateCount: { integerValue: String(Date.now()) },
+    };
+};
+
+const persistSignalViaPublicFirestore = async (params: {
+    userId: string;
+    lastEventAt: string;
+    nowIso: string;
+    event: OuraWebhookEvent;
+}) => {
+    const { projectId, apiKey } = getPublicFirestoreConfig();
+    const encodedUserId = encodeURIComponent(params.userId);
+    const baseUrl = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/${WEBHOOK_SIGNALS_COLLECTION}/${encodedUserId}`;
+    const fieldNames = Object.keys(toFirestoreFields(params));
+    const search = new URLSearchParams({ key: apiKey });
+    fieldNames.forEach((fieldName) => search.append('updateMask.fieldPaths', fieldName));
+
+    const response = await fetch(`${baseUrl}?${search.toString()}`, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            fields: toFirestoreFields(params),
+        }),
+    });
+
+    if (!response.ok) {
+        const payload = await parseJsonResponse(response);
+        throw new Error(`public_firestore_write_failed (${response.status}): ${JSON.stringify(payload)}`);
+    }
+};
+
+const persistSignal = async (params: {
+    userId: string;
+    lastEventAt: string;
+    nowIso: string;
+    event: OuraWebhookEvent;
+}) => {
+    try {
+        const db = getAdminFirestore();
+        await db.collection(WEBHOOK_SIGNALS_COLLECTION).doc(params.userId).set({
+            ouraUserId: params.userId,
+            lastEventAt: params.lastEventAt,
+            lastReceivedAt: params.nowIso,
+            lastEventType: params.event.event_type || 'update',
+            lastDataType: params.event.data_type || 'unknown',
+            lastObjectId: params.event.object_id || null,
+            updateCount: FieldValue.increment(1),
+        }, { merge: true });
+        return;
+    } catch (error: any) {
+        const message = String(error?.message || '');
+        const missingAdminCreds =
+            message.includes('Missing Firebase Admin credentials')
+            || message.includes('Could not load the default credentials')
+            || message.includes('Failed to determine service account');
+
+        if (!missingAdminCreds) {
+            throw error;
+        }
+    }
+
+    await persistSignalViaPublicFirestore(params);
 };
 
 const handleVerification = (req: any, res: any) => {
@@ -123,16 +227,12 @@ const handleEvent = async (req: any, res: any) => {
     const lastEventAt = typeof event.event_time === 'string' && event.event_time ? event.event_time : nowIso;
 
     try {
-        const db = getAdminFirestore();
-        await db.collection(WEBHOOK_SIGNALS_COLLECTION).doc(userId).set({
-            ouraUserId: userId,
+        await persistSignal({
+            userId,
             lastEventAt,
-            lastReceivedAt: nowIso,
-            lastEventType: event.event_type || 'update',
-            lastDataType: event.data_type || 'unknown',
-            lastObjectId: event.object_id || null,
-            updateCount: FieldValue.increment(1),
-        }, { merge: true });
+            nowIso,
+            event,
+        });
     } catch (error: any) {
         sendJson(res, 500, {
             error: 'failed_to_persist_webhook_signal',
