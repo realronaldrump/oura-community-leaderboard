@@ -3,6 +3,7 @@ import { useUser } from '../../contexts/UserContext';
 import { CHALLENGE_DEFINITIONS } from '../../services/analyticsService';
 import { ChallengeDefinition, ChallengeType } from '../../types/analyticsTypes';
 import { Crown, Zap, Footprints, Moon, Play, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { formatISODateForDisplay, formatLocalISODate } from '../../utils/date';
 
 const ChallengeManager: React.FC = () => {
     const { activeProfile, updateProfile } = useUser();
@@ -29,7 +30,7 @@ const ChallengeManager: React.FC = () => {
     const handleJoin = async (challengeDef: ChallengeDefinition) => {
         setIsJoining(challengeDef.id);
         try {
-            const startDate = new Date().toISOString().split('T')[0];
+            const startDate = formatLocalISODate();
             const endDate = new Date();
             endDate.setDate(endDate.getDate() + challengeDef.durationDays - 1);
 
@@ -38,7 +39,7 @@ const ChallengeManager: React.FC = () => {
                 challengeId: challengeDef.id,
                 userId: activeProfile.id,
                 startDate,
-                endDate: endDate.toISOString().split('T')[0],
+                endDate: formatLocalISODate(endDate),
                 status: 'active' as const,
                 progress: 0,
                 history: {}
@@ -183,7 +184,7 @@ const ChallengeManager: React.FC = () => {
                                         <div>
                                             <p className="font-medium text-[var(--text-primary)]">{def?.name || 'Unknown Challenge'}</p>
                                             <p className="text-xs text-[var(--text-muted)]">
-                                                {new Date(c.startDate).toLocaleDateString()} - {new Date(c.endDate).toLocaleDateString()}
+                                                {formatISODateForDisplay(c.startDate)} - {formatISODateForDisplay(c.endDate)}
                                             </p>
                                         </div>
                                     </div>

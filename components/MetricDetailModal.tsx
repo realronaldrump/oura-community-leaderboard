@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, TrendingUp, TrendingDown, Calendar, Info, Activity, Heart, Droplets, Wind, Zap, Brain, ArrowUp, ArrowDown, Minus, Moon, Trophy, Medal } from 'lucide-react';
 import { IOSModal, IOSListItem, IOSButton } from './ios';
 import { LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, AreaChart } from 'recharts';
+import { formatISODateForDisplay } from '../utils/date';
 
 interface MetricDataPoint {
     date: string;
@@ -401,7 +402,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                 <div className="flex items-center justify-between py-2">
                     <div>
                         <p className="text-[#666666] text-sm">
-                            {date ? new Date(date).toLocaleDateString() : 'Latest'}
+                            {date ? formatISODateForDisplay(date) : 'Latest'}
                         </p>
                     </div>
                     <div className="text-right">
@@ -496,7 +497,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                         <XAxis
                                             dataKey="date"
                                             tick={{ fill: '#666666', fontSize: 11 }}
-                                            tickFormatter={(value) => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                            tickFormatter={(value) => formatISODateForDisplay(value, undefined, { month: 'short', day: 'numeric' })}
                                             axisLine={{ stroke: '#222' }}
                                         />
                                         <YAxis
@@ -515,7 +516,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                                     : `${value} ${effectiveUnit}`,
                                                 config.title
                                             ]}
-                                            labelFormatter={(label) => new Date(label).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                                            labelFormatter={(label) => formatISODateForDisplay(label, undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                                         />
                                         <Area
                                             type="monotone"
@@ -703,7 +704,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                                     </div>
                                                     <div>
                                                         <p className="text-sm font-medium text-[#FAFAFA]">
-                                                            {new Date(entry.date).toLocaleDateString(undefined, {
+                                                            {formatISODateForDisplay(entry.date, undefined, {
                                                                 weekday: 'short',
                                                                 month: 'short',
                                                                 day: 'numeric',

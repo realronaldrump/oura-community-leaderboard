@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Calculator, TrendingUp, Target, Clock, Thermometer, Heart, Moon, Zap } from 'lucide-react';
 import { DailyReadiness, DailySleep, DailyActivity, SleepSession } from '../types';
 import { IOSModal, IOSListItem, IOSButton } from './ios';
+import { formatISODateForDisplay } from '../utils/date';
 
 interface ScoreBreakdownModalProps {
     isOpen: boolean;
@@ -220,7 +221,7 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                             Score: {score}/100
                         </p>
                         <p className="text-[#666666] text-xs mt-1">
-                            {new Date(date).toLocaleDateString(undefined, {
+                            {formatISODateForDisplay(date, undefined, {
                                 weekday: 'long',
                                 year: 'numeric',
                                 month: 'long',

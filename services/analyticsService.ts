@@ -11,6 +11,12 @@ import {
     CalendarHeatmapDay, UserChallenge, ChallengeDefinition, ChallengeStatus, AutomatedInsight
 } from '../types/analyticsTypes';
 import * as ss from 'simple-statistics';
+import {
+    formatLocalISODate,
+    getISODateWeekday,
+    parseLocalISODate,
+    shiftLocalISODate,
+} from '../utils/date';
 
 // ============================================
 // CHALLENGE DEFINITIONS
@@ -78,16 +84,13 @@ export function checkChallengeProgress(
     let isFailed = false;
 
     // Iterate through dates from startDate to today (or endDate)
-    const start = new Date(challenge.startDate);
-    const end = new Date();
-    // Safety check to not go beyond duration
-    const maxEnd = new Date(challenge.startDate);
-    maxEnd.setDate(maxEnd.getDate() + def.durationDays - 1);
+    if (!parseLocalISODate(challenge.startDate)) return challenge;
 
-    const checkUntil = end < maxEnd ? end : maxEnd;
+    const today = formatLocalISODate();
+    const maxEndDate = shiftLocalISODate(challenge.startDate, def.durationDays - 1);
+    const checkUntil = today < maxEndDate ? today : maxEndDate;
 
-    for (let d = new Date(start); d <= checkUntil; d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0];
+    for (let dateStr = challenge.startDate; dateStr <= checkUntil; dateStr = shiftLocalISODate(dateStr, 1)) {
 
         // Skip if already recorded (unless we want to re-verify, but for now trust history if present)
         // Actually, we should re-verify if data might have synced late.
@@ -138,7 +141,7 @@ export function checkChallengeProgress(
             // If data is missing (null), is it a fail?
             // Usually yes, for a "streak".
             // But if it's "today" and data hasn't synced, we shouldn't fail yet.
-            if (dateStr === new Date().toISOString().split('T')[0] && metricValue === null) {
+            if (dateStr === today && metricValue === null) {
                 // Today, no data yet. Don't count as fail, but break streak calculation?
                 // Actually, just ignore for now.
             } else {
@@ -181,7 +184,7 @@ export function checkChallengeProgress(
             currentStreak++;
         } else {
             // Failure!
-            if (d < new Date().toISOString().split('T')[0] || (d === new Date().toISOString().split('T')[0] && getMetricValueForDate(data, def.metric, d) !== null)) {
+            if (d < today || (d === today && getMetricValueForDate(data, def.metric, d) !== null)) {
                 // Only fail if it's a confirmed failure (past or present with data)
                 isFailed = true;
             }
@@ -545,7 +548,8 @@ function detectDayOfWeekPatterns(
 
         for (const sleep of data.sleep || []) {
             if (sleep.score == null) continue;
-            const dayOfWeek = new Date(sleep.day).getDay();
+            const dayOfWeek = getISODateWeekday(sleep.day);
+            if (dayOfWeek == null) continue;
             byDay[dayOfWeek].push(sleep.score);
         }
 
@@ -596,9 +600,7 @@ function detectActivitySleepPatterns(
         for (const activity of data.activity || []) {
             if (activity.steps == null) continue;
 
-            const nextDay = new Date(activity.day);
-            nextDay.setDate(nextDay.getDate() + 1);
-            const nextDayStr = nextDay.toISOString().split('T')[0];
+            const nextDayStr = shiftLocalISODate(activity.day, 1);
             const nextDaySleep = sleepByDay.get(nextDayStr);
 
             if (nextDaySleep != null) {
@@ -652,7 +654,8 @@ function detectWeekendEffect(
 
         for (const sleep of data.sleep || []) {
             if (sleep.score == null) continue;
-            const day = new Date(sleep.day).getDay();
+            const day = getISODateWeekday(sleep.day);
+            if (day == null) continue;
             if (day === 0 || day === 6) {
                 weekendScores.push(sleep.score);
             } else {
@@ -1055,9 +1058,7 @@ function simulateForUser(
     const metricValues = getScenarioMetricValues(data, scenario.metric);
 
     for (const { day, value } of metricValues) {
-        const nextDay = new Date(day);
-        nextDay.setDate(nextDay.getDate() + 1);
-        const nextDayStr = nextDay.toISOString().split('T')[0];
+        const nextDayStr = shiftLocalISODate(day, 1);
         const targetValue = targetByDay.get(nextDayStr);
 
         if (targetValue != null) {

@@ -1,6 +1,6 @@
 import { FULL_HISTORY_START_DATE, syncDailyStats } from '../hooks/useOuraData';
 import { DailyStats } from '../types';
-import { formatLocalISODate } from '../utils/date';
+import { formatLocalISODate, getOuraFetchEndISODate } from '../utils/date';
 
 export interface SyncProgress {
     status: 'idle' | 'syncing' | 'complete' | 'error';
@@ -19,6 +19,7 @@ type SyncAuthContext = {
 };
 
 const getToday = () => formatLocalISODate();
+const getFetchEndDate = () => getOuraFetchEndISODate();
 
 const describeCoverage = (data: DailyStats): { start: string; end: string; days: number } | null => {
     const days = [
@@ -52,6 +53,7 @@ export const smartSync = async (
     authContext: SyncAuthContext = {}
 ): Promise<Partial<DailyStats>> => {
     const today = getToday();
+    const fetchEndDate = getFetchEndDate();
 
     onProgress({
         status: 'syncing',
@@ -63,7 +65,7 @@ export const smartSync = async (
 
     const data = await syncDailyStats(token, existingData, {
         mode: 'incremental',
-        endDate: today,
+        endDate: fetchEndDate,
         grantedScopes: authContext.grantedScopes,
         availabilityKey: authContext.availabilityKey,
     });
@@ -93,6 +95,7 @@ export const fullSync = async (
     authContext: SyncAuthContext = {}
 ): Promise<DailyStats> => {
     const today = getToday();
+    const fetchEndDate = getFetchEndDate();
 
     onProgress({
         status: 'syncing',
@@ -104,7 +107,7 @@ export const fullSync = async (
 
     const data = await syncDailyStats(token, undefined, {
         mode: 'full',
-        endDate: today,
+        endDate: fetchEndDate,
         grantedScopes: authContext.grantedScopes,
         availabilityKey: authContext.availabilityKey,
     });

@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { SleepSession } from '../../types';
 import { IOSModal, IOSButton, IOSListItem } from '../ios';
 import { Moon, Zap, Wind, Activity, Info } from 'lucide-react';
+import { formatISODateForDisplay } from '../../utils/date';
 
 // Custom tooltip component with total
 interface CustomTooltipProps {
@@ -335,7 +336,7 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
                             </div>
                             <div>
                                 <p className="text-sm text-text-muted">
-                                    {new Date(selectedStage.session.day).toLocaleDateString(undefined, {
+                                    {formatISODateForDisplay(selectedStage.session.day, undefined, {
                                         weekday: 'long',
                                         year: 'numeric',
                                         month: 'long',

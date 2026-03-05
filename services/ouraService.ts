@@ -11,7 +11,7 @@ import {
   DailyStress,
   DailyResilience
 } from '../types';
-import { formatLocalISODate } from '../utils/date';
+import { formatLocalISODate, getOuraFetchEndISODate } from '../utils/date';
 
 type QueryParams = Record<string, string | undefined>;
 type DateWindow = { start: string; end: string };
@@ -55,7 +55,7 @@ class OuraService {
 
   private getDateRange(daysBackOrStart: number | string = 30, end?: string) {
     if (typeof daysBackOrStart === 'string') {
-      const today = formatLocalISODate();
+      const today = getOuraFetchEndISODate();
       return {
         start_date: daysBackOrStart,
         end_date: end || today
@@ -145,15 +145,15 @@ class OuraService {
   }
 
   private clampDateWindow(startDate: string, endDate: string, maxDays: number): string {
-    const start = new Date(`${startDate}T00:00:00`);
-    const endTs = new Date(`${endDate}T00:00:00`).getTime();
-    if (Number.isNaN(start.getTime()) || Number.isNaN(endTs)) return startDate;
+    const start = this.parseDay(startDate);
+    const end = this.parseDay(endDate);
+    if (!start || !end) return startDate;
 
     const maxRangeMs = maxDays * 24 * 60 * 60 * 1000;
-    if (endTs - start.getTime() <= maxRangeMs) return startDate;
+    if (end.getTime() - start.getTime() <= maxRangeMs) return startDate;
 
-    const clamped = new Date(endTs - maxRangeMs);
-    return clamped.toISOString().split('T')[0];
+    const clamped = new Date(end.getTime() - maxRangeMs);
+    return this.formatDay(clamped);
   }
 
   private parseDay(day: string): Date | null {

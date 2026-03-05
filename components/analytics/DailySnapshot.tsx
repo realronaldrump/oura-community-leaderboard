@@ -6,6 +6,7 @@ import html2canvas from 'html2canvas';
 import { Camera, Image, Pin, BedDouble, Zap, Flame, Footprints, Clock, Trophy, Crown } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
 import DateRangePicker from '../DateRangePicker';
+import { getRelativeLocalISODate } from '../../utils/date';
 
 interface DailySnapshotProps {
     profiles: Array<{ id: string; email?: string | null; challenges?: any[] }>;
@@ -13,11 +14,7 @@ interface DailySnapshotProps {
 }
 
 const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) => {
-    const [selectedDate, setSelectedDate] = useState<string>(() => {
-        const today = new Date();
-        today.setDate(today.getDate() - 1);
-        return today.toISOString().split('T')[0];
-    });
+    const [selectedDate, setSelectedDate] = useState<string>(() => getRelativeLocalISODate(-1));
     const [note, setNote] = useState('');
     const [isExporting, setIsExporting] = useState(false);
     const [pinnedSnapshots, setPinnedSnapshots] = useState<DailySnapshotData[]>([]);

@@ -4,6 +4,7 @@ import { generateTimelineData } from '../../services/analyticsService';
 import { Clock, BedDouble, Activity, Heart } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
 import DateRangePicker from '../DateRangePicker';
+import { getRelativeLocalISODate } from '../../utils/date';
 
 interface TimelineViewProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -13,11 +14,7 @@ interface TimelineViewProps {
 const userColors = ['#00C896', '#A855F7', '#F59E0B', '#3B82F6'];
 
 const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
-    const [selectedDate, setSelectedDate] = useState<string>(() => {
-        const today = new Date();
-        today.setDate(today.getDate() - 1);
-        return today.toISOString().split('T')[0];
-    });
+    const [selectedDate, setSelectedDate] = useState<string>(() => getRelativeLocalISODate(-1));
 
     const availableDates = useMemo(() => {
         const dates = new Set<string>();

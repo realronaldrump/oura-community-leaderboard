@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ouraService } from '../services/ouraService';
 import { DailyStats } from '../types';
-import { formatLocalISODate } from '../utils/date';
+import { getOuraFetchEndISODate, shiftLocalISODate } from '../utils/date';
 
 export const FULL_HISTORY_START_DATE = '2016-01-01';
 const INITIAL_RECENT_DAYS = 28;
@@ -22,14 +22,8 @@ type SyncDailyStatsOptions = {
     availabilityKey?: string;
 };
 
-const getToday = (): string => formatLocalISODate();
-
-const shiftDate = (day: string, daysDelta: number): string => {
-    const d = new Date(`${day}T00:00:00`);
-    if (Number.isNaN(d.getTime())) return day;
-    d.setDate(d.getDate() + daysDelta);
-    return formatLocalISODate(d);
-};
+const getFetchEndDate = (): string => getOuraFetchEndISODate();
+const shiftDate = (day: string, daysDelta: number): string => shiftLocalISODate(day, daysDelta);
 
 const normalizeScope = (scope: string): string =>
     scope.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -242,8 +236,8 @@ export const fetchDailyStats = async (
     const canFetchWorkout = hasAnyScope(normalizedScopes, ['workout']);
     const canFetchSession = hasAnyScope(normalizedScopes, ['session']);
     const canFetchTag = hasAnyScope(normalizedScopes, ['tag', 'tag user', 'enhanced_tag']);
-    const start = dateRange?.start || shiftDate(getToday(), -INITIAL_RECENT_DAYS);
-    const end = dateRange?.end;
+    const end = dateRange?.end || getFetchEndDate();
+    const start = dateRange?.start || shiftDate(end, -INITIAL_RECENT_DAYS);
 
     // Phase 1: Critical endpoints the dashboard needs to render scores + details
     const criticalRequests = [
@@ -260,7 +254,7 @@ export const fetchDailyStats = async (
 
     // Phase 2: Supplementary endpoints — fetched after critical data is secured
     // Limit heartrate to 2 days for the dashboard (the slowest, most paginated endpoint)
-    const hrStart = shiftDate(end || getToday(), -2);
+    const hrStart = shiftDate(end, -2);
     const supplementaryRequests = [
         canFetchSpO2 ? ouraService.getDailySpO2(token, start, end, { availabilityKey }) : Promise.resolve([]),
         ouraService.getDailyStress(token, start, end, { availabilityKey }),
@@ -325,7 +319,7 @@ export const syncDailyStats = async (
     options: SyncDailyStatsOptions = {}
 ): Promise<DailyStats> => {
     const mode = options.mode || 'incremental';
-    const endDate = options.endDate || getToday();
+    const endDate = options.endDate || getFetchEndDate();
 
     if (mode === 'full') {
         return fetchDailyStats(token, {

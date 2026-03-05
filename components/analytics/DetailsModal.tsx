@@ -1,5 +1,6 @@
 import React from 'react';
 import { Calendar, X } from 'lucide-react';
+import { formatISODateForDisplay } from '../../utils/date';
 
 interface DetailsModalProps {
     isOpen: boolean;
@@ -91,7 +92,7 @@ const DetailsModal: React.FC<DetailsModalProps> = ({
                                             }`}
                                     >
                                         <span className="text-[var(--text-secondary)] font-mono">
-                                            {new Date(date).toLocaleDateString(undefined, {
+                                            {formatISODateForDisplay(date, undefined, {
                                                 weekday: 'short',
                                                 year: 'numeric',
                                                 month: 'short',

@@ -39,7 +39,11 @@ import { useAutoSync, formatLastSync } from '../hooks/useAutoSync';
 import { useWebhookRefresh } from '../hooks/useWebhookRefresh';
 import { X, RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain } from 'lucide-react';
 import { getProfileDisplayName } from '../utils/profileName';
-import { formatLocalISODate } from '../utils/date';
+import {
+    formatLocalISODate,
+    isISODateString,
+    shiftLocalISODate,
+} from '../utils/date';
 
 const METERS_TO_MILES = 0.000621371;
 const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
@@ -86,23 +90,13 @@ const toTimestampMs = (value?: string | null): number => {
     return Number.isNaN(ts) ? Number.NEGATIVE_INFINITY : ts;
 };
 
-const isIsoDay = (value: unknown): value is string =>
-    typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+const isIsoDay = (value: unknown): value is string => isISODateString(value);
 
 const toIsoDayFromTimestamp = (value?: string | null): string | null => {
     if (!value) return null;
     const rawPrefix = value.slice(0, 10);
     return isIsoDay(rawPrefix) ? rawPrefix : null;
 };
-
-const shiftIsoDay = (day: string, deltaDays: number): string => {
-    const parsed = new Date(`${day}T12:00:00`);
-    if (Number.isNaN(parsed.getTime())) return day;
-    parsed.setDate(parsed.getDate() + deltaDays);
-    return formatLocalISODate(parsed);
-};
-
-const NEXT_DAY_SESSION_TYPES = new Set(['sleep', 'long_sleep', 'late_nap']);
 
 const isScoreReady = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value);
@@ -126,6 +120,7 @@ const getSessionCandidateDays = (session: SleepSession): Set<string> => {
 
     if (isIsoDay(session.day)) {
         days.add(session.day);
+        return days;
     }
 
     const bedtimeStartDay = toIsoDayFromTimestamp(session.bedtime_start);
@@ -136,15 +131,6 @@ const getSessionCandidateDays = (session: SleepSession): Set<string> => {
     const bedtimeEndDay = toIsoDayFromTimestamp(session.bedtime_end);
     if (bedtimeEndDay) {
         days.add(bedtimeEndDay);
-    }
-
-    // Oura sleep day can roll over at 6 pm local time. Include next day as bounded
-    // fallback for sessions that contribute to next-day daily scores.
-    if (
-        isIsoDay(session.day) &&
-        Boolean(session.type && NEXT_DAY_SESSION_TYPES.has(session.type))
-    ) {
-        days.add(shiftIsoDay(session.day, 1));
     }
 
     return days;
@@ -409,7 +395,19 @@ const Dashboard: React.FC = () => {
         activityHistory.forEach((item) => item.day && daySet.add(item.day));
         return Array.from(daySet).sort((a, b) => b.localeCompare(a));
     }, [activityHistory, readinessHistory, sleepHistory]);
-    const todayIsoDay = formatLocalISODate();
+    const todayIsoDay = useMemo(() => {
+        const observedDays = new Set<string>();
+        availableDays.forEach((day) => observedDays.add(day));
+        spo2History.forEach((item) => item.day && observedDays.add(item.day));
+        stressHistory.forEach((item) => item.day && observedDays.add(item.day));
+        resilienceHistory.forEach((item) => item.day && observedDays.add(item.day));
+        hrData.forEach((item) => {
+            const day = toIsoDayFromTimestamp(item.timestamp);
+            if (day) observedDays.add(day);
+        });
+
+        return Array.from(observedDays).sort((a, b) => b.localeCompare(a))[0] || formatLocalISODate();
+    }, [availableDays, hrData, resilienceHistory, spo2History, stressHistory]);
 
     const sleepScoreDays = useMemo(() => getScoredDays(sleepHistory), [sleepHistory]);
     const readinessScoreDays = useMemo(() => getScoredDays(readinessHistory), [readinessHistory]);
@@ -752,9 +750,7 @@ const Dashboard: React.FC = () => {
 
     const previousCompareDay = useMemo(() => {
         if (!compareDay) return '';
-        const previous = new Date(`${compareDay}T12:00:00`);
-        previous.setDate(previous.getDate() - 1);
-        return formatLocalISODate(previous);
+        return shiftLocalISODate(compareDay, -1);
     }, [compareDay]);
 
     const isInCompareWindow = (timestamp: string): boolean => {
@@ -782,9 +778,9 @@ const Dashboard: React.FC = () => {
 
     useEffect(() => {
         if (!activeProfile?.id || viewMode !== 'today') return;
-        if (referenceDay !== formatLocalISODate()) return;
+        if (referenceDay !== todayIsoDay) return;
         queryClient.invalidateQueries({ queryKey: ['dailyStats', activeProfile.id], exact: true });
-    }, [activeProfile?.id, queryClient, referenceDay, viewMode]);
+    }, [activeProfile?.id, queryClient, referenceDay, todayIsoDay, viewMode]);
 
     useEffect(() => {
         if (!profiles.length) return;
@@ -1152,8 +1148,8 @@ const Dashboard: React.FC = () => {
                                     {hasIncompleteTodayCoverage && (
                                         <p className="mt-2 text-xs text-[#A0A0A0]">
                                             {referenceDay === todayIsoDay
-                                                ? "Today's Oura data is still syncing. Some metrics may be unavailable yet."
-                                                : "Today's Oura data is still syncing. Showing your latest complete day."}
+                                                ? 'This Oura day is still syncing. Some metrics may not be available yet.'
+                                                : 'The latest Oura day is still syncing. Showing your latest complete day.'}
                                         </p>
                                     )}
                                 </div>

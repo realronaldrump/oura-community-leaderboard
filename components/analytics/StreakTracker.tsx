@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
 import DetailsModal from './DetailsModal';
+import { formatISODateForDisplay } from '../../utils/date';
 
 interface StreakTrackerProps {
     profiles: Array<{ id: string; email?: string | null }>;
@@ -86,7 +87,7 @@ const getStreakLabel = (type: StreakType): string => {
 
 const formatDate = (value?: string): string => {
     if (!value) return '—';
-    return new Date(value).toLocaleDateString(undefined, {
+    return formatISODateForDisplay(value, undefined, {
         month: 'short',
         day: 'numeric',
         year: 'numeric'
