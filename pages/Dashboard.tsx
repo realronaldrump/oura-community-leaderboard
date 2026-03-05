@@ -1152,8 +1152,8 @@ const Dashboard: React.FC = () => {
                                     {hasIncompleteTodayCoverage && (
                                         <p className="mt-2 text-xs text-[#A0A0A0]">
                                             {referenceDay === todayIsoDay
-                                                ? 'Today&apos;s Oura data is still syncing. Some metrics may be unavailable yet.'
-                                                : 'Today&apos;s Oura data is still syncing. Showing your latest complete day.'}
+                                                ? "Today's Oura data is still syncing. Some metrics may be unavailable yet."
+                                                : "Today's Oura data is still syncing. Showing your latest complete day."}
                                         </p>
                                     )}
                                 </div>
