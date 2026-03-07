@@ -24,6 +24,7 @@ import SyncModal from '../components/SyncModal';
 import PrimaryProfileSwitcher from '../components/PrimaryProfileSwitcher';
 import DateRangePicker from '../components/DateRangePicker';
 import InviteLinkCard from '../components/InviteLinkCard';
+import InviteLinkModal from '../components/InviteLinkModal';
 import MultiProfileComparisonTable, { ComparisonRow } from '../components/MultiProfileComparisonTable';
 import { smartSync, SyncProgress } from '../services/syncService';
 import {
@@ -38,9 +39,9 @@ import {
 } from '../components/analytics';
 import { useAutoSync, formatLastSync } from '../hooks/useAutoSync';
 import { useWebhookRefresh } from '../hooks/useWebhookRefresh';
-import { X, RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain, Check, Users } from 'lucide-react';
+import { X, RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain, Users } from 'lucide-react';
 import { getProfileDisplayName } from '../utils/profileName';
-import { isInviteLocation, shareInviteLink } from '../utils/inviteLink';
+import { isInviteLocation } from '../utils/inviteLink';
 import {
     formatLocalISODate,
     isISODateString,
@@ -262,7 +263,7 @@ const Dashboard: React.FC = () => {
     const [profilePendingRemoval, setProfilePendingRemoval] = useState<{ id: string; name: string } | null>(null);
     const [isRemovingProfile, setIsRemovingProfile] = useState(false);
     const [removeProfileError, setRemoveProfileError] = useState<string | null>(null);
-    const [inviteActionStatus, setInviteActionStatus] = useState<'idle' | 'copied' | 'shared' | 'error'>('idle');
+    const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
     const queryClient = useQueryClient();
 
@@ -283,12 +284,6 @@ const Dashboard: React.FC = () => {
     const profileIds = useMemo(() => profiles.map(p => p.id), [profiles]);
     const { lastSyncTime } = useAutoSync(profileIds, !!activeProfile);
     useWebhookRefresh(activeProfile, viewMode === 'today');
-
-    useEffect(() => {
-        if (inviteActionStatus === 'idle') return;
-        const timer = window.setTimeout(() => setInviteActionStatus('idle'), 2400);
-        return () => window.clearTimeout(timer);
-    }, [inviteActionStatus]);
 
     // Manual sync
     const handleSyncAllData = async () => {
@@ -313,18 +308,6 @@ const Dashboard: React.FC = () => {
             await markProfileSyncError(activeProfile.id, err);
         } finally {
             setIsSyncing(false);
-        }
-    };
-
-    const handleInviteFriend = async () => {
-        try {
-            const result = await shareInviteLink();
-            if (result !== 'dismissed') {
-                setInviteActionStatus(result);
-            }
-        } catch (error) {
-            console.error('Failed to share invite link:', error);
-            setInviteActionStatus('error');
         }
     };
 
@@ -1390,6 +1373,7 @@ const Dashboard: React.FC = () => {
     return (
         <div className="min-h-screen text-[#FAFAFA]">
             <SyncModal isOpen={showSyncModal} progress={syncProgress} onClose={() => setShowSyncModal(false)} />
+            <InviteLinkModal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} />
             <ScoreBreakdownModal
                 isOpen={scoreBreakdownModal.isOpen}
                 onClose={() => setScoreBreakdownModal({ isOpen: false, scoreType: null })}
@@ -1424,28 +1408,12 @@ const Dashboard: React.FC = () => {
                             selectClassName="h-8 text-xs min-w-[9.5rem]"
                         />
                         <button
-                            onClick={handleInviteFriend}
-                            className={`inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${
-                                inviteActionStatus === 'error'
-                                    ? 'border-[#4A2323] bg-[#1A1212] text-[#FCA5A5]'
-                                    : 'border-[#1E4033] bg-[#101715] text-[#9BE4C9] hover:bg-[#13211D]'
-                            }`}
+                            onClick={() => setIsInviteModalOpen(true)}
+                            className="inline-flex min-h-9 items-center gap-2 rounded-md border border-[#1E4033] bg-[#101715] px-3 text-xs font-medium text-[#9BE4C9] transition-colors hover:bg-[#13211D]"
                             title="Invite a friend"
                         >
-                            {inviteActionStatus === 'copied' || inviteActionStatus === 'shared' ? (
-                                <Check className="h-4 w-4" />
-                            ) : (
-                                <Users className="h-4 w-4" />
-                            )}
-                            <span className="hidden md:inline">
-                                {inviteActionStatus === 'copied'
-                                    ? 'Copied'
-                                    : inviteActionStatus === 'shared'
-                                        ? 'Shared'
-                                        : inviteActionStatus === 'error'
-                                            ? 'Retry Invite'
-                                            : 'Invite'}
-                            </span>
+                            <Users className="h-4 w-4" />
+                            <span className="hidden md:inline">Invite</span>
                         </button>
                         <button onClick={handleSyncAllData} disabled={isSyncing} className="p-2 rounded-md hover:bg-[#1C1C1C] text-[#666] hover:text-[#FAFAFA] transition-colors disabled:opacity-40" title="Refresh data">
                             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
