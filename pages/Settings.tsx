@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { fullSync, SyncProgress } from '../services/syncService';
 import SyncModal from '../components/SyncModal';
 import PrimaryProfileSwitcher from '../components/PrimaryProfileSwitcher';
+import InviteLinkCard from '../components/InviteLinkCard';
 import { ouraService } from '../services/ouraService';
 import { webhookService } from '../services/webhookService';
 import { DailyStats } from '../types';
@@ -641,19 +642,27 @@ const Settings: React.FC = () => {
                     </div>
                 </section>
 
-                {/* Add Profile */}
+                {/* Add Profiles */}
                 <section>
-                    <h2 className="text-sm font-medium text-[#A0A0A0] uppercase tracking-wider mb-4">Add Profile</h2>
-                    <div className="bg-[#141414] border border-[#222] rounded-lg p-5">
-                        <div className="flex items-center justify-between gap-4">
-                            <div className="flex-1">
-                                <p className="text-[#FAFAFA] font-medium text-sm">Connect Another Account</p>
-                                <p className="text-[#666] text-xs mt-1">Add another Oura profile to seamlessly switch between them.</p>
+                    <h2 className="text-sm font-medium text-[#A0A0A0] uppercase tracking-wider mb-4">Add Profiles</h2>
+                    <div className="space-y-4">
+                        <div className="bg-[#141414] border border-[#222] rounded-lg p-5">
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="flex-1">
+                                    <p className="text-[#FAFAFA] font-medium text-sm">Connect Another Account</p>
+                                    <p className="text-[#666] text-xs mt-1">Add another Oura profile to seamlessly switch between them.</p>
+                                </div>
+                                <button onClick={login} className="px-4 py-2 bg-[#00C896] text-[#0C0C0C] font-medium rounded-md text-sm hover:opacity-90 transition-opacity whitespace-nowrap">
+                                    Connect Account
+                                </button>
                             </div>
-                            <button onClick={login} className="px-4 py-2 bg-[#00C896] text-[#0C0C0C] font-medium rounded-md text-sm hover:opacity-90 transition-opacity whitespace-nowrap">
-                                Connect Account
-                            </button>
                         </div>
+
+                        <InviteLinkCard
+                            title="Invite a friend"
+                            description="Send this link to a new friend and they will land directly on the join flow. Once they connect Oura, they are added to the same shared leaderboard automatically."
+                            memberCount={profiles.length}
+                        />
                     </div>
                 </section>
             </div>

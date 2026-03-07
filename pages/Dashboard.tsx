@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     DailyActivity, DailyReadiness, DailySleep, SleepSession, HeartRate,
-    DailySpO2, DailyStress, DailyResilience, LeaderboardEntry, formatDuration, formatTime, DailyStats
+    DailySpO2, DailyStress, DailyResilience, LeaderboardEntry, UserProfile, formatDuration, formatTime, DailyStats
 } from '../types';
 import { useUser } from '../contexts/UserContext';
 import MetricCard from '../components/MetricCard';
@@ -18,12 +18,13 @@ import {
 } from 'recharts';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { fetchDailyStats, FULL_HISTORY_START_DATE, syncDailyStats } from '../hooks/useOuraData';
-import MetricComparisonGroup from '../components/MetricComparisonGroup';
 import ComparisonHeartRateChart from '../components/charts/ComparisonHeartRateChart';
 import AllTimeHistory from '../components/AllTimeHistory';
 import SyncModal from '../components/SyncModal';
 import PrimaryProfileSwitcher from '../components/PrimaryProfileSwitcher';
 import DateRangePicker from '../components/DateRangePicker';
+import InviteLinkCard from '../components/InviteLinkCard';
+import MultiProfileComparisonTable, { ComparisonRow } from '../components/MultiProfileComparisonTable';
 import { smartSync, SyncProgress } from '../services/syncService';
 import {
     StreakTracker,
@@ -37,8 +38,9 @@ import {
 } from '../components/analytics';
 import { useAutoSync, formatLastSync } from '../hooks/useAutoSync';
 import { useWebhookRefresh } from '../hooks/useWebhookRefresh';
-import { X, RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain } from 'lucide-react';
+import { X, RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain, Check, Users } from 'lucide-react';
 import { getProfileDisplayName } from '../utils/profileName';
+import { isInviteLocation, shareInviteLink } from '../utils/inviteLink';
 import {
     formatLocalISODate,
     isISODateString,
@@ -51,6 +53,7 @@ const DEFAULT_DAILY_STATS_STALE_MS = 1000 * 60 * 60;
 const LIVE_DAILY_STATS_STALE_MS = 1000 * 60 * 5;
 const LIVE_DAILY_STATS_REFETCH_MS = 1000 * 60 * 5;
 type DayRange = { start: string; end: string };
+const COMPARE_PALETTE = ['#00C896', '#60A5FA', '#A855F7', '#F59E0B', '#F87171', '#22C55E', '#38BDF8', '#FB7185'];
 
 const filterByDayRange = <T extends { day?: string }>(items: T[] | undefined, range: DayRange | null): T[] => {
     if (!items || items.length === 0) return [];
@@ -176,6 +179,46 @@ const getMostRecentComparableDay = (data?: DailyStats): string | undefined => {
     ) ?? orderedDays[0];
 };
 
+type CompareParticipant = {
+    id: string;
+    entry: LeaderboardEntry;
+    profile: UserProfile;
+    data: DailyStats;
+};
+
+type CompareSnapshot = CompareParticipant & {
+    name: string;
+    color: string;
+    sleep?: DailySleep;
+    readiness?: DailyReadiness;
+    activity?: DailyActivity;
+    session?: SleepSession;
+    compareAverage: number | null;
+    availableScoreCount: number;
+    hrWindow: HeartRate[];
+};
+
+const arraysEqual = (left: string[], right: string[]): boolean =>
+    left.length === right.length && left.every((value, index) => value === right[index]);
+
+const intersectDaySets = (sets: Set<string>[]): string[] => {
+    if (sets.length === 0) return [];
+    const [first, ...rest] = sets;
+    return Array.from(first).filter((day) => rest.every((set) => set.has(day)));
+};
+
+const getAnyScoredDaysFromStats = (data?: DailyStats): Set<string> => {
+    if (!data) return new Set<string>();
+    return new Set<string>([
+        ...getScoredDays(data.sleep),
+        ...getScoredDays(data.readiness),
+        ...getScoredDays(data.activity),
+    ]);
+};
+
+const formatContributionCaption = (label: string, value?: number | null): string =>
+    value != null ? `${label} ${Math.round(value)}` : 'No score';
+
 const Dashboard: React.FC = () => {
     const {
         activeProfile,
@@ -219,6 +262,7 @@ const Dashboard: React.FC = () => {
     const [profilePendingRemoval, setProfilePendingRemoval] = useState<{ id: string; name: string } | null>(null);
     const [isRemovingProfile, setIsRemovingProfile] = useState(false);
     const [removeProfileError, setRemoveProfileError] = useState<string | null>(null);
+    const [inviteActionStatus, setInviteActionStatus] = useState<'idle' | 'copied' | 'shared' | 'error'>('idle');
 
     const queryClient = useQueryClient();
 
@@ -239,6 +283,12 @@ const Dashboard: React.FC = () => {
     const profileIds = useMemo(() => profiles.map(p => p.id), [profiles]);
     const { lastSyncTime } = useAutoSync(profileIds, !!activeProfile);
     useWebhookRefresh(activeProfile, viewMode === 'today');
+
+    useEffect(() => {
+        if (inviteActionStatus === 'idle') return;
+        const timer = window.setTimeout(() => setInviteActionStatus('idle'), 2400);
+        return () => window.clearTimeout(timer);
+    }, [inviteActionStatus]);
 
     // Manual sync
     const handleSyncAllData = async () => {
@@ -263,6 +313,18 @@ const Dashboard: React.FC = () => {
             await markProfileSyncError(activeProfile.id, err);
         } finally {
             setIsSyncing(false);
+        }
+    };
+
+    const handleInviteFriend = async () => {
+        try {
+            const result = await shareInviteLink();
+            if (result !== 'dismissed') {
+                setInviteActionStatus(result);
+            }
+        } catch (error) {
+            console.error('Failed to share invite link:', error);
+            setInviteActionStatus('error');
         }
     };
 
@@ -706,36 +768,72 @@ const Dashboard: React.FC = () => {
         );
     };
 
-    // Versus data
-    const compareEntries = leaderboardData.slice(0, 2);
-    const p1Index = profiles.findIndex((p) => p.id === compareEntries[0]?.id);
-    const p2Index = profiles.findIndex((p) => p.id === compareEntries[1]?.id);
-    const p1Data = p1Index >= 0 ? (userQueries[p1Index]?.data as DailyStats | undefined) : undefined;
-    const p2Data = p2Index >= 0 ? (userQueries[p2Index]?.data as DailyStats | undefined) : undefined;
-    const compareProfileA = profiles.find((p) => p.id === compareEntries[0]?.id);
-    const compareProfileB = profiles.find((p) => p.id === compareEntries[1]?.id);
+    const compareParticipantPool = useMemo<CompareParticipant[]>(() => {
+        return leaderboardData
+            .map((entry) => {
+                const profile = profiles.find((candidate) => candidate.id === entry.id);
+                const profileIndex = profiles.findIndex((candidate) => candidate.id === entry.id);
+                const data = profileIndex >= 0 ? (userQueries[profileIndex]?.data as DailyStats | undefined) : undefined;
+
+                if (!profile || !data) return null;
+
+                return {
+                    id: entry.id,
+                    entry,
+                    profile,
+                    data,
+                } satisfies CompareParticipant;
+            })
+            .filter((participant): participant is CompareParticipant => participant !== null);
+    }, [leaderboardData, profiles, userQueries]);
+
+    const availableCompareIds = useMemo(
+        () => compareParticipantPool.map((participant) => participant.id),
+        [compareParticipantPool]
+    );
+    const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
+
+    useEffect(() => {
+        setSelectedCompareIds((current) => {
+            const stillAvailable = availableCompareIds.filter((id) => current.includes(id));
+            const next = stillAvailable.length >= 2 ? stillAvailable : availableCompareIds;
+            return arraysEqual(current, next) ? current : next;
+        });
+    }, [availableCompareIds]);
+
+    const selectedCompareParticipants = useMemo(
+        () => compareParticipantPool.filter((participant) => selectedCompareIds.includes(participant.id)),
+        [compareParticipantPool, selectedCompareIds]
+    );
+
+    const toggleCompareParticipant = (id: string) => {
+        setSelectedCompareIds((current) => {
+            const isSelected = current.includes(id);
+            if (isSelected && current.length <= 2) return current;
+
+            const next = isSelected
+                ? current.filter((currentId) => currentId !== id)
+                : [...current, id];
+            const ordered = availableCompareIds.filter((currentId) => next.includes(currentId));
+            return arraysEqual(current, ordered) ? current : ordered;
+        });
+    };
+
     const compareAvailableDays = useMemo(() => {
-        if (!p1Data || !p2Data) return [];
-        const p1Days = completeDaySetFromStats(p1Data);
-        const p2Days = completeDaySetFromStats(p2Data);
-        const completeOverlap = Array.from(p1Days).filter((day) => p2Days.has(day)).sort((a, b) => b.localeCompare(a));
+        if (selectedCompareParticipants.length < 2) return [];
+
+        const completeOverlap = intersectDaySets(
+            selectedCompareParticipants.map((participant) => completeDaySetFromStats(participant.data))
+        ).sort((a, b) => b.localeCompare(a));
         if (completeOverlap.length > 0) {
             return completeOverlap;
         }
 
-        const p1AnyDays = new Set<string>([
-            ...getScoredDays(p1Data.sleep),
-            ...getScoredDays(p1Data.readiness),
-            ...getScoredDays(p1Data.activity),
-        ]);
-        const p2AnyDays = new Set<string>([
-            ...getScoredDays(p2Data.sleep),
-            ...getScoredDays(p2Data.readiness),
-            ...getScoredDays(p2Data.activity),
-        ]);
+        return intersectDaySets(
+            selectedCompareParticipants.map((participant) => getAnyScoredDaysFromStats(participant.data))
+        ).sort((a, b) => b.localeCompare(a));
+    }, [selectedCompareParticipants]);
 
-        return Array.from(p1AnyDays).filter((day) => p2AnyDays.has(day)).sort((a, b) => b.localeCompare(a));
-    }, [p1Data, p2Data]);
     const [compareDay, setCompareDay] = useState<string>('');
 
     useEffect(() => {
@@ -759,22 +857,190 @@ const Dashboard: React.FC = () => {
         return day === compareDay || day === previousCompareDay;
     };
 
-    const p1Hr = useMemo(
-        () => (p1Data?.heartrate || []).filter((point) => isInCompareWindow(point.timestamp)),
-        [p1Data?.heartrate, compareDay, previousCompareDay]
+    const compareSnapshots = useMemo<CompareSnapshot[]>(() => {
+        return selectedCompareParticipants
+            .map((participant) => {
+                const sleep = compareDay ? findLatestByDay(participant.data.sleep, compareDay) : undefined;
+                const readiness = compareDay ? findLatestByDay(participant.data.readiness, compareDay) : undefined;
+                const activity = compareDay ? findLatestByDay(participant.data.activity, compareDay) : undefined;
+                const session = compareDay
+                    ? pickBestSession(getSessionsForDay(participant.data.session, compareDay))
+                    : undefined;
+                const scoreValues = [sleep?.score, readiness?.score, activity?.score].filter(isScoreReady);
+
+                return {
+                    ...participant,
+                    name: getProfileDisplayName(participant.profile),
+                    color: '#00C896',
+                    sleep,
+                    readiness,
+                    activity,
+                    session,
+                    compareAverage: scoreValues.length > 0
+                        ? Math.round(scoreValues.reduce((sum, value) => sum + value, 0) / scoreValues.length)
+                        : participant.entry.average,
+                    availableScoreCount: scoreValues.length,
+                    hrWindow: (participant.data.heartrate || []).filter((point) => isInCompareWindow(point.timestamp)),
+                };
+            })
+            .sort((left, right) => {
+                const leftScore = left.compareAverage ?? Number.NEGATIVE_INFINITY;
+                const rightScore = right.compareAverage ?? Number.NEGATIVE_INFINITY;
+                if (rightScore !== leftScore) return rightScore - leftScore;
+                return left.name.localeCompare(right.name);
+            })
+            .map((participant, index) => ({
+                ...participant,
+                color: COMPARE_PALETTE[index % COMPARE_PALETTE.length],
+            }));
+    }, [compareDay, selectedCompareParticipants]);
+
+    const compareColumns = useMemo(
+        () => compareSnapshots.map((snapshot) => ({
+            id: snapshot.id,
+            name: snapshot.name,
+            color: snapshot.color,
+            score: snapshot.compareAverage,
+        })),
+        [compareSnapshots]
     );
-    const p2Hr = useMemo(
-        () => (p2Data?.heartrate || []).filter((point) => isInCompareWindow(point.timestamp)),
-        [p2Data?.heartrate, compareDay, previousCompareDay]
+
+    const compareHeartRateSeries = useMemo(
+        () => compareSnapshots.map((snapshot) => ({
+            id: snapshot.id,
+            name: snapshot.name,
+            color: snapshot.color,
+            data: snapshot.hrWindow,
+        })),
+        [compareSnapshots]
     );
-    const p1Sleep = findLatestByDay(p1Data?.sleep || [], compareDay);
-    const p1Readiness = findLatestByDay(p1Data?.readiness || [], compareDay);
-    const p1Activity = findLatestByDay(p1Data?.activity || [], compareDay);
-    const p2Sleep = findLatestByDay(p2Data?.sleep || [], compareDay);
-    const p2Readiness = findLatestByDay(p2Data?.readiness || [], compareDay);
-    const p2Activity = findLatestByDay(p2Data?.activity || [], compareDay);
-    const p1Session = pickBestSession(getSessionsForDay(p1Data?.session, compareDay));
-    const p2Session = pickBestSession(getSessionsForDay(p2Data?.session, compareDay));
+
+    const hasCompareHeartRateData = compareHeartRateSeries.some((series) => series.data.length > 0);
+
+    const buildCompareCells = (selector: (snapshot: CompareSnapshot) => { value?: number | string | null; display?: string | number | null; caption?: string | null; }) =>
+        Object.fromEntries(compareSnapshots.map((snapshot) => [snapshot.id, selector(snapshot)]));
+
+    const readinessCompareRows = useMemo<ComparisonRow[]>(() => ([
+        {
+            label: 'Resting HR',
+            inverse: true,
+            cells: buildCompareCells((snapshot) => ({
+                value: snapshot.session?.lowest_heart_rate,
+                display: snapshot.session?.lowest_heart_rate != null ? `${Math.round(snapshot.session.lowest_heart_rate)} bpm` : '--',
+                caption: formatContributionCaption('Recovery', snapshot.readiness?.contributors.resting_heart_rate),
+            })),
+        },
+        {
+            label: 'HRV',
+            cells: buildCompareCells((snapshot) => ({
+                value: snapshot.session?.average_hrv,
+                display: snapshot.session?.average_hrv != null ? `${Math.round(snapshot.session.average_hrv)} ms` : '--',
+                caption: formatContributionCaption('Balance', snapshot.readiness?.contributors.hrv_balance),
+            })),
+        },
+        {
+            label: 'Sleep Balance',
+            cells: buildCompareCells((snapshot) => ({
+                value: snapshot.readiness?.contributors.sleep_balance,
+                display: snapshot.readiness?.contributors.sleep_balance != null ? Math.round(snapshot.readiness.contributors.sleep_balance) : '--',
+                caption: 'Contribution score',
+            })),
+        },
+        {
+            label: 'Recovery Index',
+            cells: buildCompareCells((snapshot) => ({
+                value: snapshot.readiness?.contributors.recovery_index,
+                display: snapshot.readiness?.contributors.recovery_index != null ? Math.round(snapshot.readiness.contributors.recovery_index) : '--',
+                caption: 'Contribution score',
+            })),
+        },
+    ]), [compareSnapshots]);
+
+    const sleepCompareRows = useMemo<ComparisonRow[]>(() => ([
+        {
+            label: 'Total Sleep',
+            cells: buildCompareCells((snapshot) => ({
+                value: snapshot.session?.total_sleep_duration,
+                display: formatDuration(snapshot.session?.total_sleep_duration),
+                caption: formatContributionCaption('Sleep', snapshot.sleep?.contributors.total_sleep),
+            })),
+        },
+        {
+            label: 'Efficiency',
+            cells: buildCompareCells((snapshot) => ({
+                value: snapshot.session?.efficiency,
+                display: snapshot.session?.efficiency != null ? `${Math.round(snapshot.session.efficiency)}%` : '--',
+                caption: formatContributionCaption('Sleep', snapshot.sleep?.contributors.efficiency),
+            })),
+        },
+        {
+            label: 'Deep Sleep',
+            cells: buildCompareCells((snapshot) => ({
+                value: snapshot.session?.deep_sleep_duration,
+                display: formatDuration(snapshot.session?.deep_sleep_duration),
+                caption: formatContributionCaption('Sleep', snapshot.sleep?.contributors.deep_sleep),
+            })),
+        },
+        {
+            label: 'REM Sleep',
+            cells: buildCompareCells((snapshot) => ({
+                value: snapshot.session?.rem_sleep_duration,
+                display: formatDuration(snapshot.session?.rem_sleep_duration),
+                caption: formatContributionCaption('Sleep', snapshot.sleep?.contributors.rem_sleep),
+            })),
+        },
+    ]), [compareSnapshots]);
+
+    const activityCompareRows = useMemo<ComparisonRow[]>(() => ([
+        {
+            label: 'Steps',
+            cells: buildCompareCells((snapshot) => ({
+                value: snapshot.activity?.steps,
+                display: snapshot.activity?.steps?.toLocaleString() || '--',
+                caption: formatContributionCaption('Stay active', snapshot.activity?.contributors.stay_active),
+            })),
+        },
+        {
+            label: 'Active Calories',
+            cells: buildCompareCells((snapshot) => ({
+                value: snapshot.activity?.active_calories,
+                display: snapshot.activity?.active_calories != null ? `${snapshot.activity.active_calories.toLocaleString()} kcal` : '--',
+                caption: formatContributionCaption('Training volume', snapshot.activity?.contributors.training_volume),
+            })),
+        },
+        {
+            label: 'Move Every Hour',
+            cells: buildCompareCells((snapshot) => ({
+                value: snapshot.activity?.contributors.move_every_hour,
+                display: snapshot.activity?.inactivity_alerts != null ? `${snapshot.activity.inactivity_alerts} alerts` : 'No data',
+                caption: formatContributionCaption('Score', snapshot.activity?.contributors.move_every_hour),
+            })),
+        },
+        {
+            label: 'High Activity Time',
+            cells: buildCompareCells((snapshot) => ({
+                value: snapshot.activity?.high_activity_time,
+                display: formatDuration(snapshot.activity?.high_activity_time),
+                caption: formatContributionCaption('Training frequency', snapshot.activity?.contributors.training_frequency),
+            })),
+        },
+        {
+            label: 'Meet Daily Targets',
+            cells: buildCompareCells((snapshot) => ({
+                value: snapshot.activity?.contributors.meet_daily_targets,
+                display: snapshot.activity?.contributors.meet_daily_targets != null ? Math.round(snapshot.activity.contributors.meet_daily_targets) : '--',
+                caption: 'Contribution score',
+            })),
+        },
+        {
+            label: 'Recovery Time',
+            cells: buildCompareCells((snapshot) => ({
+                value: snapshot.activity?.contributors.recovery_time,
+                display: snapshot.activity?.contributors.recovery_time != null ? Math.round(snapshot.activity.contributors.recovery_time) : '--',
+                caption: 'Contribution score',
+            })),
+        },
+    ]), [compareSnapshots]);
 
     useEffect(() => {
         if (!activeProfile?.id || viewMode !== 'today') return;
@@ -805,6 +1071,7 @@ const Dashboard: React.FC = () => {
     }, [profiles.length, queryClient]);
 
     const userName = activeProfile?.firstName || activeProfile?.email?.split('@')[0] || 'there';
+    const inviteLanding = isInviteLocation(window.location.pathname, window.location.search);
 
     const formatDayLabel = (day: string | undefined) => {
         if (!day) return 'Today';
@@ -900,72 +1167,148 @@ const Dashboard: React.FC = () => {
     // ============================================
     if (!activeProfile) {
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center p-6">
-                <div className="w-full max-w-sm animate-fade-in">
-                    <div className="text-center mb-12">
-                        <div className="w-12 h-12 rounded-full bg-[#141414] border border-[#1E1E1E] flex items-center justify-center mx-auto mb-5">
-                            <Heart className="w-5 h-5 text-[#00C896]" />
-                        </div>
-                        <h1 className="text-2xl font-semibold tracking-tight text-[#FAFAFA] mb-2">Davis Watches You Sleep!</h1>
-                        <p className="text-[#666] text-sm">Your Oura data, clearly presented</p>
-                    </div>
-
-                    {firebaseError && (
-                        <button onClick={retryFirebaseConnection} className="w-full mb-6 p-4 bg-[#1C1C1C] border border-[#333] rounded-lg text-left">
-                            <p className="text-[#F87171] text-sm font-medium">Connection issue</p>
-                            <p className="text-[#666] text-xs mt-1">{firebaseError}</p>
-                        </button>
-                    )}
-
-                    {isLoadingProfiles && !firebaseError && (
-                        <div className="flex items-center justify-center gap-3 p-6 mb-6">
-                            <div className="w-4 h-4 border-2 border-[#333] border-t-[#00C896] rounded-full animate-spin" />
-                            <span className="text-[#666] text-sm">Loading profiles...</span>
-                        </div>
-                    )}
-
-                    {!isLoadingProfiles && profiles.length > 0 && (
-                        <div className="mb-8">
-                            <p className="text-[#555] text-xs font-medium tracking-wider mb-3 px-1">Choose profile</p>
-                            <div className="space-y-2">
-                                {profiles.map(p => (
-                                    <div key={p.id} className="flex gap-2">
-                                        <button
-                                            onClick={() => setActiveProfileId(p.id)}
-                                            className="flex-1 bg-[#141414] border border-[#1E1E1E] rounded-xl p-4 text-left hover:border-[#333] hover:bg-[#161616] transition-all duration-200 flex items-center justify-between"
-                                        >
-                                            <div>
-                                                <span className="text-[#FAFAFA] font-medium text-sm block">
-                                                    {getProfileDisplayName(p)}
-                                                </span>
-                                                <span className={`text-[11px] ${profileHealthById.get(p.id)?.level === 'error'
-                                                        ? 'text-[#F87171]'
-                                                        : profileHealthById.get(p.id)?.level === 'warning'
-                                                            ? 'text-[#FBBF24]'
-                                                            : 'text-[#00C896]'
-                                                    }`}>
-                                                    {profileHealthById.get(p.id)?.label || 'Up to date'}
-                                                </span>
-                                            </div>
-                                            <span className="text-[#444] text-xs font-mono">
-                                                {p.lastSuccessfulSyncAt ? new Date(p.lastSuccessfulSyncAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
-                                            </span>
-                                        </button>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); handleOpenRemoveProfileDialog(p); }}
-                                            className="px-3 bg-[#141414] border border-[#222] rounded-lg text-[#666] hover:text-[#F87171] hover:border-[#F87171]/30 transition-colors"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                ))}
+            <div className="min-h-screen bg-[#0C0C0C] px-4 py-8 sm:px-6">
+                <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
+                    <section className="relative overflow-hidden rounded-[2rem] border border-[#1E1E1E] bg-[#101010] p-6 sm:p-8">
+                        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(0,200,150,0.18),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(96,165,250,0.14),transparent_36%)]" />
+                        <div className="relative">
+                            <div className="inline-flex items-center gap-2 rounded-full border border-[#23322C] bg-[#0E1714] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#00C896]">
+                                <Heart className="h-3.5 w-3.5" />
+                                {inviteLanding ? 'Invite link' : 'Private leaderboard'}
                             </div>
-                        </div>
-                    )}
 
-                    <button onClick={login} className="w-full py-3.5 bg-[#00C896] text-[#0C0C0C] font-semibold rounded-xl hover:bg-[#00B589] transition-colors text-sm">
-                        {profiles.length > 0 ? 'Add Another Profile' : 'Connect Oura Ring'}
-                    </button>
+                            <h1 className="mt-5 max-w-2xl text-3xl font-semibold tracking-tight text-[#FAFAFA] sm:text-4xl">
+                                {inviteLanding
+                                    ? 'Join this Oura leaderboard in one step.'
+                                    : profiles.length > 0
+                                        ? 'Add a new friend without touching the existing setup.'
+                                        : 'Start your shared Oura leaderboard.'}
+                            </h1>
+                            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[#A0A0A0] sm:text-base">
+                                {inviteLanding
+                                    ? 'Connect your Oura account and you will appear alongside the rest of the group automatically.'
+                                    : profiles.length > 0
+                                        ? 'The shared board is already live. A new friend just needs the invite link and one Oura sign-in to add themselves.'
+                                        : 'Connect the first Oura account to create the board, then invite others from the dashboard or settings.'}
+                            </p>
+
+                            <div className="mt-6 flex flex-wrap gap-3">
+                                <div className="rounded-2xl border border-[#1E1E1E] bg-[#0C0C0C]/70 px-4 py-3">
+                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#666]">Members</p>
+                                    <p className="mt-1 text-2xl font-semibold text-[#FAFAFA]">{profiles.length}</p>
+                                </div>
+                                <div className="rounded-2xl border border-[#1E1E1E] bg-[#0C0C0C]/70 px-4 py-3">
+                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#666]">Joining</p>
+                                    <p className="mt-1 text-sm font-medium text-[#FAFAFA]">Oura OAuth</p>
+                                    <p className="text-xs text-[#777]">No manual profile entry</p>
+                                </div>
+                            </div>
+
+                            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                                <button
+                                    onClick={login}
+                                    className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#00C896] px-5 py-3 text-sm font-semibold text-[#06120D] transition-opacity hover:opacity-90"
+                                >
+                                    {profiles.length > 0 ? 'Join This Leaderboard' : 'Connect Oura Ring'}
+                                </button>
+                                {profiles.length > 0 ? (
+                                    <div className="inline-flex min-h-12 items-center rounded-xl border border-[#222] px-4 py-3 text-sm text-[#A0A0A0]">
+                                        Already on this device? Choose your profile on the right.
+                                    </div>
+                                ) : null}
+                            </div>
+
+                            <p className="mt-6 max-w-xl text-xs leading-relaxed text-[#777]">
+                                Connecting adds your data to this shared leaderboard. Selecting an existing profile only changes the local view on this browser.
+                            </p>
+                        </div>
+                    </section>
+
+                    <div className="space-y-4">
+                        {firebaseError && (
+                            <button
+                                onClick={retryFirebaseConnection}
+                                className="w-full rounded-[1.25rem] border border-[#3A2424] bg-[#1C1212] p-4 text-left"
+                            >
+                                <p className="text-sm font-medium text-[#FCA5A5]">Connection issue</p>
+                                <p className="mt-1 text-xs text-[#C28B8B]">{firebaseError}</p>
+                            </button>
+                        )}
+
+                        <section className="rounded-[1.5rem] border border-[#1E1E1E] bg-[#131313] p-5">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#666]">Returning members</p>
+                                    <h2 className="mt-2 text-lg font-semibold text-[#FAFAFA]">Choose a profile</h2>
+                                </div>
+                                <div className="rounded-full border border-[#222] px-3 py-1 text-[11px] uppercase tracking-[0.12em] text-[#8A8A8A]">
+                                    {profiles.length} total
+                                </div>
+                            </div>
+
+                            {isLoadingProfiles && !firebaseError ? (
+                                <div className="mt-5 flex items-center justify-center gap-3 rounded-2xl border border-[#1E1E1E] bg-[#0D0D0D] p-6">
+                                    <div className="h-4 w-4 rounded-full border-2 border-[#333] border-t-[#00C896] animate-spin" />
+                                    <span className="text-sm text-[#888]">Loading profiles...</span>
+                                </div>
+                            ) : profiles.length > 0 ? (
+                                <div className="mt-5 space-y-3">
+                                    {profiles.map((profile) => (
+                                        <div key={profile.id} className="flex gap-2">
+                                            <button
+                                                onClick={() => setActiveProfileId(profile.id)}
+                                                className="flex min-h-12 flex-1 items-center justify-between rounded-2xl border border-[#222] bg-[#0D0D0D] px-4 py-3 text-left transition-colors hover:border-[#333] hover:bg-[#111111]"
+                                            >
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-medium text-[#FAFAFA]">
+                                                        {getProfileDisplayName(profile)}
+                                                    </p>
+                                                    <p
+                                                        className={`mt-1 text-[11px] ${
+                                                            profileHealthById.get(profile.id)?.level === 'error'
+                                                                ? 'text-[#F87171]'
+                                                                : profileHealthById.get(profile.id)?.level === 'warning'
+                                                                    ? 'text-[#FBBF24]'
+                                                                    : 'text-[#00C896]'
+                                                        }`}
+                                                    >
+                                                        {profileHealthById.get(profile.id)?.label || 'Up to date'}
+                                                    </p>
+                                                </div>
+                                                <span className="ml-3 text-xs font-mono text-[#555]">
+                                                    {profile.lastSuccessfulSyncAt
+                                                        ? new Date(profile.lastSuccessfulSyncAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                                                        : ''}
+                                                </span>
+                                            </button>
+                                            <button
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    handleOpenRemoveProfileDialog(profile);
+                                                }}
+                                                className="inline-flex min-h-12 min-w-12 items-center justify-center rounded-2xl border border-[#222] bg-[#0D0D0D] text-[#666] transition-colors hover:border-[#F87171]/30 hover:text-[#F87171]"
+                                                title={`Remove ${getProfileDisplayName(profile)}`}
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="mt-5 rounded-2xl border border-dashed border-[#2B2B2B] bg-[#0D0D0D] p-5 text-sm text-[#777]">
+                                    No profiles yet. Connect the first Oura account to create the board.
+                                </div>
+                            )}
+                        </section>
+
+                        {profiles.length > 0 && !inviteLanding ? (
+                            <InviteLinkCard
+                                title="Invite the next friend"
+                                description="Send this link to anyone new. They land on the join screen and can add themselves with a single Oura sign-in."
+                                memberCount={profiles.length}
+                            />
+                        ) : null}
+                    </div>
                 </div>
 
                 <AppDialog
@@ -1080,6 +1423,30 @@ const Dashboard: React.FC = () => {
                             className="hidden sm:block"
                             selectClassName="h-8 text-xs min-w-[9.5rem]"
                         />
+                        <button
+                            onClick={handleInviteFriend}
+                            className={`inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${
+                                inviteActionStatus === 'error'
+                                    ? 'border-[#4A2323] bg-[#1A1212] text-[#FCA5A5]'
+                                    : 'border-[#1E4033] bg-[#101715] text-[#9BE4C9] hover:bg-[#13211D]'
+                            }`}
+                            title="Invite a friend"
+                        >
+                            {inviteActionStatus === 'copied' || inviteActionStatus === 'shared' ? (
+                                <Check className="h-4 w-4" />
+                            ) : (
+                                <Users className="h-4 w-4" />
+                            )}
+                            <span className="hidden md:inline">
+                                {inviteActionStatus === 'copied'
+                                    ? 'Copied'
+                                    : inviteActionStatus === 'shared'
+                                        ? 'Shared'
+                                        : inviteActionStatus === 'error'
+                                            ? 'Retry Invite'
+                                            : 'Invite'}
+                            </span>
+                        </button>
                         <button onClick={handleSyncAllData} disabled={isSyncing} className="p-2 rounded-md hover:bg-[#1C1C1C] text-[#666] hover:text-[#FAFAFA] transition-colors disabled:opacity-40" title="Refresh data">
                             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
                         </button>
@@ -1324,83 +1691,169 @@ const Dashboard: React.FC = () => {
                 )}
 
                 {/* ======== COMPARE VIEW ======== */}
-                {viewMode === 'compare' && compareEntries.length >= 2 && (
+                {viewMode === 'compare' && compareParticipantPool.length >= 2 && (
                     <div className="space-y-6 pt-6">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                            <div>
-                                <p className="text-[11px] uppercase tracking-[0.14em] text-[#666]">Compare Date</p>
-                                <p className="text-sm text-[#A0A0A0]">{compareDay ? formatDayLabel(compareDay) : 'No shared date available'}</p>
+                        <section className="rounded-[1.5rem] border border-[#222] bg-[#141414] p-5">
+                            <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+                                <div className="min-w-0">
+                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#666]">Compare together</p>
+                                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[#FAFAFA]">
+                                        {compareDay ? formatDayLabel(compareDay) : 'Choose a shared date'}
+                                    </h2>
+                                    <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#8A8A8A]">
+                                        Compare any two or more people on the same Oura day. If the selected group has no shared day yet, remove one person or sync more recent data.
+                                    </p>
+                                </div>
+                                {compareAvailableDays.length > 0 ? (
+                                    <DateRangePicker
+                                        mode="date"
+                                        dates={compareAvailableDays}
+                                        selectedDate={compareDay}
+                                        onSelectDate={setCompareDay}
+                                    />
+                                ) : (
+                                    <div className="rounded-xl border border-[#222] bg-[#101010] px-4 py-3 text-sm text-[#777]">
+                                        No shared compare dates yet
+                                    </div>
+                                )}
                             </div>
-                            <DateRangePicker
-                                mode="date"
-                                dates={compareAvailableDays}
-                                selectedDate={compareDay}
-                                onSelectDate={setCompareDay}
-                            />
-                        </div>
-                        <div className="bg-[#141414] border border-[#222] rounded-lg p-5 flex items-center justify-between">
-                            <div className="text-center flex-1">
-                                <p className="text-sm font-semibold text-[#60A5FA]">{compareEntries[0].name.split('@')[0]}</p>
-                                <p className="font-mono text-xl font-bold">{compareEntries[0].average}</p>
+
+                            <div className="mt-5 flex flex-wrap gap-2">
+                                {compareParticipantPool.map((participant) => {
+                                    const isSelected = selectedCompareIds.includes(participant.id);
+                                    const isLocked = isSelected && selectedCompareIds.length <= 2;
+
+                                    return (
+                                        <button
+                                            key={participant.id}
+                                            type="button"
+                                            onClick={() => toggleCompareParticipant(participant.id)}
+                                            disabled={isLocked}
+                                            className={`rounded-full border px-3 py-2 text-sm transition-colors ${
+                                                isSelected
+                                                    ? 'border-[#1E4033] bg-[#102019] text-[#A8F1D8]'
+                                                    : 'border-[#2A2A2A] bg-[#101010] text-[#8A8A8A] hover:border-[#3A3A3A] hover:text-[#FAFAFA]'
+                                            } ${isLocked ? 'cursor-not-allowed opacity-80' : ''}`}
+                                        >
+                                            {getProfileDisplayName(participant.profile)}
+                                        </button>
+                                    );
+                                })}
+                                {selectedCompareIds.length < availableCompareIds.length ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedCompareIds(availableCompareIds)}
+                                        className="rounded-full border border-[#2A2A2A] bg-[#101010] px-3 py-2 text-sm text-[#A0A0A0] transition-colors hover:border-[#3A3A3A] hover:text-[#FAFAFA]"
+                                    >
+                                        Select everyone
+                                    </button>
+                                ) : null}
                             </div>
-                            <div className="text-[#444] text-sm font-medium px-4">vs</div>
-                            <div className="text-center flex-1">
-                                <p className="text-sm font-semibold text-[#A855F7]">{compareEntries[1].name.split('@')[0]}</p>
-                                <p className="font-mono text-xl font-bold">{compareEntries[1].average}</p>
+
+                            <div className="mt-4 flex flex-wrap gap-3 text-xs text-[#777]">
+                                <span>{selectedCompareIds.length} selected</span>
+                                <span>{compareAvailableDays.length} shared dates</span>
+                                <span>Minimum selection: 2 people</span>
                             </div>
-                        </div>
+                        </section>
+
                         {compareDay ? (
                             <>
-                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                                    <MetricComparisonGroup
-                                        title="Readiness" scoreA={p1Readiness?.score} scoreB={p2Readiness?.score}
-                                        userAName={compareProfileA?.firstName || compareProfileA?.email?.split('@')[0] || compareEntries[0].name}
-                                        userBName={compareProfileB?.firstName || compareProfileB?.email?.split('@')[0] || compareEntries[1].name}
-                                        defaultOpen={true}
-                                        metrics={[
-                                            { label: "Resting HR", valA: p1Readiness?.contributors.resting_heart_rate, valB: p2Readiness?.contributors.resting_heart_rate, displayA: p1Session?.lowest_heart_rate ? `${p1Session.lowest_heart_rate}` : undefined, displayB: p2Session?.lowest_heart_rate ? `${p2Session.lowest_heart_rate}` : undefined, unit: "bpm", inverse: true, max: 100 },
-                                            { label: "HRV Balance", valA: p1Readiness?.contributors.hrv_balance, valB: p2Readiness?.contributors.hrv_balance, displayA: p1Session?.average_hrv ? `${p1Session.average_hrv}` : undefined, displayB: p2Session?.average_hrv ? `${p2Session.average_hrv}` : undefined, unit: "ms", max: 100 },
-                                            { label: "Sleep Balance", valA: p1Readiness?.contributors.sleep_balance, valB: p2Readiness?.contributors.sleep_balance, max: 100 },
-                                            { label: "Recovery Index", valA: p1Readiness?.contributors.recovery_index, valB: p2Readiness?.contributors.recovery_index, max: 100 },
-                                        ]}
+                                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                    {compareSnapshots.map((snapshot, index) => (
+                                        <article
+                                            key={snapshot.id}
+                                            className="rounded-[1.25rem] border bg-[#131313] p-4"
+                                            style={{ borderColor: `${snapshot.color}40` }}
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#666]">Rank #{index + 1}</p>
+                                                    <h3 className="mt-2 truncate text-lg font-semibold text-[#FAFAFA]">{snapshot.name}</h3>
+                                                </div>
+                                                <span
+                                                    className="rounded-full px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.12em]"
+                                                    style={{ backgroundColor: `${snapshot.color}18`, color: snapshot.color }}
+                                                >
+                                                    {snapshot.availableScoreCount}/3 scores
+                                                </span>
+                                            </div>
+
+                                            <div className="mt-5 flex items-end justify-between">
+                                                <div>
+                                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#666]">Daily average</p>
+                                                    <p className="mt-1 font-mono text-3xl font-semibold text-[#FAFAFA]">
+                                                        {snapshot.compareAverage ?? '--'}
+                                                    </p>
+                                                </div>
+                                                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: snapshot.color }} />
+                                            </div>
+
+                                            <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+                                                <div className="rounded-xl border border-[#222] bg-[#0E0E0E] px-3 py-2">
+                                                    <p className="text-[#666]">Readiness</p>
+                                                    <p className="mt-1 font-mono text-sm text-[#FAFAFA]">{snapshot.readiness?.score ?? '--'}</p>
+                                                </div>
+                                                <div className="rounded-xl border border-[#222] bg-[#0E0E0E] px-3 py-2">
+                                                    <p className="text-[#666]">Sleep</p>
+                                                    <p className="mt-1 font-mono text-sm text-[#FAFAFA]">{snapshot.sleep?.score ?? '--'}</p>
+                                                </div>
+                                                <div className="rounded-xl border border-[#222] bg-[#0E0E0E] px-3 py-2">
+                                                    <p className="text-[#666]">Activity</p>
+                                                    <p className="mt-1 font-mono text-sm text-[#FAFAFA]">{snapshot.activity?.score ?? '--'}</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-4 flex items-center justify-between text-[11px] text-[#8A8A8A]">
+                                                <span>{formatDuration(snapshot.session?.total_sleep_duration)}</span>
+                                                <span>{snapshot.activity?.steps?.toLocaleString() || '--'} steps</span>
+                                            </div>
+                                        </article>
+                                    ))}
+                                </div>
+
+                                <div className="space-y-4">
+                                    <MultiProfileComparisonTable
+                                        title="Readiness"
+                                        subtitle="Daily readiness scores plus the supporting recovery metrics behind them."
+                                        columns={compareColumns.map((column, index) => ({
+                                            ...column,
+                                            score: compareSnapshots[index]?.readiness?.score ?? null,
+                                        }))}
+                                        rows={readinessCompareRows}
                                     />
-                                    <MetricComparisonGroup
-                                        title="Sleep" scoreA={p1Sleep?.score} scoreB={p2Sleep?.score}
-                                        userAName={compareProfileA?.firstName || compareProfileA?.email?.split('@')[0] || compareEntries[0].name}
-                                        userBName={compareProfileB?.firstName || compareProfileB?.email?.split('@')[0] || compareEntries[1].name}
-                                        defaultOpen={true}
-                                        metrics={[
-                                            { label: "Total Sleep", valA: p1Sleep?.contributors.total_sleep, valB: p2Sleep?.contributors.total_sleep, displayA: p1Session?.total_sleep_duration ? formatDuration(p1Session.total_sleep_duration) : undefined, displayB: p2Session?.total_sleep_duration ? formatDuration(p2Session.total_sleep_duration) : undefined, max: 100 },
-                                            { label: "Efficiency", valA: p1Sleep?.contributors.efficiency, valB: p2Sleep?.contributors.efficiency, displayA: p1Session?.efficiency ? `${p1Session.efficiency}` : undefined, displayB: p2Session?.efficiency ? `${p2Session.efficiency}` : undefined, unit: "%", max: 100 },
-                                            { label: "Deep Sleep", valA: p1Sleep?.contributors.deep_sleep, valB: p2Sleep?.contributors.deep_sleep, displayA: p1Session?.deep_sleep_duration ? formatDuration(p1Session.deep_sleep_duration) : undefined, displayB: p2Session?.deep_sleep_duration ? formatDuration(p2Session.deep_sleep_duration) : undefined, max: 100 },
-                                            { label: "REM Sleep", valA: p1Sleep?.contributors.rem_sleep, valB: p2Sleep?.contributors.rem_sleep, displayA: p1Session?.rem_sleep_duration ? formatDuration(p1Session.rem_sleep_duration) : undefined, displayB: p2Session?.rem_sleep_duration ? formatDuration(p2Session.rem_sleep_duration) : undefined, max: 100 },
-                                        ]}
+                                    <MultiProfileComparisonTable
+                                        title="Sleep"
+                                        subtitle="Sleep score context for everyone on the selected day."
+                                        columns={compareColumns.map((column, index) => ({
+                                            ...column,
+                                            score: compareSnapshots[index]?.sleep?.score ?? null,
+                                        }))}
+                                        rows={sleepCompareRows}
                                     />
-                                    <MetricComparisonGroup
-                                        title="Activity" scoreA={p1Activity?.score} scoreB={p2Activity?.score}
-                                        userAName={compareProfileA?.firstName || compareProfileA?.email?.split('@')[0] || compareEntries[0].name}
-                                        userBName={compareProfileB?.firstName || compareProfileB?.email?.split('@')[0] || compareEntries[1].name}
-                                        defaultOpen={true}
-                                        metrics={[
-                                            { label: "Stay Active", valA: p1Activity?.contributors.stay_active, valB: p2Activity?.contributors.stay_active, displayA: p1Activity?.steps?.toLocaleString(), displayB: p2Activity?.steps?.toLocaleString(), unit: "steps", max: 100 },
-                                            { label: "Meet Daily Targets", valA: p1Activity?.contributors.meet_daily_targets, valB: p2Activity?.contributors.meet_daily_targets, max: 100 },
-                                            { label: "Move Every Hour", valA: p1Activity?.contributors.move_every_hour, valB: p2Activity?.contributors.move_every_hour, displayA: p1Activity?.inactivity_alerts != null ? `${p1Activity.inactivity_alerts}` : undefined, displayB: p2Activity?.inactivity_alerts != null ? `${p2Activity.inactivity_alerts}` : undefined, unit: "alerts", max: 100 },
-                                            { label: "Recovery Time", valA: p1Activity?.contributors.recovery_time, valB: p2Activity?.contributors.recovery_time, max: 100 },
-                                            { label: "Training Frequency", valA: p1Activity?.contributors.training_frequency, valB: p2Activity?.contributors.training_frequency, displayA: formatDuration(p1Activity?.high_activity_time), displayB: formatDuration(p2Activity?.high_activity_time), max: 100 },
-                                            { label: "Training Volume", valA: p1Activity?.contributors.training_volume, valB: p2Activity?.contributors.training_volume, displayA: p1Activity?.active_calories?.toLocaleString(), displayB: p2Activity?.active_calories?.toLocaleString(), unit: "kcal", max: 100 },
-                                        ]}
+                                    <MultiProfileComparisonTable
+                                        title="Activity"
+                                        subtitle="Activity totals and contribution scores across the selected group."
+                                        columns={compareColumns.map((column, index) => ({
+                                            ...column,
+                                            score: compareSnapshots[index]?.activity?.score ?? null,
+                                        }))}
+                                        rows={activityCompareRows}
                                     />
                                 </div>
-                                {(p1Hr?.length || p2Hr?.length) ? (
-                                    <div className="bg-[#141414] border border-[#222] rounded-lg p-4 h-64">
-                                        <h4 className="text-xs text-[#666] uppercase tracking-wider mb-3">Heart Rate (48h)</h4>
-                                        <ComparisonHeartRateChart userAData={p1Hr || []} userBData={p2Hr || []} userAName={compareEntries[0].name} userBName={compareEntries[1].name} />
+
+                                {hasCompareHeartRateData ? (
+                                    <div className="rounded-[1.25rem] border border-[#222] bg-[#141414] p-4">
+                                        <h4 className="text-xs uppercase tracking-[0.14em] text-[#666]">Heart Rate (48h)</h4>
+                                        <div className="mt-3 h-64">
+                                            <ComparisonHeartRateChart series={compareHeartRateSeries} />
+                                        </div>
                                     </div>
                                 ) : null}
                             </>
                         ) : (
-                            <div className="rounded-lg border border-[#222] bg-[#141414] p-4 text-sm text-[#8A8A8A]">
-                                No overlapping compare day is available yet for these profiles.
+                            <div className="rounded-[1.25rem] border border-[#222] bg-[#141414] p-5 text-sm text-[#8A8A8A]">
+                                The current selection does not share a comparable Oura day yet. Remove one person from the selection or sync more recent data to unlock the multi-user comparison tables.
                             </div>
                         )}
                     </div>
@@ -1411,9 +1864,9 @@ const Dashboard: React.FC = () => {
                         <button onClick={login} className="px-4 py-2 bg-[#00C896] text-[#0C0C0C] font-medium rounded-md text-sm hover:opacity-90 transition-opacity">Add Profile</button>
                     </div>
                 )}
-                {viewMode === 'compare' && profiles.length >= 2 && compareEntries.length < 2 && (
+                {viewMode === 'compare' && profiles.length >= 2 && compareParticipantPool.length < 2 && (
                     <div className="pt-16 text-center">
-                        <p className="text-[#666]">Waiting for enough synced data to compare profiles.</p>
+                        <p className="text-[#666]">Waiting for enough synced data to compare everyone.</p>
                     </div>
                 )}
 

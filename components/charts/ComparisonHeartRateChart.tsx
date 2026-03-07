@@ -7,58 +7,53 @@ import {
     CartesianGrid,
     Tooltip,
     ResponsiveContainer,
-    Legend
+    Legend,
 } from 'recharts';
 import { HeartRate } from '../../types';
 
-interface ComparisonHeartRateChartProps {
-    userAData: HeartRate[];
-    userBData: HeartRate[];
-    userAName: string;
-    userBName: string;
+export interface ComparisonHeartRateSeries {
+    id: string;
+    name: string;
+    color: string;
+    data: HeartRate[];
 }
 
-const ComparisonHeartRateChart: React.FC<ComparisonHeartRateChartProps> = ({ userAData, userBData, userAName, userBName }) => {
+interface ComparisonHeartRateChartProps {
+    series: ComparisonHeartRateSeries[];
+}
+
+const ComparisonHeartRateChart: React.FC<ComparisonHeartRateChartProps> = ({ series }) => {
+    const activeSeries = series.filter((entry) => entry.data.length > 0);
 
     const formattedData = useMemo(() => {
-        // We need to merge two data sets.
-        // Assuming data is sorted by timestamp.
-        // We will bucket by time. Since dates might be different if we are comparing "last night" vs "last night", 
-        // but strictly speaking they should be overlapping in time if we are comparing same night.
-        // However, if they sleep at slightly different times, we might want to align by "hours since sleep onset" OR just real wall clock time.
-        // The prompt implies "Overlaid Data... immediately shows who fell asleep faster". 
-        // This suggests wall clock time (e.g. 10PM vs 10:15PM).
+        const dataMap = new Map<string, Record<string, number | string>>();
 
-        // Let's create a map by time (HH:MM)
-        const dataMap = new Map<string, { time: string, hrA?: number, hrB?: number, timestamp: number }>();
-
-        const processData = (data: HeartRate[], key: 'hrA' | 'hrB') => {
-            data.forEach(point => {
+        activeSeries.forEach((entry) => {
+            entry.data.forEach((point) => {
                 const date = new Date(point.timestamp);
-                // Round to nearest 5 minutes to make the graph readable and increase overlap
-                const minutes = date.getMinutes();
-                const roundedMinutes = Math.floor(minutes / 5) * 5;
+                const roundedMinutes = Math.floor(date.getMinutes() / 5) * 5;
                 date.setMinutes(roundedMinutes, 0, 0);
 
-                // Format HH:MM
                 const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
                 if (!dataMap.has(timeStr)) {
                     dataMap.set(timeStr, { time: timeStr, timestamp: date.getTime() });
                 }
-                const entry = dataMap.get(timeStr)!;
-                // Average if multiple points fall in same bucket? Or just take last. Oura HR is 5min interval usually so it should be fine.
-                entry[key] = point.bpm;
+
+                const bucket = dataMap.get(timeStr)!;
+                bucket[`series_${entry.id}`] = point.bpm;
             });
-        };
+        });
 
-        processData(userAData, 'hrA');
-        processData(userBData, 'hrB');
+        return Array.from(dataMap.values()).sort((a, b) => {
+            const left = typeof a.timestamp === 'number' ? a.timestamp : 0;
+            const right = typeof b.timestamp === 'number' ? b.timestamp : 0;
+            return left - right;
+        });
+    }, [activeSeries]);
 
-        return Array.from(dataMap.values()).sort((a, b) => a.timestamp - b.timestamp);
-    }, [userAData, userBData]);
-
-    if (!userAData.length && !userBData.length) return <div className="text-center text-gray-500">No heart rate data available</div>;
+    if (activeSeries.length === 0) {
+        return <div className="text-center text-gray-500">No heart rate data available</div>;
+    }
 
     return (
         <div className="w-full h-64">
@@ -90,24 +85,18 @@ const ComparisonHeartRateChart: React.FC<ComparisonHeartRateChartProps> = ({ use
                         itemStyle={{ color: '#F3F4F6' }}
                     />
                     <Legend />
-                    <Line
-                        type="monotone"
-                        dataKey="hrA"
-                        name={userAName}
-                        stroke="#10B981"
-                        dot={false}
-                        strokeWidth={2}
-                        connectNulls
-                    />
-                    <Line
-                        type="monotone"
-                        dataKey="hrB"
-                        name={userBName}
-                        stroke="#3B82F6"
-                        dot={false}
-                        strokeWidth={2}
-                        connectNulls
-                    />
+                    {activeSeries.map((entry) => (
+                        <Line
+                            key={entry.id}
+                            type="monotone"
+                            dataKey={`series_${entry.id}`}
+                            name={entry.name}
+                            stroke={entry.color}
+                            dot={false}
+                            strokeWidth={2}
+                            connectNulls
+                        />
+                    ))}
                 </LineChart>
             </ResponsiveContainer>
         </div>
