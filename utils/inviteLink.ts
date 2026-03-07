@@ -1,7 +1,9 @@
 export const INVITE_PATH = '/join';
+export const COMPETITION_INVITE_PARAM = 'competitionInvite';
 
 const INVITE_SHARE_TITLE = 'Join my Oura leaderboard';
 const INVITE_SHARE_TEXT = 'Connect your Oura account to join our private leaderboard.';
+const COMPETITION_INVITE_SHARE_TEXT = 'Join my Oura competition and start tomorrow.';
 
 export type InviteShareResult = 'shared' | 'copied' | 'dismissed';
 
@@ -10,10 +12,25 @@ export const buildInviteLink = (): string => {
     return new URL(INVITE_PATH, window.location.origin).toString();
 };
 
+export const buildCompetitionInviteLink = (token: string): string => {
+    if (typeof window === 'undefined') {
+        return `${INVITE_PATH}?${COMPETITION_INVITE_PARAM}=${encodeURIComponent(token)}`;
+    }
+
+    const url = new URL(INVITE_PATH, window.location.origin);
+    url.searchParams.set(COMPETITION_INVITE_PARAM, token);
+    return url.toString();
+};
+
 export const isInviteLocation = (pathname?: string, search?: string): boolean => {
     if (pathname === INVITE_PATH) return true;
     if (!search) return false;
     return new URLSearchParams(search).get('invite') === '1';
+};
+
+export const getCompetitionInviteToken = (search?: string): string | null => {
+    if (!search) return null;
+    return new URLSearchParams(search).get(COMPETITION_INVITE_PARAM);
 };
 
 export const supportsNativeInviteShare = (): boolean => {
@@ -45,9 +62,7 @@ const copyInviteLinkWithExecCommand = (inviteLink: string): boolean => {
     return copied;
 };
 
-export const copyInviteLink = async (): Promise<string> => {
-    const inviteLink = buildInviteLink();
-
+const copyLink = async (inviteLink: string): Promise<string> => {
     if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(inviteLink);
         return inviteLink;
@@ -58,6 +73,15 @@ export const copyInviteLink = async (): Promise<string> => {
     }
 
     throw new Error('clipboard_unavailable');
+};
+
+export const copyInviteLink = async (): Promise<string> => {
+    const inviteLink = buildInviteLink();
+    return copyLink(inviteLink);
+};
+
+export const copyCompetitionInviteLink = async (token: string): Promise<string> => {
+    return copyLink(buildCompetitionInviteLink(token));
 };
 
 export const shareInviteLink = async (): Promise<InviteShareResult> => {
@@ -79,5 +103,27 @@ export const shareInviteLink = async (): Promise<InviteShareResult> => {
     }
 
     await copyInviteLink();
+    return 'copied';
+};
+
+export const shareCompetitionInviteLink = async (token: string, title: string): Promise<InviteShareResult> => {
+    const inviteLink = buildCompetitionInviteLink(token);
+
+    if (supportsNativeInviteShare()) {
+        try {
+            await navigator.share({
+                title,
+                text: COMPETITION_INVITE_SHARE_TEXT,
+                url: inviteLink,
+            });
+            return 'shared';
+        } catch (error) {
+            if (error instanceof DOMException && error.name === 'AbortError') {
+                return 'dismissed';
+            }
+        }
+    }
+
+    await copyCompetitionInviteLink(token);
     return 'copied';
 };

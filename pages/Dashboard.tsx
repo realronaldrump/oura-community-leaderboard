@@ -26,6 +26,7 @@ import DateRangePicker from '../components/DateRangePicker';
 import InviteLinkCard from '../components/InviteLinkCard';
 import InviteLinkModal from '../components/InviteLinkModal';
 import MultiProfileComparisonTable, { ComparisonRow } from '../components/MultiProfileComparisonTable';
+import CompeteView from '../components/compete/CompeteView';
 import { smartSync, SyncProgress } from '../services/syncService';
 import {
     StreakTracker,
@@ -39,11 +40,13 @@ import {
 } from '../components/analytics';
 import { useAutoSync, formatLastSync } from '../hooks/useAutoSync';
 import { useWebhookRefresh } from '../hooks/useWebhookRefresh';
+import { useCompetitionInvitePreview } from '../hooks/useCompetitions';
 import { X, RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain, Users } from 'lucide-react';
 import { getProfileDisplayName } from '../utils/profileName';
-import { isInviteLocation } from '../utils/inviteLink';
+import { getCompetitionInviteToken, isInviteLocation } from '../utils/inviteLink';
 import {
     formatLocalISODate,
+    formatISODateForDisplay,
     isISODateString,
     shiftLocalISODate,
 } from '../utils/date';
@@ -234,7 +237,12 @@ const Dashboard: React.FC = () => {
         markProfileSyncSuccess,
         markProfileSyncError,
     } = useUser();
-    const [viewMode, setViewMode] = useState<'today' | 'compare' | 'trends' | 'insights' | 'export'>('today');
+    const [competitionInviteToken, setCompetitionInviteToken] = useState<string | null>(() => (
+        typeof window !== 'undefined' ? getCompetitionInviteToken(window.location.search) : null
+    ));
+    const [viewMode, setViewMode] = useState<'today' | 'compare' | 'compete' | 'trends' | 'insights' | 'export'>(() => (
+        typeof window !== 'undefined' && getCompetitionInviteToken(window.location.search) ? 'compete' : 'today'
+    ));
     const [isSyncing, setIsSyncing] = useState(false);
     const [showSyncModal, setShowSyncModal] = useState(false);
     const [syncProgress, setSyncProgress] = useState<SyncProgress>({
@@ -265,6 +273,8 @@ const Dashboard: React.FC = () => {
     const [removeProfileError, setRemoveProfileError] = useState<string | null>(null);
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
+    const { preview: competitionInvitePreview, isLoading: competitionInvitePreviewLoading } = useCompetitionInvitePreview(competitionInviteToken);
+
     const queryClient = useQueryClient();
 
     const runWithAutoTokenRefresh = async <T,>(profileId: string, operation: (token: string) => Promise<T>): Promise<T> => {
@@ -284,6 +294,19 @@ const Dashboard: React.FC = () => {
     const profileIds = useMemo(() => profiles.map(p => p.id), [profiles]);
     const { lastSyncTime } = useAutoSync(profileIds, !!activeProfile);
     useWebhookRefresh(activeProfile, viewMode === 'today');
+
+    useEffect(() => {
+        const syncInviteToken = () => {
+            const nextToken = getCompetitionInviteToken(window.location.search);
+            setCompetitionInviteToken(nextToken);
+            if (nextToken) {
+                setViewMode('compete');
+            }
+        };
+
+        window.addEventListener('popstate', syncInviteToken);
+        return () => window.removeEventListener('popstate', syncInviteToken);
+    }, []);
 
     // Manual sync
     const handleSyncAllData = async () => {
@@ -378,6 +401,14 @@ const Dashboard: React.FC = () => {
 
     const activeUserQuery = userQueries.find((_, idx) => profiles[idx].id === activeProfile?.id);
     const activeData = activeUserQuery?.data as DailyStats | undefined;
+    const competitionProfileData = useMemo(() => (
+        profiles.map((profile, index) => ({
+            profile,
+            data: userQueries[index]?.data as DailyStats | undefined,
+            isLoading: Boolean(userQueries[index]?.isLoading),
+            isError: Boolean(userQueries[index]?.isError),
+        }))
+    ), [profiles, userQueries]);
 
     const profileHealthById = useMemo(() => {
         const staleThresholdMs = 18 * 60 * 60 * 1000;
@@ -1055,6 +1086,14 @@ const Dashboard: React.FC = () => {
 
     const userName = activeProfile?.firstName || activeProfile?.email?.split('@')[0] || 'there';
     const inviteLanding = isInviteLocation(window.location.pathname, window.location.search);
+    const clearCompetitionInviteToken = () => {
+        if (typeof window === 'undefined') return;
+        const url = new URL(window.location.href);
+        url.searchParams.delete('competitionInvite');
+        const nextPath = `${url.pathname}${url.search}`;
+        window.history.replaceState({}, '', nextPath);
+        setCompetitionInviteToken(null);
+    };
 
     const formatDayLabel = (day: string | undefined) => {
         if (!day) return 'Today';
@@ -1157,22 +1196,26 @@ const Dashboard: React.FC = () => {
                         <div className="relative">
                             <div className="inline-flex items-center gap-2 rounded-full border border-[#23322C] bg-[#0E1714] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#00C896]">
                                 <Heart className="h-3.5 w-3.5" />
-                                {inviteLanding ? 'Invite link' : 'Private leaderboard'}
+                                {competitionInviteToken ? 'Competition invite' : inviteLanding ? 'Invite link' : 'Private leaderboard'}
                             </div>
 
                             <h1 className="mt-5 max-w-2xl text-3xl font-semibold tracking-tight text-[#FAFAFA] sm:text-4xl">
-                                {inviteLanding
-                                    ? 'Join this Oura leaderboard in one step.'
-                                    : profiles.length > 0
-                                        ? 'Add a new friend without touching the existing setup.'
-                                        : 'Start your shared Oura leaderboard.'}
+                                {competitionInviteToken
+                                    ? "Join the leaderboard and lock in tomorrow's competition."
+                                    : inviteLanding
+                                        ? 'Join this Oura leaderboard in one step.'
+                                        : profiles.length > 0
+                                            ? 'Add a new friend without touching the existing setup.'
+                                            : 'Start your shared Oura leaderboard.'}
                             </h1>
                             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[#A0A0A0] sm:text-base">
-                                {inviteLanding
-                                    ? 'Connect your Oura account and you will appear alongside the rest of the group automatically.'
-                                    : profiles.length > 0
-                                        ? 'The shared board is already live. A new friend just needs the invite link and one Oura sign-in to add themselves.'
-                                        : 'Connect the first Oura account to create the board, then invite others from the dashboard or settings.'}
+                                {competitionInviteToken
+                                    ? 'Connect your Oura account once. You will join the shared leaderboard and the invited competition in the same flow.'
+                                    : inviteLanding
+                                        ? 'Connect your Oura account and you will appear alongside the rest of the group automatically.'
+                                        : profiles.length > 0
+                                            ? 'The shared board is already live. A new friend just needs the invite link and one Oura sign-in to add themselves.'
+                                            : 'Connect the first Oura account to create the board, then invite others from the dashboard or settings.'}
                             </p>
 
                             <div className="mt-6 flex flex-wrap gap-3">
@@ -1192,7 +1235,11 @@ const Dashboard: React.FC = () => {
                                     onClick={login}
                                     className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#00C896] px-5 py-3 text-sm font-semibold text-[#06120D] transition-opacity hover:opacity-90"
                                 >
-                                    {profiles.length > 0 ? 'Join This Leaderboard' : 'Connect Oura Ring'}
+                                    {competitionInviteToken
+                                        ? 'Join Competition'
+                                        : profiles.length > 0
+                                            ? 'Join This Leaderboard'
+                                            : 'Connect Oura Ring'}
                                 </button>
                                 {profiles.length > 0 ? (
                                     <div className="inline-flex min-h-12 items-center rounded-xl border border-[#222] px-4 py-3 text-sm text-[#A0A0A0]">
@@ -1200,6 +1247,25 @@ const Dashboard: React.FC = () => {
                                     </div>
                                 ) : null}
                             </div>
+
+                            {competitionInviteToken ? (
+                                <div className="mt-6 rounded-[1.35rem] border border-[#1E4033] bg-[#101715] p-4">
+                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#8FD8C0]">Competition Preview</p>
+                                    <h3 className="mt-2 text-lg font-semibold text-[#FAFAFA]">
+                                        {competitionInvitePreviewLoading
+                                            ? 'Loading competition...'
+                                            : competitionInvitePreview?.competition.title || 'Competition invite'}
+                                    </h3>
+                                    <p className="mt-2 text-sm leading-relaxed text-[#A0A0A0]">
+                                        {competitionInvitePreview?.competition.description || 'This invite will be applied after your Oura account connects.'}
+                                    </p>
+                                    {competitionInvitePreview ? (
+                                        <p className="mt-3 text-xs text-[#7BD8B6]">
+                                            Starts {formatISODateForDisplay(competitionInvitePreview.competition.startDate, 'en-US', { month: 'short', day: 'numeric' })} and runs through {formatISODateForDisplay(competitionInvitePreview.competition.endDate, 'en-US', { month: 'short', day: 'numeric' })}.
+                                        </p>
+                                    ) : null}
+                                </div>
+                            ) : null}
 
                             <p className="mt-6 max-w-xl text-xs leading-relaxed text-[#777]">
                                 Connecting adds your data to this shared leaderboard. Selecting an existing profile only changes the local view on this browser.
@@ -1433,6 +1499,7 @@ const Dashboard: React.FC = () => {
                     {[
                         { key: 'today', label: 'Today' },
                         ...(profiles.length > 1 ? [{ key: 'compare', label: 'Compare' }] : []),
+                        { key: 'compete', label: 'Compete' },
                         { key: 'trends', label: 'Trends' },
                         { key: 'insights', label: 'Insights' },
                         { key: 'export', label: 'Export' },
@@ -1836,6 +1903,17 @@ const Dashboard: React.FC = () => {
                     <div className="pt-16 text-center">
                         <p className="text-[#666]">Waiting for enough synced data to compare everyone.</p>
                     </div>
+                )}
+
+                {/* ======== COMPETE VIEW ======== */}
+                {viewMode === 'compete' && (
+                    <CompeteView
+                        activeProfile={activeProfile}
+                        profiles={profiles}
+                        profileData={competitionProfileData}
+                        competitionInviteToken={competitionInviteToken}
+                        onClearCompetitionInviteToken={clearCompetitionInviteToken}
+                    />
                 )}
 
                 {/* ======== TRENDS VIEW ======== */}

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { UserProfile, AuthStatus } from '../types';
-import { createOAuthState, getAuthUrl, OAUTH_STATE_KEY } from '../constants';
+import { createOAuthState, getAuthUrl, OAUTH_STATE_KEY, POST_AUTH_DESTINATION_KEY } from '../constants';
 import { ouraService } from '../services/ouraService';
 import { firebaseService } from '../services/firebaseService';
 import { oauthService } from '../services/oauthService';
@@ -18,7 +18,7 @@ interface UserContextType {
     activeProfile: UserProfile | null;
     setActiveProfileId: (id: string | null) => void;
     clearActiveProfileSelection: () => void;
-    addProfile: (options: AddProfileOptions) => Promise<void>;
+    addProfile: (options: AddProfileOptions) => Promise<UserProfile>;
     removeProfile: (id: string) => Promise<void>;
     updateProfile: (profile: Partial<UserProfile>) => Promise<void>;
     updateProfileById: (id: string, profile: Partial<UserProfile>) => Promise<void>;
@@ -99,10 +99,14 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAuthStatus(AuthStatus.LOADING);
         const state = createOAuthState();
         localStorage.setItem(OAUTH_STATE_KEY, state);
+        if (typeof window !== 'undefined') {
+            const destination = `${window.location.pathname}${window.location.search}`;
+            localStorage.setItem(POST_AUTH_DESTINATION_KEY, destination);
+        }
         window.location.href = getAuthUrl(state);
     };
 
-    const addProfile = async (options: AddProfileOptions) => {
+    const addProfile = async (options: AddProfileOptions): Promise<UserProfile> => {
         setAuthStatus(AuthStatus.LOADING);
         try {
             const { accessToken, refreshToken = null } = options;
@@ -152,6 +156,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await firebaseService.saveProfile(newProfile);
             setActiveProfileId(profileId);
             setAuthStatus(AuthStatus.AUTHENTICATED);
+            return newProfile;
         } catch (error) {
             console.error("Failed to add profile", error);
             setAuthStatus(AuthStatus.UNAUTHENTICATED);

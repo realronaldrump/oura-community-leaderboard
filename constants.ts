@@ -3,6 +3,7 @@ export const CLIENT_ID = '92e4c379-b278-4c42-a7c0-db088b67680f';
 
 export const REDIRECT_URI = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
 export const OAUTH_STATE_KEY = 'oura_oauth_state_v1';
+export const POST_AUTH_DESTINATION_KEY = 'oura_post_auth_destination_v1';
 
 /**
  * Leave scopes unspecified by default so Oura can present all currently available

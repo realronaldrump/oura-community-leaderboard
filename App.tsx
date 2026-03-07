@@ -4,8 +4,11 @@ import { UserProvider, useUser } from './contexts/UserContext';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import AppDialog from './components/AppDialog';
-import { OAUTH_STATE_KEY, REDIRECT_URI } from './constants';
+import { OAUTH_STATE_KEY, POST_AUTH_DESTINATION_KEY, REDIRECT_URI } from './constants';
 import { oauthService, OAuthRequestError } from './services/oauthService';
+import { competitionService } from './services/competitionService';
+import { getProfileDisplayName } from './utils/profileName';
+import { getCompetitionInviteToken } from './utils/inviteLink';
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
     Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -68,7 +71,7 @@ const formatAuthFailureMessage = (error: unknown): string => {
 const Router = () => {
     const { addProfile } = useUser();
     const [path, setPath] = useState(window.location.pathname);
-    const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
+    const [dialogState, setDialogState] = useState<{ title: string; message: string } | null>(null);
 
     useEffect(() => {
         const handlePopState = () => setPath(window.location.pathname);
@@ -85,7 +88,10 @@ const Router = () => {
         if (oauthError) {
             window.history.replaceState(null, '', window.location.pathname);
             console.error("OAuth failed", { oauthError, oauthErrorDescription });
-            setAuthErrorMessage(`Authentication failed: ${oauthErrorDescription || oauthError}`);
+            setDialogState({
+                title: 'Authentication Unsuccessful',
+                message: `Authentication failed: ${oauthErrorDescription || oauthError}`,
+            });
             return;
         }
 
@@ -94,12 +100,17 @@ const Router = () => {
 
         const state = params.get('state');
         const storedState = localStorage.getItem(OAUTH_STATE_KEY);
+        const storedDestination = localStorage.getItem(POST_AUTH_DESTINATION_KEY) || '/';
         localStorage.removeItem(OAUTH_STATE_KEY);
+        localStorage.removeItem(POST_AUTH_DESTINATION_KEY);
         window.history.replaceState(null, '', window.location.pathname);
 
         if (!state || !storedState || state !== storedState) {
             console.error("OAuth state mismatch", { state, storedState });
-            setAuthErrorMessage("Authentication failed: invalid OAuth state.");
+            setDialogState({
+                title: 'Authentication Unsuccessful',
+                message: 'Authentication failed: invalid OAuth state.',
+            });
             return;
         }
 
@@ -112,12 +123,38 @@ const Router = () => {
                     expiresInSeconds: tokens.expiresInSeconds,
                 });
             })
-            .then(() => {
+            .then(async (profile) => {
+                const inviteToken = getCompetitionInviteToken(storedDestination);
+                if (inviteToken) {
+                    try {
+                        const result = await competitionService.acceptCompetitionInviteToken(inviteToken, {
+                            profileId: profile.id,
+                            displayName: getProfileDisplayName(profile),
+                        });
+                        setDialogState({
+                            title: 'Competition Joined',
+                            message: `You joined ${result.competition.title}. It starts ${new Date(`${result.competition.startDate}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.`,
+                        });
+                    } catch (error) {
+                        console.error('Competition invite acceptance failed', error);
+                        setDialogState({
+                            title: 'Invite Not Applied',
+                            message: 'Your Oura account connected successfully, but the competition invite could not be applied.',
+                        });
+                    }
+                }
+
+                const nextPath = storedDestination.startsWith('/settings') ? '/settings' : '/';
+                window.history.replaceState(null, '', nextPath);
+                setPath(nextPath);
                 console.log("Profile added via OAuth");
             })
             .catch(err => {
                 console.error("Auth failed", err);
-                setAuthErrorMessage(formatAuthFailureMessage(err));
+                setDialogState({
+                    title: 'Authentication Unsuccessful',
+                    message: formatAuthFailureMessage(err),
+                });
             });
     }, [addProfile]);
 
@@ -127,11 +164,11 @@ const Router = () => {
         <>
             {routedPage}
             <AppDialog
-                isOpen={Boolean(authErrorMessage)}
-                title="Authentication Unsuccessful"
-                message={authErrorMessage || ''}
+                isOpen={Boolean(dialogState)}
+                title={dialogState?.title || ''}
+                message={dialogState?.message || ''}
                 confirmText="Dismiss"
-                onConfirm={() => setAuthErrorMessage(null)}
+                onConfirm={() => setDialogState(null)}
             />
         </>
     );
