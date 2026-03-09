@@ -506,7 +506,7 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                                         className="w-full rounded-xl border border-[#2A2A2A] bg-[#0F0F0F] px-3 py-3 text-sm text-[#FAFAFA] outline-none focus:border-[#00C896]"
                                                     >
                                                         {COMPETITION_METRICS.map((option) => (
-                                                            <option key={option.id} value={option.id} className="bg-[#1C1C1C] text-[#FAFAFA]">
+                                                            <option key={option.id} value={option.id}>
                                                                 {option.label}
                                                             </option>
                                                         ))}
@@ -520,8 +520,8 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                                         onChange={(event) => updateRule(rule.id, { operator: event.target.value as 'gte' | 'lte' })}
                                                         className="w-full rounded-xl border border-[#2A2A2A] bg-[#0F0F0F] px-3 py-3 text-sm text-[#FAFAFA] outline-none focus:border-[#00C896]"
                                                     >
-                                                        <option value="gte" className="bg-[#1C1C1C] text-[#FAFAFA]">At least</option>
-                                                        <option value="lte" className="bg-[#1C1C1C] text-[#FAFAFA]">At most</option>
+                                                        <option value="gte">At least</option>
+                                                        <option value="lte">At most</option>
                                                     </select>
                                                 </label>
 
@@ -580,9 +580,9 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                                         onChange={(event) => updateRule(rule.id, { aggregation: event.target.value as RuleDraft['aggregation'] })}
                                                         className="w-full rounded-xl border border-[#2A2A2A] bg-[#0F0F0F] px-3 py-3 text-sm text-[#FAFAFA] outline-none focus:border-[#00C896]"
                                                     >
-                                                        <option value="daily" className="bg-[#1C1C1C] text-[#FAFAFA]">Daily progress</option>
-                                                        <option value="average" className="bg-[#1C1C1C] text-[#FAFAFA]">Average across the competition</option>
-                                                        <option value="total" className="bg-[#1C1C1C] text-[#FAFAFA]">Total across the competition</option>
+                                                        <option value="daily">Daily progress</option>
+                                                        <option value="average">Average across the competition</option>
+                                                        <option value="total">Total across the competition</option>
                                                     </select>
                                                 </label>
                                             ) : null}
