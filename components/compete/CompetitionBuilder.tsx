@@ -320,8 +320,8 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                             />
                                             <span className="text-[11px] uppercase tracking-[0.14em] text-[#666]">{template.format}</span>
                                         </div>
-                                        <h3 className="mt-3 text-base font-semibold text-[#FAFAFA]">{template.title}</h3>
-                                        <p className="mt-2 text-sm leading-relaxed text-[#888]">{template.description}</p>
+                                        <h3 className="mt-3 text-base font-semibold" style={{ color: '#FAFAFA' }}>{template.title}</h3>
+                                        <p className="mt-2 text-sm leading-relaxed" style={{ color: '#999' }}>{template.description}</p>
                                     </button>
                                 ))}
                             </div>
