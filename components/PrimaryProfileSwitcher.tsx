@@ -32,7 +32,7 @@ const PrimaryProfileSwitcher: React.FC<PrimaryProfileSwitcherProps> = ({
                 title="Switch primary profile"
             >
                 {profiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
+                    <option key={profile.id} value={profile.id} className="bg-[#1C1C1C] text-[#FAFAFA]">
                         {getProfileDisplayName(profile)}
                     </option>
                 ))}

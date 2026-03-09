@@ -95,13 +95,13 @@ const MetricCard: React.FC<MetricCardProps> = ({
           {value ?? '--'}
         </span>
         {unit && value != null && (
-          <span className="text-[#555] text-xs font-medium">{unit}</span>
+          <span className="text-[#888] text-xs font-medium">{unit}</span>
         )}
       </div>
 
       {/* Subtext */}
       {subtext && (
-        <p className="text-[11px] text-[#555] mt-2 relative z-10 leading-relaxed">
+        <p className="text-[11px] text-[#888] mt-2 relative z-10 leading-relaxed">
           {subtext}
         </p>
       )}

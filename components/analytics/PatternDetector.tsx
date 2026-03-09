@@ -121,9 +121,9 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
                         onChange={(e) => setFilter(e.target.value as FilterType)}
                         className="px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--accent)]"
                     >
-                        <option value="all">All Types</option>
+                        <option value="all" className="bg-[#1C1C1C] text-[#FAFAFA]">All Types</option>
                         {patternTypes.map(type => (
-                            <option key={type} value={type}>
+                            <option key={type} value={type} className="bg-[#1C1C1C] text-[#FAFAFA]">
                                 {type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
                             </option>
                         ))}
@@ -134,9 +134,9 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
                         onChange={(e) => setSortBy(e.target.value as SortType)}
                         className="px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--accent)]"
                     >
-                        <option value="confidence">By Confidence</option>
-                        <option value="impact">By Impact</option>
-                        <option value="recent">Most Recent</option>
+                        <option value="confidence" className="bg-[#1C1C1C] text-[#FAFAFA]">By Confidence</option>
+                        <option value="impact" className="bg-[#1C1C1C] text-[#FAFAFA]">By Impact</option>
+                        <option value="recent" className="bg-[#1C1C1C] text-[#FAFAFA]">Most Recent</option>
                     </select>
                 </div>
             </div>

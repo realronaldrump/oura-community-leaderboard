@@ -1324,7 +1324,7 @@ const Dashboard: React.FC = () => {
                                                         {profileHealthById.get(profile.id)?.label || 'Up to date'}
                                                     </p>
                                                 </div>
-                                                <span className="ml-3 text-xs font-mono text-[#555]">
+                                                <span className="ml-3 text-xs font-mono text-[#888]">
                                                     {profile.lastSuccessfulSyncAt
                                                         ? new Date(profile.lastSuccessfulSyncAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
                                                         : ''}
@@ -1428,7 +1428,7 @@ const Dashboard: React.FC = () => {
                         <circle cx="20" cy="20" r="17" fill="none" stroke="#00C896" strokeWidth="2.5" strokeDasharray="107" strokeDashoffset="80" strokeLinecap="round" className="animate-spin origin-center" style={{ animationDuration: '1.2s' }} />
                     </svg>
                 </div>
-                <p className="text-[#555] text-sm">Loading your data</p>
+                <p className="text-[#888] text-sm">Loading your data</p>
             </div>
         );
     }
@@ -1466,7 +1466,7 @@ const Dashboard: React.FC = () => {
                 <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <h1 className="text-base font-semibold tracking-tight">{userName}</h1>
-                        <span className="text-[#444] text-xs font-mono hidden sm:inline">{formatLastSync(lastSyncTime)}</span>
+                        <span className="text-[#777] text-xs font-mono hidden sm:inline">{formatLastSync(lastSyncTime)}</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <PrimaryProfileSwitcher
@@ -1507,7 +1507,7 @@ const Dashboard: React.FC = () => {
                         <button
                             key={tab.key}
                             onClick={() => setViewMode(tab.key as any)}
-                            className={`px-4 py-2.5 text-[13px] font-medium transition-all border-b-2 whitespace-nowrap ${viewMode === tab.key ? 'border-[#00C896] text-[#FAFAFA]' : 'border-transparent text-[#555] hover:text-[#999]'}`}
+                            className={`px-4 py-2.5 text-[13px] font-medium transition-all border-b-2 whitespace-nowrap ${viewMode === tab.key ? 'border-[#00C896] text-[#FAFAFA]' : 'border-transparent text-[#888] hover:text-[#CCC]'}`}
                         >
                             {tab.label}
                         </button>
@@ -1595,7 +1595,7 @@ const Dashboard: React.FC = () => {
                                             </span>
                                         </div>
                                         <span className="text-xs text-[#888] font-medium tracking-wide">{label}</span>
-                                        {quality && <span className="text-[10px] text-[#555] mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">{quality}</span>}
+                                        {quality && <span className="text-[10px] text-[#888] mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">{quality}</span>}
                                     </button>
                                 );
                             })}
