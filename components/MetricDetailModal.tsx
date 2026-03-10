@@ -285,6 +285,14 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
 
     const trend = calculateTrend();
 
+    const isTrendImproving = trend
+        ? trend.direction === 'stable'
+            ? null
+            : config.goodHigher
+                ? trend.direction === 'up'
+                : trend.direction === 'down'
+        : null;
+
     const OPEN_ENDED_RANGE_SENTINELS = new Set([999, 9999, 99999]);
     const usesMinuteThresholds = ['sleep_duration', 'deep_sleep', 'rem_sleep'].includes(metricType);
 
@@ -367,8 +375,12 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
 
     const getPercentile = (value: number) => {
         const sortedValues = historyData.map(d => d.value).sort((a, b) => a - b);
-        const index = sortedValues.findIndex(v => v >= value);
-        return Math.round((index / sortedValues.length) * 100);
+        if (sortedValues.length === 0) return 0;
+
+        const valuesAtOrBelow = sortedValues.filter(v => v <= value).length;
+        const rawPercentile = Math.round((valuesAtOrBelow / sortedValues.length) * 100);
+
+        return config.goodHigher ? rawPercentile : 100 - rawPercentile;
     };
 
     const getInsights = () => {
@@ -428,7 +440,15 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                 </div>
                             </div>
                             {trend && (
-                                <div className={`flex items-center gap-1 text-sm font-medium ${trend.direction === 'up' ? 'text-green-400' : trend.direction === 'down' ? 'text-red-400' : 'text-gray-400'}`}>
+                                <div
+                                    className={`flex items-center gap-1 text-sm font-medium ${
+                                        trend.direction === 'stable'
+                                            ? 'text-gray-400'
+                                            : isTrendImproving
+                                                ? 'text-green-400'
+                                                : 'text-red-400'
+                                    }`}
+                                >
                                     {trend.direction === 'up' ? <TrendingUp className="w-4 h-4" /> : trend.direction === 'down' ? <TrendingDown className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
                                     <span>{Math.abs(trend.change).toFixed(1)}%</span>
                                     <span className="text-[#666666] text-xs">vs last {selectedTimeRange === '7d' ? '3.5 days' : selectedTimeRange === '14d' ? '7 days' : '15 days'}</span>
