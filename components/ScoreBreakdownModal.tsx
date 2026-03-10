@@ -1,8 +1,14 @@
-import React from 'react';
-import { X, Calculator, TrendingUp, Target, Clock, Thermometer, Heart, Moon, Zap } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Calculator, Calendar, TrendingUp, TrendingDown, Minus, Target, Clock, Thermometer, Heart, Moon, Zap } from 'lucide-react';
+import { AreaChart, Area, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { DailyReadiness, DailySleep, DailyActivity, SleepSession } from '../types';
 import { IOSModal, IOSListItem, IOSButton } from './ios';
 import { formatISODateForDisplay } from '../utils/date';
+
+interface ScoreHistoryPoint {
+    date: string;
+    value: number;
+}
 
 interface ScoreBreakdownModalProps {
     isOpen: boolean;
@@ -10,6 +16,7 @@ interface ScoreBreakdownModalProps {
     scoreType: 'readiness' | 'sleep' | 'activity';
     scoreData: DailyReadiness | DailySleep | DailyActivity | null;
     sessionData?: SleepSession | null;
+    historyData?: ScoreHistoryPoint[];
 }
 
 interface FactorDefinition {
@@ -26,9 +33,10 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
     onClose,
     scoreType,
     scoreData,
-    sessionData
+    sessionData,
+    historyData = [],
 }) => {
-    if (!isOpen || !scoreData) return null;
+    const [selectedTimeRange, setSelectedTimeRange] = useState<'7d' | '14d' | '30d'>('14d');
 
     const getFactorsForScoreType = (type: string, data: any, session?: SleepSession | null): FactorDefinition[] => {
         switch (type) {
@@ -211,13 +219,51 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
     const score = scoreData.score || 0;
     const title = `${scoreType.charAt(0).toUpperCase() + scoreType.slice(1)} Score Breakdown`;
     const date = scoreData.day;
+    const scoreColor = scoreType === 'readiness' ? '#34D399' : scoreType === 'sleep' ? '#60A5FA' : '#FBBF24';
+    const rangeDays = selectedTimeRange === '7d' ? 7 : selectedTimeRange === '14d' ? 14 : 30;
+    const filteredHistory = useMemo(
+        () => historyData.slice(0, rangeDays).reverse(),
+        [historyData, rangeDays]
+    );
+
+    const chartDomain = useMemo<[number, number]>(() => {
+        if (!filteredHistory.length) return [0, 100];
+        const values = filteredHistory.map((entry) => entry.value);
+        const min = Math.max(0, Math.min(...values) - 4);
+        const max = Math.min(100, Math.max(...values) + 4);
+        if (min === max) {
+            return [Math.max(0, min - 4), Math.min(100, max + 4)];
+        }
+        return [min, max];
+    }, [filteredHistory]);
+
+    const trend = useMemo(() => {
+        if (filteredHistory.length < 2) return null;
+
+        const midpoint = Math.ceil(filteredHistory.length / 2);
+        const older = filteredHistory.slice(0, midpoint);
+        const recent = filteredHistory.slice(midpoint);
+        if (!older.length || !recent.length) return null;
+
+        const olderAverage = older.reduce((sum, entry) => sum + entry.value, 0) / older.length;
+        const recentAverage = recent.reduce((sum, entry) => sum + entry.value, 0) / recent.length;
+        if (olderAverage === 0) return null;
+
+        const change = ((recentAverage - olderAverage) / olderAverage) * 100;
+        return {
+            change,
+            direction: change > 0 ? 'up' : change < 0 ? 'down' : 'stable',
+        };
+    }, [filteredHistory]);
+
+    if (!isOpen || !scoreData) return null;
 
     return (
         <IOSModal isOpen={isOpen} onClose={onClose} title={title}>
             <div className="space-y-4">
                 <div className="flex items-center justify-between py-2">
                     <div>
-                        <p className="text-[#00C896] text-sm font-medium">
+                        <p className="text-sm font-medium" style={{ color: scoreColor }}>
                             Score: {score}/100
                         </p>
                         <p className="text-[#666666] text-xs mt-1">
@@ -232,7 +278,40 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                 </div>
 
                 {/* Content */}
-                <div className="overflow-y-auto ios-scroll max-h-[60vh]">
+                <div className="overflow-y-auto ios-scroll max-h-[68vh] space-y-6">
+                    <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222]">
+                        <div className="flex items-end justify-between gap-4">
+                            <div>
+                                <p className="text-[#666666] text-sm mb-1">Current Score</p>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-4xl font-bold font-mono" style={{ color: scoreColor }}>
+                                        {score}
+                                    </span>
+                                    <span className="text-[#666666] text-sm font-medium">/100</span>
+                                </div>
+                            </div>
+                            {trend && (
+                                <div
+                                    className={`flex items-center gap-1 text-sm font-medium ${
+                                        trend.direction === 'stable'
+                                            ? 'text-[#8A8A8A]'
+                                            : trend.direction === 'up'
+                                                ? 'text-[#34D399]'
+                                                : 'text-[#F87171]'
+                                    }`}
+                                >
+                                    {trend.direction === 'up'
+                                        ? <TrendingUp className="w-4 h-4" />
+                                        : trend.direction === 'down'
+                                            ? <TrendingDown className="w-4 h-4" />
+                                            : <Minus className="w-4 h-4" />}
+                                    <span>{Math.abs(trend.change).toFixed(1)}%</span>
+                                    <span className="text-[#666666] text-xs">vs prior window</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="mb-6">
                         <p className="text-[#A0A0A0] text-sm">
                             Your {scoreType} score is calculated by weighting various health factors.
@@ -253,9 +332,87 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                         </p>
                     </div>
 
+                    <div className="flex gap-2">
+                        {(['7d', '14d', '30d'] as const).map((range) => (
+                            <button
+                                key={range}
+                                onClick={() => setSelectedTimeRange(range)}
+                                className={`flex-1 min-h-11 rounded-lg border px-3 py-2 text-sm font-medium transition-all ${
+                                    selectedTimeRange === range
+                                        ? 'border-[#00C896]/30 bg-[#00C896]/20 text-[#00C896]'
+                                        : 'border-[#222] bg-[#0C0C0C] text-[#666666] hover:border-[#333]'
+                                }`}
+                            >
+                                {range === '7d' ? '7 Days' : range === '14d' ? '14 Days' : '30 Days'}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222]">
+                        <h4 className="text-sm font-medium text-[#FAFAFA] mb-4 flex items-center gap-2">
+                            <Calendar className="w-4 h-4" />
+                            {title} History
+                        </h4>
+                        {filteredHistory.length > 0 ? (
+                            <div style={{ height: 200 }}>
+                                <ResponsiveContainer
+                                    width="100%"
+                                    height="100%"
+                                    minWidth={0}
+                                    minHeight={160}
+                                    initialDimension={{ width: 560, height: 180 }}
+                                >
+                                    <AreaChart data={filteredHistory}>
+                                        <defs>
+                                            <linearGradient id={`score-history-${scoreType}`} x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor={scoreColor} stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor={scoreColor} stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#222" />
+                                        <XAxis
+                                            dataKey="date"
+                                            tick={{ fill: '#666666', fontSize: 11 }}
+                                            tickFormatter={(value) => formatISODateForDisplay(value, undefined, { month: 'short', day: 'numeric' })}
+                                            axisLine={{ stroke: '#222' }}
+                                            minTickGap={20}
+                                        />
+                                        <YAxis
+                                            domain={chartDomain}
+                                            tick={{ fill: '#666666', fontSize: 11 }}
+                                            axisLine={{ stroke: '#222' }}
+                                            tickCount={5}
+                                        />
+                                        <Tooltip
+                                            contentStyle={{
+                                                backgroundColor: '#0C0C0C',
+                                                border: '1px solid #222',
+                                                borderRadius: '8px',
+                                            }}
+                                            formatter={(value: number) => [`${value}/100`, 'Score']}
+                                            labelFormatter={(label) => formatISODateForDisplay(label, undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                                        />
+                                        <Area
+                                            type="monotone"
+                                            dataKey="value"
+                                            stroke={scoreColor}
+                                            strokeWidth={2}
+                                            fill={`url(#score-history-${scoreType})`}
+                                            activeDot={{ r: 5, strokeWidth: 2, stroke: scoreColor, fill: '#0C0C0C' }}
+                                        />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
+                        ) : (
+                            <div className="flex min-h-[10rem] items-center justify-center rounded-lg border border-dashed border-[#222] bg-[#090909] px-4 text-center text-sm text-[#666666]">
+                                Not enough score history yet to draw a chart.
+                            </div>
+                        )}
+                    </div>
+
                     {/* Factors List */}
                     <div className="space-y-2">
-                        {factors.map((factor, idx) => (
+                        {factors.map((factor) => (
                             <IOSListItem
                                 key={factor.key}
                                 title={factor.label}

@@ -57,6 +57,8 @@ const DEFAULT_DAILY_STATS_STALE_MS = 1000 * 60 * 60;
 const LIVE_DAILY_STATS_STALE_MS = 1000 * 60 * 5;
 const LIVE_DAILY_STATS_REFETCH_MS = 1000 * 60 * 5;
 type DayRange = { start: string; end: string };
+type ScoreType = 'readiness' | 'sleep' | 'activity';
+type ScoreHistoryPoint = { date: string; value: number };
 const COMPARE_PALETTE = ['#00C896', '#60A5FA', '#A855F7', '#F59E0B', '#F87171', '#22C55E', '#38BDF8', '#FB7185'];
 
 const filterByDayRange = <T extends { day?: string }>(items: T[] | undefined, range: DayRange | null): T[] => {
@@ -251,7 +253,7 @@ const Dashboard: React.FC = () => {
 
     const [scoreBreakdownModal, setScoreBreakdownModal] = useState<{
         isOpen: boolean;
-        scoreType: 'readiness' | 'sleep' | 'activity' | null;
+        scoreType: ScoreType | null;
     }>({ isOpen: false, scoreType: null });
 
     const [metricDetailModal, setMetricDetailModal] = useState<{
@@ -647,6 +649,35 @@ const Dashboard: React.FC = () => {
         { label: 'Training Volume', value: currentActivity.contributors.training_volume, color: '#f97316', key: 'training_volume' },
     ] : [];
 
+    const getScoreHistoryData = (scoreType: ScoreType, data?: DailyStats): ScoreHistoryPoint[] => {
+        if (!data) return [];
+
+        const scoreEntries = scoreType === 'readiness'
+            ? data.readiness
+            : scoreType === 'sleep'
+                ? data.sleep
+                : data.activity;
+
+        const sortedEntries = [...(scoreEntries || [])]
+            .filter((entry): entry is typeof entry & { day: string; score: number } => Boolean(entry?.day) && isScoreReady(entry.score))
+            .sort((a, b) => {
+                const byDay = b.day.localeCompare(a.day);
+                if (byDay !== 0) return byDay;
+                return toTimestampMs(b.timestamp) - toTimestampMs(a.timestamp);
+            });
+
+        const seenDays = new Set<string>();
+        const history: ScoreHistoryPoint[] = [];
+
+        sortedEntries.forEach((entry) => {
+            if (seenDays.has(entry.day)) return;
+            seenDays.add(entry.day);
+            history.push({ date: entry.day, value: entry.score });
+        });
+
+        return history;
+    };
+
     const getMetricHistoryData = (metricType: string, days: number = 30, data?: DailyStats) => {
         const dataSource = data || activeData;
         if (!dataSource) return [];
@@ -695,6 +726,30 @@ const Dashboard: React.FC = () => {
         return dataPoints;
     };
 
+    const prefetchAllTimeStats = () => {
+        if (!activeProfile?.id) return;
+
+        const allTimeQueryKey = ['allTimeStats', activeProfile.id] as const;
+        const cachedAllTime = queryClient.getQueryData(allTimeQueryKey) as DailyStats | undefined;
+        if (cachedAllTime) return;
+
+        queryClient.prefetchQuery({
+            queryKey: allTimeQueryKey,
+            queryFn: () => runWithAutoTokenRefresh(activeProfile.id, (token) =>
+                fetchDailyStats(token, { start: FULL_HISTORY_START_DATE }, {
+                    grantedScopes: activeProfile.grantedScopes,
+                    availabilityKey: activeProfile.id,
+                })
+            ),
+            staleTime: 1000 * 60 * 60 * 24,
+        });
+    };
+
+    const handleScoreCardClick = (scoreType: ScoreType) => {
+        setScoreBreakdownModal({ isOpen: true, scoreType });
+        prefetchAllTimeStats();
+    };
+
     const handleMetricCardClick = (
         metricType: 'hrv' | 'heart_rate' | 'lowest_hr' | 'spo2' | 'stress' | 'resilience' | 'steps' | 'calories' | 'sleep_duration' | 'deep_sleep' | 'rem_sleep' | 'efficiency',
         currentValue: number | null,
@@ -712,20 +767,17 @@ const Dashboard: React.FC = () => {
             : [];
         setMetricDetailModal({ isOpen: true, metricType, currentValue, historyData, unit, color, date: currentSleep?.day });
 
-        // Prefetch full history in background if not cached
-        if (!cachedAllTime) {
-            queryClient.prefetchQuery({
-                queryKey: allTimeQueryKey,
-                queryFn: () => runWithAutoTokenRefresh(activeProfile.id, (token) =>
-                    fetchDailyStats(token, { start: FULL_HISTORY_START_DATE }, {
-                        grantedScopes: activeProfile.grantedScopes,
-                        availabilityKey: activeProfile.id,
-                    })
-                ),
-                staleTime: 1000 * 60 * 60 * 24,
-            });
-        }
+        prefetchAllTimeStats();
     };
+
+    const scoreHistorySource = activeProfile?.id
+        ? ((queryClient.getQueryData(['allTimeStats', activeProfile.id]) as DailyStats | undefined) || activeData)
+        : activeData;
+
+    const scoreHistoryData = useMemo(() => {
+        if (!scoreBreakdownModal.scoreType) return [];
+        return getScoreHistoryData(scoreBreakdownModal.scoreType, scoreHistorySource);
+    }, [scoreBreakdownModal.scoreType, scoreHistorySource]);
 
     const scopedAllTimeData = useMemo(
         () => allTimeQueries.map((query) => filterDailyStatsByDayRange(query.data as DailyStats | undefined, effectiveTrendsRange)),
@@ -1446,6 +1498,7 @@ const Dashboard: React.FC = () => {
                 scoreType={scoreBreakdownModal.scoreType || 'readiness'}
                 scoreData={scoreBreakdownModal.scoreType === 'readiness' ? currentReadiness : scoreBreakdownModal.scoreType === 'sleep' ? currentSleep : scoreBreakdownModal.scoreType === 'activity' ? currentActivity : null}
                 sessionData={currentSession}
+                historyData={scoreHistoryData}
             />
             <MetricDetailModal
                 isOpen={metricDetailModal.isOpen}
@@ -1582,7 +1635,7 @@ const Dashboard: React.FC = () => {
                                 return (
                                     <button
                                         key={type}
-                                        onClick={() => setScoreBreakdownModal({ isOpen: true, scoreType: type })}
+                                        onClick={() => handleScoreCardClick(type)}
                                         className="score-card-v2 group"
                                     >
                                         <div className="relative w-[76px] h-[76px] sm:w-[88px] sm:h-[88px] mx-auto mb-3">
