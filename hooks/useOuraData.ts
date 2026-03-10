@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ouraService } from '../services/ouraService';
 import { DailyStats } from '../types';
 import { getOuraFetchEndISODate, shiftLocalISODate } from '../utils/date';
+import { hasAnyOuraScope, normalizeGrantedOuraScopes } from '../utils/ouraScopes';
 
 export const FULL_HISTORY_START_DATE = '2016-01-01';
 const INITIAL_RECENT_DAYS = 28;
@@ -24,23 +25,6 @@ type SyncDailyStatsOptions = {
 
 const getFetchEndDate = (): string => getOuraFetchEndISODate();
 const shiftDate = (day: string, daysDelta: number): string => shiftLocalISODate(day, daysDelta);
-
-const normalizeScope = (scope: string): string =>
-    scope.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-const normalizeGrantedScopes = (grantedScopes?: string[]): Set<string> => {
-    if (!grantedScopes?.length) return new Set<string>();
-    return new Set(
-        grantedScopes
-            .filter((scope): scope is string => typeof scope === 'string' && scope.trim().length > 0)
-            .map((scope) => normalizeScope(scope))
-    );
-};
-
-const hasAnyScope = (scopeSet: Set<string>, candidates: string[]): boolean => {
-    if (scopeSet.size === 0) return true;
-    return candidates.some((candidate) => scopeSet.has(normalizeScope(candidate)));
-};
 
 const sortByDayDesc = (a: any, b: any): number => {
     const bDate = new Date(b?.day || b?.summary_date || 0).getTime();
@@ -230,17 +214,17 @@ export const fetchDailyStats = async (
 ): Promise<DailyStats> => {
     const includeStaticCollections = config.includeStaticCollections ?? true;
     const availabilityKey = config.availabilityKey;
-    const normalizedScopes = normalizeGrantedScopes(config.grantedScopes);
-    const hasDailyScope = hasAnyScope(normalizedScopes, ['daily']);
-    const canFetchSpO2 = hasAnyScope(normalizedScopes, ['spo2Daily', 'daily_spo2', 'spo2']);
-    const canFetchStress = hasDailyScope || hasAnyScope(normalizedScopes, ['stress', 'daily_stress']);
-    const canFetchResilience = hasDailyScope || hasAnyScope(normalizedScopes, ['resilience', 'daily_resilience']);
-    const canFetchHeartrate = hasAnyScope(normalizedScopes, ['heartrate']);
-    const canFetchWorkout = hasAnyScope(normalizedScopes, ['workout']);
-    const canFetchSession = hasAnyScope(normalizedScopes, ['session']);
-    const canFetchTag = hasAnyScope(normalizedScopes, ['tag', 'tag user', 'enhanced_tag']);
-    const canFetchRingConfiguration = hasAnyScope(normalizedScopes, ['ring_configuration']);
-    const canFetchHeartHealth = hasAnyScope(normalizedScopes, ['heart_health']);
+    const normalizedScopes = normalizeGrantedOuraScopes(config.grantedScopes);
+    const hasDailyScope = hasAnyOuraScope(normalizedScopes, ['daily']);
+    const canFetchSpO2 = hasAnyOuraScope(normalizedScopes, ['spo2Daily', 'daily_spo2', 'spo2']);
+    const canFetchStress = hasDailyScope || hasAnyOuraScope(normalizedScopes, ['stress', 'daily_stress']);
+    const canFetchResilience = hasDailyScope || hasAnyOuraScope(normalizedScopes, ['resilience', 'daily_resilience']);
+    const canFetchHeartrate = hasAnyOuraScope(normalizedScopes, ['heartrate']);
+    const canFetchWorkout = hasAnyOuraScope(normalizedScopes, ['workout']);
+    const canFetchSession = hasAnyOuraScope(normalizedScopes, ['session']);
+    const canFetchTag = hasAnyOuraScope(normalizedScopes, ['tag', 'tag user', 'enhanced_tag']);
+    const canFetchRingConfiguration = hasAnyOuraScope(normalizedScopes, ['ring_configuration']);
+    const canFetchHeartHealth = hasAnyOuraScope(normalizedScopes, ['heart_health']);
     const end = dateRange?.end || getFetchEndDate();
     const start = dateRange?.start || shiftDate(end, -INITIAL_RECENT_DAYS);
 
