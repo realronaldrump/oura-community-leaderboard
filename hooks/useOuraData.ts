@@ -231,7 +231,10 @@ export const fetchDailyStats = async (
     const includeStaticCollections = config.includeStaticCollections ?? true;
     const availabilityKey = config.availabilityKey;
     const normalizedScopes = normalizeGrantedScopes(config.grantedScopes);
-    const canFetchSpO2 = hasAnyScope(normalizedScopes, ['spo2Daily', 'spo2']);
+    const hasDailyScope = hasAnyScope(normalizedScopes, ['daily']);
+    const canFetchSpO2 = hasAnyScope(normalizedScopes, ['spo2Daily', 'daily_spo2', 'spo2']);
+    const canFetchStress = hasDailyScope || hasAnyScope(normalizedScopes, ['stress', 'daily_stress']);
+    const canFetchResilience = hasDailyScope || hasAnyScope(normalizedScopes, ['resilience', 'daily_resilience']);
     const canFetchHeartrate = hasAnyScope(normalizedScopes, ['heartrate']);
     const canFetchWorkout = hasAnyScope(normalizedScopes, ['workout']);
     const canFetchSession = hasAnyScope(normalizedScopes, ['session']);
@@ -257,8 +260,8 @@ export const fetchDailyStats = async (
     const hrStart = shiftDate(end, -2);
     const supplementaryRequests = [
         canFetchSpO2 ? ouraService.getDailySpO2(token, start, end, { availabilityKey }) : Promise.resolve([]),
-        ouraService.getDailyStress(token, start, end, { availabilityKey }),
-        ouraService.getDailyResilience(token, start, end, { availabilityKey }),
+        canFetchStress ? ouraService.getDailyStress(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        canFetchResilience ? ouraService.getDailyResilience(token, start, end, { availabilityKey }) : Promise.resolve([]),
         canFetchHeartrate ? ouraService.getHeartRate(token, hrStart, end, { availabilityKey }) : Promise.resolve([]),
         canFetchWorkout ? ouraService.getWorkouts(token, start, end, { availabilityKey }) : Promise.resolve([]),
         canFetchSession ? ouraService.getSessions(token, start, end, { availabilityKey }) : Promise.resolve([]),

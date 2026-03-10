@@ -1,7 +1,23 @@
-import React, { useState } from 'react';
-import { X, TrendingUp, TrendingDown, Calendar, Info, Activity, Heart, Droplets, Wind, Zap, Brain, ArrowUp, ArrowDown, Minus, Moon, Trophy, Medal } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import {
+    TrendingUp,
+    TrendingDown,
+    Calendar,
+    Info,
+    Activity,
+    Heart,
+    Droplets,
+    Wind,
+    Zap,
+    Brain,
+    Minus,
+    Moon,
+    Trophy,
+    Flame,
+    Thermometer,
+} from 'lucide-react';
 import { IOSModal, IOSListItem, IOSButton } from './ios';
-import { LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, AreaChart } from 'recharts';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatISODateForDisplay } from '../utils/date';
 
 interface MetricDataPoint {
@@ -10,17 +26,46 @@ interface MetricDataPoint {
     label?: string;
 }
 
+export type MetricDetailType =
+    | 'hrv'
+    | 'heart_rate'
+    | 'lowest_hr'
+    | 'spo2'
+    | 'stress'
+    | 'resilience'
+    | 'steps'
+    | 'calories'
+    | 'total_calories'
+    | 'distance'
+    | 'sleep_duration'
+    | 'deep_sleep'
+    | 'rem_sleep'
+    | 'light_sleep'
+    | 'efficiency'
+    | 'bedtime'
+    | 'wake_time'
+    | 'latency'
+    | 'awake_time'
+    | 'breathing_rate'
+    | 'body_temperature'
+    | 'high_activity_time'
+    | 'medium_activity_time'
+    | 'low_activity_time'
+    | 'sedentary_time';
+
 interface MetricDetailModalProps {
     isOpen: boolean;
     onClose: () => void;
-    metricType: 'hrv' | 'heart_rate' | 'lowest_hr' | 'spo2' | 'stress' | 'resilience' | 'steps' | 'calories' | 'sleep_duration' | 'deep_sleep' | 'rem_sleep' | 'efficiency';
+    metricType: MetricDetailType;
     currentValue?: number | null;
     historyData: MetricDataPoint[];
     unit?: string;
     color?: string;
     date?: string;
-    isDurationInMinutes?: boolean;
 }
+
+type MetricValueFormat = 'number' | 'duration' | 'clock' | 'signed';
+type MetricEvaluationMode = 'higher_better' | 'lower_better' | 'closer_to_zero';
 
 type MetricConfig = {
     title: string;
@@ -29,34 +74,106 @@ type MetricConfig = {
     optimalRange?: string;
     unit: string;
     color: string;
-    goodHigher: boolean;
+    valueFormat: MetricValueFormat;
+    evaluation: MetricEvaluationMode;
+    decimals?: number;
+    showTrend?: boolean;
+    showInsights?: boolean;
+    showPercentile?: boolean;
+    bestLabel?: string;
+    worstLabel?: string;
+    topListBestLabel?: string;
+    topListWorstLabel?: string;
+    bestBadge?: string;
+    worstBadge?: string;
     categories: { label: string; range: [number, number]; color: string }[];
 };
 
-const METRIC_CONFIGS: Record<string, MetricConfig> = {
+const OPEN_ENDED_RANGE_SENTINELS = new Set([999, 9999, 99999, 999999]);
+
+const formatDurationFromSeconds = (seconds: number | null | undefined): string => {
+    if (seconds == null) return '--';
+    const totalSeconds = Math.max(0, Math.round(seconds));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+    }
+
+    return `${minutes}m`;
+};
+
+const formatCompactDurationFromSeconds = (seconds: number): string => {
+    const totalSeconds = Math.max(0, Math.round(seconds));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+    if (hours > 0 && minutes === 0) return `${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+};
+
+const normalizeMinutesOfDay = (minutes: number): number => {
+    const normalized = Math.round(minutes) % 1440;
+    return normalized < 0 ? normalized + 1440 : normalized;
+};
+
+const formatClockFromMinutes = (minutes: number | null | undefined): string => {
+    if (minutes == null) return '--';
+
+    const normalized = normalizeMinutesOfDay(minutes);
+    const hours = Math.floor(normalized / 60);
+    const remainder = normalized % 60;
+    const date = new Date(Date.UTC(2000, 0, 1, hours, remainder));
+
+    return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: 'UTC',
+    });
+};
+
+const formatNumber = (value: number, decimals: number): string => {
+    if (Math.abs(value) >= 1000 && decimals === 0) {
+        return Math.round(value).toLocaleString();
+    }
+
+    return value.toLocaleString(undefined, {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+    });
+};
+
+const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
     hrv: {
         title: 'Heart Rate Variability',
         icon: <Heart className="w-4 h-4" />,
-        description: 'HRV measures the variation in time intervals between consecutive heartbeats, recorded primarily during sleep when the body is at rest. This metric is a powerful indicator of your autonomic nervous system\'s balance between stress (sympathetic) and recovery (parasympathetic). Higher HRV typically indicates better cardiovascular fitness, lower stress levels, and more effective recovery. HRV varies significantly between individuals, so compare against your personal baseline rather than absolute values.',
-        optimalRange: '50-100 ms (varies by age/fitness)',
+        description: 'HRV measures the variation in time intervals between consecutive heartbeats during sleep. Higher HRV usually reflects better recovery and stronger parasympathetic activity, so your own baseline matters more than any universal target.',
+        optimalRange: '50-100 ms (varies by age and fitness)',
         unit: 'ms',
         color: '#8B5CF6',
-        goodHigher: true,
+        valueFormat: 'number',
+        evaluation: 'higher_better',
+        decimals: 0,
         categories: [
-            { label: 'Excellent', range: [100, 999], color: '#10B981' },
-            { label: 'Good', range: [50, 100], color: '#3B82F6' },
-            { label: 'Fair', range: [30, 50], color: '#F59E0B' },
             { label: 'Low', range: [0, 30], color: '#EF4444' },
+            { label: 'Fair', range: [30, 50], color: '#F59E0B' },
+            { label: 'Good', range: [50, 100], color: '#3B82F6' },
+            { label: 'Excellent', range: [100, 999], color: '#10B981' },
         ],
     },
     heart_rate: {
         title: 'Average Heart Rate',
         icon: <Activity className="w-4 h-4" />,
-        description: 'Your average heart rate recorded during sleep periods, when the body is at rest. This metric provides insight into your cardiovascular health and how well your body recovers during sleep. A lower sleeping heart rate generally indicates better cardiovascular fitness and more efficient heart function. This value typically runs 10-20 bpm lower than your daytime resting heart rate due to the body\'s relaxed state during sleep.',
-        optimalRange: '40-60 bpm (during sleep)',
+        description: 'Your average sleeping heart rate shows how much effort your cardiovascular system needed overnight. Lower values usually indicate stronger recovery and less physiological strain.',
+        optimalRange: '40-60 bpm during sleep',
         unit: 'bpm',
         color: '#EF4444',
-        goodHigher: false,
+        valueFormat: 'number',
+        evaluation: 'lower_better',
+        decimals: 0,
         categories: [
             { label: 'Excellent', range: [0, 50], color: '#10B981' },
             { label: 'Good', range: [50, 60], color: '#3B82F6' },
@@ -67,11 +184,13 @@ const METRIC_CONFIGS: Record<string, MetricConfig> = {
     lowest_hr: {
         title: 'Lowest Heart Rate',
         icon: <Heart className="w-4 h-4" />,
-        description: 'The minimum heart rate recorded during your sleep period, which typically occurs during deep sleep phases when the body is in its most relaxed state. This metric reflects your heart\'s efficiency and cardiovascular fitness level. A lower sleeping minimum indicates that your heart doesn\'t have to work as hard to maintain circulation during deep rest. This value often improves with consistent aerobic exercise and good sleep quality.',
+        description: 'The minimum heart rate reached overnight often lines up with your deepest recovery. Lower values tend to suggest better cardiovascular efficiency and calmer overnight load.',
         optimalRange: '35-45 bpm',
         unit: 'bpm',
-        color: '#EF4444',
-        goodHigher: false,
+        color: '#F87171',
+        valueFormat: 'number',
+        evaluation: 'lower_better',
+        decimals: 0,
         categories: [
             { label: 'Excellent', range: [0, 40], color: '#10B981' },
             { label: 'Good', range: [40, 50], color: '#3B82F6' },
@@ -82,136 +201,453 @@ const METRIC_CONFIGS: Record<string, MetricConfig> = {
     spo2: {
         title: 'Blood Oxygen (SpO2)',
         icon: <Droplets className="w-4 h-4" />,
-        description: 'Blood oxygen saturation percentage, indicating how much oxygen is being carried by red blood cells throughout your body. Measured during sleep, this metric reveals how effectively your respiratory system oxygenates your blood. Healthy SpO2 levels should remain consistently high throughout the night. Significant drops or consistently lower readings may indicate breathing issues, sleep apnea, or other respiratory conditions that could be disrupting sleep quality.',
+        description: 'SpO2 reflects how effectively oxygen is circulating through your blood during sleep. Consistently high readings generally point to steady overnight breathing.',
         optimalRange: '95-100%',
         unit: '%',
-        color: '#3B82F6',
-        goodHigher: true,
+        color: '#06B6D4',
+        valueFormat: 'number',
+        evaluation: 'higher_better',
+        decimals: 1,
         categories: [
-            { label: 'Excellent', range: [98, 100], color: '#10B981' },
-            { label: 'Good', range: [95, 98], color: '#3B82F6' },
-            { label: 'Fair', range: [90, 95], color: '#F59E0B' },
             { label: 'Low', range: [0, 90], color: '#EF4444' },
+            { label: 'Fair', range: [90, 95], color: '#F59E0B' },
+            { label: 'Good', range: [95, 98], color: '#3B82F6' },
+            { label: 'Excellent', range: [98, 101], color: '#10B981' },
         ],
     },
     stress: {
-        title: 'Stress Levels',
+        title: 'High Stress Time',
         icon: <Brain className="w-4 h-4" />,
-        description: 'Duration spent in elevated stress states throughout the day, measured through heart rate variability patterns and other physiological markers. This metric tracks both sympathetic nervous system activation (stress) and parasympathetic activation (recovery). A healthy day includes balanced periods of stress (necessary for adaptation) and recovery (essential for repair). Too much stress without adequate recovery can lead to burnout, while too much recovery without stress challenges may indicate under-stimulation.',
-        optimalRange: 'More recovery than stress',
-        unit: 'minutes',
+        description: 'This tracks how long Oura detected you in high-stress states across the day. Lower totals usually mean your day included more balance between load and recovery.',
+        optimalRange: 'Under 1 hour of high stress',
+        unit: '',
         color: '#F59E0B',
-        goodHigher: false,
+        valueFormat: 'duration',
+        evaluation: 'lower_better',
+        decimals: 0,
+        bestLabel: 'Lowest (All Time)',
+        worstLabel: 'Highest (All Time)',
+        topListBestLabel: 'Lowest',
+        topListWorstLabel: 'Highest',
+        bestBadge: 'Lowest high-stress day',
+        worstBadge: 'Highest high-stress day',
         categories: [
-            { label: 'Low Stress', range: [0, 30], color: '#10B981' },
-            { label: 'Moderate', range: [30, 60], color: '#3B82F6' },
-            { label: 'High Stress', range: [60, 120], color: '#F59E0B' },
-            { label: 'Very High', range: [120, 999], color: '#EF4444' },
+            { label: 'Restored', range: [0, 3600], color: '#10B981' },
+            { label: 'Moderate', range: [3600, 7200], color: '#3B82F6' },
+            { label: 'High', range: [7200, 10800], color: '#F59E0B' },
+            { label: 'Very High', range: [10800, 999999], color: '#EF4444' },
         ],
     },
     resilience: {
         title: 'Resilience Score',
         icon: <Zap className="w-4 h-4" />,
-        description: 'A composite score measuring how effectively your body recovers from physical and mental stress. This metric analyzes your heart rate variability, heart rate recovery patterns, sleep quality, and recovery periods following activity. Higher resilience indicates your body can bounce back quickly from challenges, meaning you can handle more stress without negative effects. Building resilience involves consistent sleep, proper nutrition, regular exercise, and stress management techniques.',
-        optimalRange: 'Above 70',
+        description: 'Resilience reflects how well you recover from strain over time. Higher values mean stronger recovery support and better ability to absorb physical or mental stress.',
+        optimalRange: '75+',
         unit: 'score',
         color: '#10B981',
-        goodHigher: true,
+        valueFormat: 'number',
+        evaluation: 'higher_better',
+        decimals: 0,
         categories: [
-            { label: 'Exceptional', range: [90, 100], color: '#10B981' },
-            { label: 'Strong', range: [75, 90], color: '#3B82F6' },
-            { label: 'Solid', range: [50, 75], color: '#F59E0B' },
-            { label: 'Limited', range: [0, 50], color: '#EF4444' },
+            { label: 'Limited', range: [0, 35], color: '#EF4444' },
+            { label: 'Adequate', range: [35, 55], color: '#F59E0B' },
+            { label: 'Solid', range: [55, 75], color: '#60A5FA' },
+            { label: 'Strong', range: [75, 90], color: '#6EE7B7' },
+            { label: 'Exceptional', range: [90, 101], color: '#10B981' },
         ],
     },
     steps: {
         title: 'Daily Steps',
         icon: <Activity className="w-4 h-4" />,
-        description: 'Total number of steps recorded throughout the entire day, measuring your overall movement and activity level. This metric captures all walking and running activities, providing a comprehensive view of your daily movement. Regular walking improves cardiovascular health, helps maintain healthy weight, boosts mood, and increases energy levels. Steps are accumulated from midnight to midnight and include both intentional exercise and incidental movement throughout your daily activities.',
+        description: 'Steps capture total daily movement, from deliberate workouts to incidental walking. Higher counts generally mean a more active day overall.',
         optimalRange: '7,000-10,000 steps',
         unit: 'steps',
-        color: '#06B6D4',
-        goodHigher: true,
+        color: '#FBBF24',
+        valueFormat: 'number',
+        evaluation: 'higher_better',
+        decimals: 0,
         categories: [
-            { label: 'Excellent', range: [10000, 99999], color: '#10B981' },
-            { label: 'Good', range: [7000, 10000], color: '#3B82F6' },
-            { label: 'Fair', range: [4000, 7000], color: '#F59E0B' },
             { label: 'Low', range: [0, 4000], color: '#EF4444' },
+            { label: 'Fair', range: [4000, 7000], color: '#F59E0B' },
+            { label: 'Good', range: [7000, 10000], color: '#3B82F6' },
+            { label: 'Excellent', range: [10000, 99999], color: '#10B981' },
         ],
     },
     calories: {
         title: 'Active Calories',
         icon: <Zap className="w-4 h-4" />,
-        description: 'Calories burned through physical activity beyond your resting metabolic rate. This metric captures energy expenditure from walking, running, workouts, and other movements throughout the day. Active calories differ from total calories (which includes your baseline metabolic burn) by focusing specifically on the energy used during movement. Tracking active calories helps you understand your exercise intensity and overall physical activity level.',
-        optimalRange: '400-800+ (varies by activity)',
+        description: 'Active calories represent the energy you burned through movement beyond baseline metabolism. Higher values typically reflect more total exercise or activity load.',
+        optimalRange: '400-800+ kcal',
         unit: 'kcal',
         color: '#F59E0B',
-        goodHigher: true,
+        valueFormat: 'number',
+        evaluation: 'higher_better',
+        decimals: 0,
         categories: [
-            { label: 'Excellent', range: [800, 9999], color: '#10B981' },
-            { label: 'Good', range: [500, 800], color: '#3B82F6' },
-            { label: 'Fair', range: [300, 500], color: '#F59E0B' },
             { label: 'Low', range: [0, 300], color: '#EF4444' },
+            { label: 'Fair', range: [300, 500], color: '#F59E0B' },
+            { label: 'Good', range: [500, 800], color: '#3B82F6' },
+            { label: 'Excellent', range: [800, 9999], color: '#10B981' },
+        ],
+    },
+    total_calories: {
+        title: 'Total Calories',
+        icon: <Flame className="w-4 h-4" />,
+        description: 'Total calories combine your resting metabolic burn with activity. This reflects the full amount of energy your body used that day.',
+        optimalRange: 'Varies by size and activity level',
+        unit: 'kcal',
+        color: '#F97316',
+        valueFormat: 'number',
+        evaluation: 'higher_better',
+        decimals: 0,
+        categories: [
+            { label: 'Low', range: [0, 2000], color: '#EF4444' },
+            { label: 'Steady', range: [2000, 2500], color: '#F59E0B' },
+            { label: 'Active', range: [2500, 3000], color: '#3B82F6' },
+            { label: 'Very Active', range: [3000, 99999], color: '#10B981' },
+        ],
+    },
+    distance: {
+        title: 'Walking Distance',
+        icon: <Activity className="w-4 h-4" />,
+        description: 'Equivalent walking distance is Oura’s estimate of how far your daily movement adds up to. It is a simple way to compare activity volume across days.',
+        optimalRange: '4-6+ miles',
+        unit: 'mi',
+        color: '#38BDF8',
+        valueFormat: 'number',
+        evaluation: 'higher_better',
+        decimals: 1,
+        categories: [
+            { label: 'Low', range: [0, 2], color: '#EF4444' },
+            { label: 'Fair', range: [2, 4], color: '#F59E0B' },
+            { label: 'Good', range: [4, 6], color: '#3B82F6' },
+            { label: 'Excellent', range: [6, 999], color: '#10B981' },
         ],
     },
     sleep_duration: {
         title: 'Total Sleep Duration',
         icon: <Moon className="w-4 h-4" />,
-        description: 'The total time spent actually asleep during your sleep period, measured from when you fall asleep until you wake up. This excludes awake time within your sleep period (unlike "Time in Bed" which includes time spent trying to fall asleep or brief awakenings). Most adults need 7-9 hours of quality sleep for optimal health, cognitive function, and physical recovery. This metric includes all sleep stages: light sleep, deep sleep, and REM sleep.',
+        description: 'Total sleep duration measures the time you were actually asleep, excluding time awake in bed. Consistent sleep quantity is one of the clearest recovery signals on the board.',
         optimalRange: '7-9 hours',
-        unit: 'hours',
-        color: '#6366F1',
-        goodHigher: true,
+        unit: '',
+        color: '#60A5FA',
+        valueFormat: 'duration',
+        evaluation: 'higher_better',
+        decimals: 0,
         categories: [
-            { label: 'Optimal', range: [420, 540], color: '#10B981' },
-            { label: 'Good', range: [360, 420], color: '#3B82F6' },
-            { label: 'Fair', range: [300, 360], color: '#F59E0B' },
-            { label: 'Low', range: [0, 300], color: '#EF4444' },
+            { label: 'Low', range: [0, 18000], color: '#EF4444' },
+            { label: 'Fair', range: [18000, 21600], color: '#F59E0B' },
+            { label: 'Good', range: [21600, 25200], color: '#3B82F6' },
+            { label: 'Optimal', range: [25200, 32400], color: '#10B981' },
+            { label: 'Extended', range: [32400, 999999], color: '#10B981' },
         ],
     },
     deep_sleep: {
         title: 'Deep Sleep Duration',
         icon: <Wind className="w-4 h-4" />,
-        description: 'The time spent in deep sleep stages (N3 sleep), the most restorative phase of sleep where physical recovery occurs. During deep sleep, your body repairs tissues, builds muscle and bone, strengthens the immune system, and releases essential hormones. This stage typically occurs most in the first half of the night and represents about 15-20% of total sleep in healthy adults. Factors like exercise, temperature, and stress levels can impact deep sleep quality.',
+        description: 'Deep sleep is the most physically restorative phase of sleep. More time here usually points to stronger overnight repair and recovery.',
         optimalRange: '1-2 hours',
-        unit: 'hours',
+        unit: '',
         color: '#1E40AF',
-        goodHigher: true,
+        valueFormat: 'duration',
+        evaluation: 'higher_better',
+        decimals: 0,
         categories: [
-            { label: 'Excellent', range: [90, 999], color: '#10B981' },
-            { label: 'Good', range: [60, 90], color: '#3B82F6' },
-            { label: 'Fair', range: [30, 60], color: '#F59E0B' },
-            { label: 'Low', range: [0, 30], color: '#EF4444' },
+            { label: 'Low', range: [0, 1800], color: '#EF4444' },
+            { label: 'Fair', range: [1800, 3600], color: '#F59E0B' },
+            { label: 'Good', range: [3600, 5400], color: '#3B82F6' },
+            { label: 'Excellent', range: [5400, 999999], color: '#10B981' },
         ],
     },
     rem_sleep: {
         title: 'REM Sleep Duration',
         icon: <Brain className="w-4 h-4" />,
-        description: 'The time spent in REM (Rapid Eye Movement) sleep, a critical stage associated with dreaming, emotional processing, creativity, and memory consolidation. REM sleep typically occurs in longer periods during the second half of the night and comprises about 20-25% of total sleep. This stage is characterized by increased brain activity, rapid eye movements, and temporary muscle paralysis. REM sleep is essential for cognitive function, emotional balance, and learning new skills.',
+        description: 'REM sleep supports memory, learning, and emotional processing. More REM usually means you gave yourself enough time for the later sleep cycles to unfold.',
         optimalRange: '1.5-2 hours',
-        unit: 'hours',
+        unit: '',
         color: '#8B5CF6',
-        goodHigher: true,
+        valueFormat: 'duration',
+        evaluation: 'higher_better',
+        decimals: 0,
         categories: [
-            { label: 'Excellent', range: [120, 999], color: '#10B981' },
-            { label: 'Good', range: [90, 120], color: '#3B82F6' },
-            { label: 'Fair', range: [60, 90], color: '#F59E0B' },
-            { label: 'Low', range: [0, 60], color: '#EF4444' },
+            { label: 'Low', range: [0, 3600], color: '#EF4444' },
+            { label: 'Fair', range: [3600, 5400], color: '#F59E0B' },
+            { label: 'Good', range: [5400, 7200], color: '#3B82F6' },
+            { label: 'Excellent', range: [7200, 999999], color: '#10B981' },
+        ],
+    },
+    light_sleep: {
+        title: 'Light Sleep Duration',
+        icon: <Moon className="w-4 h-4" />,
+        description: 'Light sleep makes up the largest share of most nights. It helps transition between wakefulness, deep sleep, and REM, so the main value here is comparing against your own baseline.',
+        optimalRange: 'Typically 3-5 hours',
+        unit: '',
+        color: '#93C5FD',
+        valueFormat: 'duration',
+        evaluation: 'higher_better',
+        decimals: 0,
+        showInsights: false,
+        showPercentile: false,
+        bestLabel: 'Highest (All Time)',
+        worstLabel: 'Lowest (All Time)',
+        topListBestLabel: 'Highest',
+        topListWorstLabel: 'Lowest',
+        bestBadge: 'Highest light sleep night',
+        worstBadge: 'Lowest light sleep night',
+        categories: [
+            { label: 'Low', range: [0, 9000], color: '#EF4444' },
+            { label: 'Typical', range: [9000, 14400], color: '#F59E0B' },
+            { label: 'High', range: [14400, 19800], color: '#3B82F6' },
+            { label: 'Very High', range: [19800, 999999], color: '#10B981' },
         ],
     },
     efficiency: {
         title: 'Sleep Efficiency',
         icon: <Activity className="w-4 h-4" />,
-        description: 'The percentage of time in bed actually spent sleeping, calculated by dividing total sleep duration by total time in bed. This metric measures sleep quality and restlessness. Higher efficiency indicates you fall asleep quickly and stay asleep with minimal awakenings. Factors that can reduce sleep efficiency include difficulty falling asleep, frequent nighttime awakenings, waking too early, or spending time in bed without sleeping. Good sleep hygiene practices often improve this metric.',
+        description: 'Sleep efficiency is the percentage of time in bed that you were actually asleep. Higher efficiency usually means you fell asleep faster and spent less time awake overnight.',
         optimalRange: '85-95%',
         unit: '%',
-        color: '#3B82F6',
-        goodHigher: true,
+        color: '#34D399',
+        valueFormat: 'number',
+        evaluation: 'higher_better',
+        decimals: 0,
         categories: [
-            { label: 'Excellent', range: [90, 100], color: '#10B981' },
-            { label: 'Good', range: [85, 90], color: '#3B82F6' },
-            { label: 'Fair', range: [80, 85], color: '#F59E0B' },
             { label: 'Low', range: [0, 80], color: '#EF4444' },
+            { label: 'Fair', range: [80, 85], color: '#F59E0B' },
+            { label: 'Good', range: [85, 90], color: '#3B82F6' },
+            { label: 'Excellent', range: [90, 101], color: '#10B981' },
+        ],
+    },
+    bedtime: {
+        title: 'Bedtime',
+        icon: <Moon className="w-4 h-4" />,
+        description: 'Bedtime tracks when your main sleep session started. The biggest value here is seeing how consistent your timing is from night to night.',
+        optimalRange: 'Roughly 9:00 PM to midnight, consistently',
+        unit: '',
+        color: '#818CF8',
+        valueFormat: 'clock',
+        evaluation: 'lower_better',
+        decimals: 0,
+        showTrend: false,
+        showInsights: false,
+        showPercentile: false,
+        bestLabel: 'Earliest (All Time)',
+        worstLabel: 'Latest (All Time)',
+        topListBestLabel: 'Earliest',
+        topListWorstLabel: 'Latest',
+        bestBadge: 'Earliest bedtime',
+        worstBadge: 'Latest bedtime',
+        categories: [
+            { label: 'Very Early', range: [1140, 1260], color: '#3B82F6' },
+            { label: 'Early', range: [1260, 1380], color: '#60A5FA' },
+            { label: 'Typical', range: [1380, 1470], color: '#10B981' },
+            { label: 'Late', range: [1470, 1590], color: '#F59E0B' },
+            { label: 'Very Late', range: [1590, 1800], color: '#EF4444' },
+        ],
+    },
+    wake_time: {
+        title: 'Wake Time',
+        icon: <Activity className="w-4 h-4" />,
+        description: 'Wake time tracks when your main sleep session ended. The chart is most useful for spotting consistency and drift across your recent schedule.',
+        optimalRange: 'Roughly 6:00 AM to 8:30 AM, consistently',
+        unit: '',
+        color: '#FACC15',
+        valueFormat: 'clock',
+        evaluation: 'lower_better',
+        decimals: 0,
+        showTrend: false,
+        showInsights: false,
+        showPercentile: false,
+        bestLabel: 'Earliest (All Time)',
+        worstLabel: 'Latest (All Time)',
+        topListBestLabel: 'Earliest',
+        topListWorstLabel: 'Latest',
+        bestBadge: 'Earliest wake time',
+        worstBadge: 'Latest wake time',
+        categories: [
+            { label: 'Very Early', range: [240, 360], color: '#3B82F6' },
+            { label: 'Early', range: [360, 450], color: '#60A5FA' },
+            { label: 'Typical', range: [450, 570], color: '#10B981' },
+            { label: 'Late', range: [570, 690], color: '#F59E0B' },
+            { label: 'Very Late', range: [690, 900], color: '#EF4444' },
+        ],
+    },
+    latency: {
+        title: 'Sleep Latency',
+        icon: <Moon className="w-4 h-4" />,
+        description: 'Sleep latency is how long it took to fall asleep after getting into bed. Lower values generally mean you were ready for sleep and settled quickly.',
+        optimalRange: 'Under 15 minutes',
+        unit: '',
+        color: '#10B981',
+        valueFormat: 'duration',
+        evaluation: 'lower_better',
+        decimals: 0,
+        bestLabel: 'Shortest (All Time)',
+        worstLabel: 'Longest (All Time)',
+        topListBestLabel: 'Shortest',
+        topListWorstLabel: 'Longest',
+        bestBadge: 'Shortest sleep latency',
+        worstBadge: 'Longest sleep latency',
+        categories: [
+            { label: 'Fast', range: [0, 900], color: '#10B981' },
+            { label: 'Normal', range: [900, 1800], color: '#3B82F6' },
+            { label: 'Slow', range: [1800, 2700], color: '#F59E0B' },
+            { label: 'Very Slow', range: [2700, 999999], color: '#EF4444' },
+        ],
+    },
+    awake_time: {
+        title: 'Awake Time',
+        icon: <Moon className="w-4 h-4" />,
+        description: 'Awake time measures the amount of time you were awake during your main sleep session. Lower values usually mean more continuous sleep with fewer disruptions.',
+        optimalRange: 'Under 30 minutes',
+        unit: '',
+        color: '#F97316',
+        valueFormat: 'duration',
+        evaluation: 'lower_better',
+        decimals: 0,
+        bestLabel: 'Shortest (All Time)',
+        worstLabel: 'Longest (All Time)',
+        topListBestLabel: 'Shortest',
+        topListWorstLabel: 'Longest',
+        bestBadge: 'Shortest awake time',
+        worstBadge: 'Longest awake time',
+        categories: [
+            { label: 'Excellent', range: [0, 1800], color: '#10B981' },
+            { label: 'Good', range: [1800, 3600], color: '#3B82F6' },
+            { label: 'Fair', range: [3600, 5400], color: '#F59E0B' },
+            { label: 'Restless', range: [5400, 999999], color: '#EF4444' },
+        ],
+    },
+    breathing_rate: {
+        title: 'Breathing Rate',
+        icon: <Wind className="w-4 h-4" />,
+        description: 'Average breathing rate during sleep can highlight changes in strain, illness, or sleep quality. The most useful comparison is usually your own normal range.',
+        optimalRange: 'About 12-16 br/min',
+        unit: 'br/min',
+        color: '#22C55E',
+        valueFormat: 'number',
+        evaluation: 'lower_better',
+        decimals: 1,
+        bestLabel: 'Lowest (All Time)',
+        worstLabel: 'Highest (All Time)',
+        topListBestLabel: 'Lowest',
+        topListWorstLabel: 'Highest',
+        bestBadge: 'Lowest breathing rate',
+        worstBadge: 'Highest breathing rate',
+        categories: [
+            { label: 'Calm', range: [0, 14], color: '#10B981' },
+            { label: 'Typical', range: [14, 16], color: '#3B82F6' },
+            { label: 'Elevated', range: [16, 18], color: '#F59E0B' },
+            { label: 'High', range: [18, 40], color: '#EF4444' },
+        ],
+    },
+    body_temperature: {
+        title: 'Body Temperature Deviation',
+        icon: <Thermometer className="w-4 h-4" />,
+        description: 'This shows how far your overnight temperature was from baseline. Values closer to zero usually mean your body was operating within its normal range.',
+        optimalRange: 'Near 0.0°F from baseline',
+        unit: '°F',
+        color: '#F87171',
+        valueFormat: 'signed',
+        evaluation: 'closer_to_zero',
+        decimals: 1,
+        showTrend: false,
+        showInsights: false,
+        showPercentile: false,
+        bestLabel: 'Closest to Baseline (All Time)',
+        worstLabel: 'Farthest from Baseline (All Time)',
+        topListBestLabel: 'Closest to Baseline',
+        topListWorstLabel: 'Farthest from Baseline',
+        bestBadge: 'Closest to baseline',
+        worstBadge: 'Farthest from baseline',
+        categories: [
+            { label: 'Below Baseline', range: [-4, -1], color: '#60A5FA' },
+            { label: 'Slightly Low', range: [-1, -0.4], color: '#93C5FD' },
+            { label: 'Stable', range: [-0.4, 0.4], color: '#10B981' },
+            { label: 'Elevated', range: [0.4, 1], color: '#F59E0B' },
+            { label: 'High', range: [1, 4], color: '#EF4444' },
+        ],
+    },
+    high_activity_time: {
+        title: 'High Activity Time',
+        icon: <Flame className="w-4 h-4" />,
+        description: 'High activity time reflects your most intense movement blocks during the day. More time here usually means a harder training load.',
+        optimalRange: '45+ minutes on active days',
+        unit: '',
+        color: '#EF4444',
+        valueFormat: 'duration',
+        evaluation: 'higher_better',
+        decimals: 0,
+        categories: [
+            { label: 'Low', range: [0, 900], color: '#EF4444' },
+            { label: 'Fair', range: [900, 2700], color: '#F59E0B' },
+            { label: 'Good', range: [2700, 5400], color: '#3B82F6' },
+            { label: 'High', range: [5400, 999999], color: '#10B981' },
+        ],
+    },
+    medium_activity_time: {
+        title: 'Medium Activity Time',
+        icon: <Activity className="w-4 h-4" />,
+        description: 'Medium activity time captures sustained everyday movement and moderate exercise. It is a good proxy for how much of the day you stayed meaningfully active.',
+        optimalRange: '1-2+ hours',
+        unit: '',
+        color: '#F59E0B',
+        valueFormat: 'duration',
+        evaluation: 'higher_better',
+        decimals: 0,
+        categories: [
+            { label: 'Low', range: [0, 1800], color: '#EF4444' },
+            { label: 'Fair', range: [1800, 3600], color: '#F59E0B' },
+            { label: 'Good', range: [3600, 7200], color: '#3B82F6' },
+            { label: 'High', range: [7200, 999999], color: '#10B981' },
+        ],
+    },
+    low_activity_time: {
+        title: 'Low Activity Time',
+        icon: <Activity className="w-4 h-4" />,
+        description: 'Low activity time represents easy movement such as walking around the house or doing errands. It is best read as part of your overall activity balance, not a score to maximize in isolation.',
+        optimalRange: 'Use as a baseline trend',
+        unit: '',
+        color: '#22C55E',
+        valueFormat: 'duration',
+        evaluation: 'higher_better',
+        decimals: 0,
+        showInsights: false,
+        showPercentile: false,
+        bestLabel: 'Highest (All Time)',
+        worstLabel: 'Lowest (All Time)',
+        topListBestLabel: 'Highest',
+        topListWorstLabel: 'Lowest',
+        bestBadge: 'Highest low-activity time',
+        worstBadge: 'Lowest low-activity time',
+        categories: [
+            { label: 'Low', range: [0, 3600], color: '#EF4444' },
+            { label: 'Typical', range: [3600, 7200], color: '#F59E0B' },
+            { label: 'High', range: [7200, 14400], color: '#3B82F6' },
+            { label: 'Very High', range: [14400, 999999], color: '#10B981' },
+        ],
+    },
+    sedentary_time: {
+        title: 'Sedentary Time',
+        icon: <Activity className="w-4 h-4" />,
+        description: 'Sedentary time is how long the day was dominated by inactivity. Lower values usually mean you broke up sitting time more effectively.',
+        optimalRange: 'Under 5-8 hours',
+        unit: '',
+        color: '#64748B',
+        valueFormat: 'duration',
+        evaluation: 'lower_better',
+        decimals: 0,
+        bestLabel: 'Shortest (All Time)',
+        worstLabel: 'Longest (All Time)',
+        topListBestLabel: 'Shortest',
+        topListWorstLabel: 'Longest',
+        bestBadge: 'Shortest sedentary day',
+        worstBadge: 'Longest sedentary day',
+        categories: [
+            { label: 'Low', range: [0, 18000], color: '#10B981' },
+            { label: 'Moderate', range: [18000, 28800], color: '#3B82F6' },
+            { label: 'High', range: [28800, 39600], color: '#F59E0B' },
+            { label: 'Very High', range: [39600, 999999], color: '#EF4444' },
         ],
     },
 };
@@ -225,24 +661,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
     unit,
     color,
     date,
-    isDurationInMinutes = false,
 }) => {
-    const formatDurationValue = (value: number | null | undefined, unit: string | undefined): string => {
-        if (value == null) return '--';
-        if (isDurationInMinutes) {
-            const hours = Math.floor(value / 60);
-            const minutes = value % 60;
-            return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-        }
-        return `${value}${unit ? ` ${unit}` : ''}`;
-    };
-
-    const formatDurationFromSeconds = (seconds: number | null | undefined): string => {
-        if (seconds == null) return '--';
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-    };
     const config = METRIC_CONFIGS[metricType] || METRIC_CONFIGS.hrv;
     const effectiveColor = color || config.color;
     const effectiveUnit = unit || config.unit;
@@ -250,97 +669,142 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
     const [selectedTimeRange, setSelectedTimeRange] = useState<'7d' | '14d' | '30d'>('7d');
     const [selectedStatistic, setSelectedStatistic] = useState<'best' | 'worst' | null>(null);
 
+    useEffect(() => {
+        if (!isOpen) return;
+        setSelectedTimeRange('7d');
+        setSelectedStatistic(null);
+    }, [isOpen, metricType]);
+
+    const showTrend = config.showTrend ?? config.valueFormat !== 'clock';
+    const showInsights = config.showInsights ?? true;
+    const showPercentile = config.showPercentile ?? true;
+
+    const formatMetricValue = (
+        value: number | null | undefined,
+        options?: { includeUnit?: boolean; compact?: boolean }
+    ): string => {
+        if (value == null) return '--';
+
+        const includeUnit = options?.includeUnit ?? true;
+        const compact = options?.compact ?? false;
+
+        switch (config.valueFormat) {
+            case 'duration':
+                return compact ? formatCompactDurationFromSeconds(value) : formatDurationFromSeconds(value);
+            case 'clock':
+                return formatClockFromMinutes(value);
+            case 'signed': {
+                const formatted = `${value > 0 ? '+' : ''}${formatNumber(value, config.decimals ?? 1)}`;
+                return includeUnit ? `${formatted} ${effectiveUnit}` : formatted;
+            }
+            case 'number':
+            default: {
+                const formatted = formatNumber(value, config.decimals ?? 0);
+                return includeUnit && effectiveUnit ? `${formatted} ${effectiveUnit}` : formatted;
+            }
+        }
+    };
+
+    const compareMetricValues = (left: number, right: number, sortBy: 'best' | 'worst') => {
+        switch (config.evaluation) {
+            case 'lower_better':
+                return sortBy === 'best' ? left - right : right - left;
+            case 'closer_to_zero':
+                return sortBy === 'best'
+                    ? Math.abs(left) - Math.abs(right)
+                    : Math.abs(right) - Math.abs(left);
+            case 'higher_better':
+            default:
+                return sortBy === 'best' ? right - left : left - right;
+        }
+    };
+
     const filterDataByRange = (data: MetricDataPoint[], range: '7d' | '14d' | '30d') => {
         const days = range === '7d' ? 7 : range === '14d' ? 14 : 30;
         return data.slice(0, days).reverse();
     };
 
     const getTopEntries = (sortBy: 'best' | 'worst', limit: number = 10) => {
-        const sorted = [...historyData].sort((a, b) => {
-            if (sortBy === 'best') {
-                return config.goodHigher ? b.value - a.value : a.value - b.value;
-            } else {
-                return config.goodHigher ? a.value - b.value : b.value - a.value;
-            }
-        });
+        const sorted = [...historyData].sort((a, b) => compareMetricValues(a.value, b.value, sortBy));
         return sorted.slice(0, limit);
     };
 
     const filteredData = filterDataByRange(historyData, selectedTimeRange);
 
     const calculateTrend = () => {
-        if (filteredData.length < 2) return null;
+        if (!showTrend || filteredData.length < 2) return null;
+
         const recent = filteredData.slice(0, Math.floor(filteredData.length / 2));
         const older = filteredData.slice(Math.floor(filteredData.length / 2));
 
-        const recentAvg = recent.reduce((sum, d) => sum + d.value, 0) / recent.length;
-        const olderAvg = older.reduce((sum, d) => sum + d.value, 0) / older.length;
+        if (recent.length === 0 || older.length === 0) return null;
+
+        const recentAvg = recent.reduce((sum, point) => sum + point.value, 0) / recent.length;
+        const olderAvg = older.reduce((sum, point) => sum + point.value, 0) / older.length;
+        if (olderAvg === 0) return null;
 
         const change = ((recentAvg - olderAvg) / olderAvg) * 100;
         return {
             change,
             direction: change > 0 ? 'up' : change < 0 ? 'down' : 'stable',
+            recentAvg,
+            olderAvg,
         };
     };
 
     const trend = calculateTrend();
-
     const isTrendImproving = trend
         ? trend.direction === 'stable'
             ? null
-            : config.goodHigher
+            : config.evaluation === 'higher_better'
                 ? trend.direction === 'up'
-                : trend.direction === 'down'
+                : config.evaluation === 'lower_better'
+                    ? trend.direction === 'down'
+                    : Math.abs(trend.recentAvg) < Math.abs(trend.olderAvg)
         : null;
 
-    const OPEN_ENDED_RANGE_SENTINELS = new Set([999, 9999, 99999]);
-    const usesMinuteThresholds = ['sleep_duration', 'deep_sleep', 'rem_sleep'].includes(metricType);
-
-    const toThresholdUnits = (value: number) => {
-        if (!usesMinuteThresholds) return value;
-        return isDurationInMinutes ? value : value / 60;
-    };
-
-    const formatThresholdValue = (value: number) => {
-        if (usesMinuteThresholds) {
-            if (value >= 60) {
-                const hours = value / 60;
-                return `${Number.isInteger(hours) ? hours : Number(hours.toFixed(1))}h`;
-            }
-            return `${Math.round(value)}m`;
-        }
-        if (Math.abs(value) >= 1000) return Math.round(value).toLocaleString();
-        return Number.isInteger(value) ? `${value}` : Number(value.toFixed(1)).toString();
-    };
+    const formatThresholdValue = (value: number) => formatMetricValue(value, { includeUnit: false, compact: true });
 
     const formatCategoryRangeLabel = (range: [number, number]) => {
         const [start, end] = range;
         const startLabel = formatThresholdValue(start);
+
         if (OPEN_ENDED_RANGE_SENTINELS.has(end)) {
-            return usesMinuteThresholds ? `${startLabel}+` : `${startLabel}+ ${effectiveUnit}`;
+            if (config.valueFormat === 'duration' || config.valueFormat === 'clock') {
+                return `${startLabel}+`;
+            }
+            return effectiveUnit ? `${startLabel}+ ${effectiveUnit}` : `${startLabel}+`;
         }
+
         const endLabel = formatThresholdValue(end);
-        return usesMinuteThresholds ? `${startLabel}-${endLabel}` : `${startLabel}-${endLabel} ${effectiveUnit}`;
+        if (config.valueFormat === 'duration' || config.valueFormat === 'clock') {
+            return `${startLabel}-${endLabel}`;
+        }
+
+        return effectiveUnit ? `${startLabel}-${endLabel} ${effectiveUnit}` : `${startLabel}-${endLabel}`;
     };
 
     const getCategory = (value: number) => {
-        const comparableValue = toThresholdUnits(value);
-        const match = config.categories.find((cat) => {
-            const upperBound = OPEN_ENDED_RANGE_SENTINELS.has(cat.range[1]) ? Number.POSITIVE_INFINITY : cat.range[1];
-            return comparableValue >= cat.range[0] && comparableValue < upperBound;
+        const category = config.categories.find((candidate) => {
+            const upperBound = OPEN_ENDED_RANGE_SENTINELS.has(candidate.range[1])
+                ? Number.POSITIVE_INFINITY
+                : candidate.range[1];
+            return value >= candidate.range[0] && value < upperBound;
         });
-        if (match) return match;
 
-        const sortedByStart = [...config.categories].sort((a, b) => a.range[0] - b.range[0]);
-        if (comparableValue < sortedByStart[0].range[0]) return sortedByStart[0];
-        return sortedByStart[sortedByStart.length - 1];
+        if (category) return category;
+
+        const sortedCategories = [...config.categories].sort((a, b) => a.range[0] - b.range[0]);
+        if (value < sortedCategories[0].range[0]) return sortedCategories[0];
+        return sortedCategories[sortedCategories.length - 1];
     };
 
     const currentCategory = currentValue !== null && currentValue !== undefined ? getCategory(currentValue) : null;
 
     const categoryBoundaries = Array.from(
-        new Set(config.categories.flatMap((cat) => [cat.range[0], cat.range[1]]))
+        new Set(config.categories.flatMap((category) => [category.range[0], category.range[1]]))
     ).sort((a, b) => a - b);
+
     const rawAxisMin = categoryBoundaries[0] ?? 0;
     const rawAxisMax = categoryBoundaries[categoryBoundaries.length - 1] ?? 100;
     const hasOpenEndedTop = OPEN_ENDED_RANGE_SENTINELS.has(rawAxisMax);
@@ -348,24 +812,24 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
     const finiteAxisMax = finiteBoundaries[finiteBoundaries.length - 1] ?? rawAxisMax;
     const finitePrevBoundary = finiteBoundaries[finiteBoundaries.length - 2] ?? rawAxisMin;
     const inferredOpenEndedSpan = Math.max(finiteAxisMax - finitePrevBoundary, 1);
-    const observedMax = historyData.reduce((maxValue, point) => Math.max(maxValue, toThresholdUnits(point.value)), Number.NEGATIVE_INFINITY);
-    const currentOnScale = currentValue !== null && currentValue !== undefined ? toThresholdUnits(currentValue) : null;
-    const axisMin = rawAxisMin;
+    const observedMax = historyData.reduce((maxValue, point) => Math.max(maxValue, point.value), Number.NEGATIVE_INFINITY);
+    const observedMin = historyData.reduce((minValue, point) => Math.min(minValue, point.value), Number.POSITIVE_INFINITY);
+
+    const axisMin = Math.min(rawAxisMin, observedMin, currentValue ?? Number.POSITIVE_INFINITY);
     const axisMax = Math.max(
         axisMin + 1,
         hasOpenEndedTop
-            ? Math.max(finiteAxisMax + inferredOpenEndedSpan, observedMax, currentOnScale ?? Number.NEGATIVE_INFINITY)
-            : rawAxisMax
+            ? Math.max(finiteAxisMax + inferredOpenEndedSpan, observedMax, currentValue ?? Number.NEGATIVE_INFINITY)
+            : Math.max(rawAxisMax, observedMax, currentValue ?? Number.NEGATIVE_INFINITY)
     );
+
     const toAxisPercent = (value: number) => {
         const pct = ((value - axisMin) / (axisMax - axisMin)) * 100;
         return Math.max(0, Math.min(100, pct));
     };
-    const markerPercent = currentOnScale !== null ? toAxisPercent(currentOnScale) : null;
+
+    const markerPercent = currentValue !== null && currentValue !== undefined ? toAxisPercent(currentValue) : null;
     const axisTickValues = Array.from(new Set([...finiteBoundaries, axisMax])).sort((a, b) => a - b);
-    const currentScaleDisplay = currentOnScale !== null
-        ? `${formatThresholdValue(currentOnScale)}${usesMinuteThresholds ? '' : ` ${effectiveUnit}`}`
-        : null;
     const markerLabelStyle = (() => {
         if (markerPercent === null) return null;
         if (markerPercent <= 8) return { left: '0%', transform: 'translateX(0)' };
@@ -374,39 +838,89 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
     })();
 
     const getPercentile = (value: number) => {
-        const sortedValues = historyData.map(d => d.value).sort((a, b) => a - b);
-        if (sortedValues.length === 0) return 0;
+        if (historyData.length === 0) return 0;
 
-        const valuesAtOrBelow = sortedValues.filter(v => v <= value).length;
-        const rawPercentile = Math.round((valuesAtOrBelow / sortedValues.length) * 100);
+        let betterOrEqualCount = 0;
+        if (config.evaluation === 'higher_better') {
+            betterOrEqualCount = historyData.filter((point) => point.value <= value).length;
+        } else if (config.evaluation === 'lower_better') {
+            betterOrEqualCount = historyData.filter((point) => point.value >= value).length;
+        } else {
+            betterOrEqualCount = historyData.filter((point) => Math.abs(point.value) >= Math.abs(value)).length;
+        }
 
-        return config.goodHigher ? rawPercentile : 100 - rawPercentile;
+        return Math.round((betterOrEqualCount / historyData.length) * 100);
     };
 
     const getInsights = () => {
-        if (currentValue === null || currentValue === undefined) return [];
+        if (!showInsights || currentValue === null || currentValue === undefined) return [];
 
-        const insights = [];
-        const percentile = getPercentile(currentValue);
+        const insights: string[] = [];
+        const percentile = showPercentile ? getPercentile(currentValue) : null;
 
-        if (percentile >= 75) {
-            insights.push(`Your ${config.title} is in the top 25% of your personal history. Keep up the great work!`);
-        } else if (percentile <= 25) {
-            insights.push(`Your ${config.title} is below your typical levels. Consider what factors might be affecting it.`);
+        if (percentile !== null) {
+            if (percentile >= 75) {
+                insights.push(`Your ${config.title} is in the strongest quarter of your personal history.`);
+            } else if (percentile <= 25) {
+                insights.push(`Your ${config.title} is weaker than your usual range and worth checking in on.`);
+            }
         }
 
         if (trend) {
-            if (trend.direction === 'up' && config.goodHigher) {
-                insights.push(`Your ${config.title} has been trending upward recently, which is a positive sign.`);
-            } else if (trend.direction === 'down' && !config.goodHigher) {
-                insights.push(`Your ${config.title} has been trending downward recently, which is a positive sign.`);
-            } else if (trend.direction === 'up' && !config.goodHigher) {
-                insights.push(`Your ${config.title} has been increasing. Consider if any lifestyle changes are contributing.`);
+            if (trend.direction === 'up' && config.evaluation === 'higher_better') {
+                insights.push(`Your ${config.title} has been trending up recently, which is a positive sign.`);
+            } else if (trend.direction === 'down' && config.evaluation === 'lower_better') {
+                insights.push(`Your ${config.title} has been trending down recently, which is a positive sign.`);
+            } else if (trend.direction !== 'stable') {
+                insights.push(`Your ${config.title} moved ${trend.direction === 'up' ? 'up' : 'down'} versus the previous segment of this range.`);
             }
         }
 
         return insights;
     };
+
+    const bestLabel = config.bestLabel || 'Best (All Time)';
+    const worstLabel = config.worstLabel || 'Worst (All Time)';
+    const topListBestLabel = config.topListBestLabel || 'Best';
+    const topListWorstLabel = config.topListWorstLabel || 'Worst';
+    const bestBadge = config.bestBadge || 'All-time best';
+    const worstBadge = config.worstBadge || (config.evaluation === 'lower_better' ? 'All-time highest' : 'All-time worst');
+
+    const averageValue = filteredData.length > 0
+        ? filteredData.reduce((sum, point) => sum + point.value, 0) / filteredData.length
+        : null;
+
+    const bestValue = historyData.length > 0 ? getTopEntries('best', 1)[0]?.value ?? null : null;
+    const worstValue = historyData.length > 0 ? getTopEntries('worst', 1)[0]?.value ?? null : null;
+
+    const stats = [
+        {
+            title: 'Average',
+            subtitle: averageValue !== null ? formatMetricValue(averageValue) : '--',
+            icon: <div className="text-[#00C896]"><Minus className="w-4 h-4" /></div>,
+        },
+        {
+            title: bestLabel,
+            subtitle: bestValue !== null ? formatMetricValue(bestValue) : '--',
+            icon: <div className="text-[#10B981]"><Trophy className="w-4 h-4" /></div>,
+            onClick: () => setSelectedStatistic(selectedStatistic === 'best' ? null : 'best'),
+        },
+        {
+            title: worstLabel,
+            subtitle: worstValue !== null ? formatMetricValue(worstValue) : '--',
+            icon: <div className="text-[#EF4444]"><TrendingDown className="w-4 h-4" /></div>,
+            onClick: () => setSelectedStatistic(selectedStatistic === 'worst' ? null : 'worst'),
+        },
+        ...(showPercentile
+            ? [{
+                title: 'Personal Percentile',
+                subtitle: currentValue !== null && currentValue !== undefined
+                    ? `${getPercentile(currentValue)}th compared to history`
+                    : '--',
+                icon: <div className="text-[#3B82F6]"><TrendingUp className="w-4 h-4" /></div>,
+            }]
+            : []),
+    ];
 
     return (
         <IOSModal isOpen={isOpen} onClose={onClose} title={config.title}>
@@ -423,19 +937,13 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                 </div>
 
                 <div className="overflow-y-auto ios-scroll max-h-[70vh] space-y-6">
-                    {/* Current Value with Trend */}
                     <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222]">
-                        <div className="flex items-end justify-between">
+                        <div className="flex items-end justify-between gap-4">
                             <div>
                                 <p className="text-[#666666] text-sm mb-1">Current Value</p>
                                 <div className="flex items-baseline gap-2">
                                     <span className="text-4xl font-bold font-mono" style={{ color: effectiveColor }}>
-                                        {['sleep_duration', 'deep_sleep', 'rem_sleep'].includes(metricType)
-                                            ? formatDurationFromSeconds(currentValue)
-                                            : currentValue ?? '--'}
-                                    </span>
-                                    <span className="text-[#666666] text-sm font-medium">
-                                        {['sleep_duration', 'deep_sleep', 'rem_sleep'].includes(metricType) ? '' : effectiveUnit}
+                                        {formatMetricValue(currentValue)}
                                     </span>
                                 </div>
                             </div>
@@ -449,22 +957,29 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                                 : 'text-red-400'
                                     }`}
                                 >
-                                    {trend.direction === 'up' ? <TrendingUp className="w-4 h-4" /> : trend.direction === 'down' ? <TrendingDown className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
+                                    {trend.direction === 'up'
+                                        ? <TrendingUp className="w-4 h-4" />
+                                        : trend.direction === 'down'
+                                            ? <TrendingDown className="w-4 h-4" />
+                                            : <Minus className="w-4 h-4" />}
                                     <span>{Math.abs(trend.change).toFixed(1)}%</span>
-                                    <span className="text-[#666666] text-xs">vs last {selectedTimeRange === '7d' ? '3.5 days' : selectedTimeRange === '14d' ? '7 days' : '15 days'}</span>
+                                    <span className="text-[#666666] text-xs">
+                                        vs last {selectedTimeRange === '7d' ? '3.5 days' : selectedTimeRange === '14d' ? '7 days' : '15 days'}
+                                    </span>
                                 </div>
                             )}
                         </div>
 
-                        {/* Category Badge */}
                         {currentCategory && (
-                            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: `${currentCategory.color}20`, color: currentCategory.color }}>
+                            <div
+                                className="mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium"
+                                style={{ backgroundColor: `${currentCategory.color}20`, color: currentCategory.color }}
+                            >
                                 {currentCategory.label}
                             </div>
                         )}
                     </div>
 
-                    {/* Description */}
                     <div className="flex gap-2 p-4 bg-[#0C0C0C] rounded-xl border border-[#222]">
                         <Info className="w-5 h-5 text-[#3B82F6] flex-shrink-0 mt-0.5" />
                         <div>
@@ -475,23 +990,22 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                         </div>
                     </div>
 
-                    {/* Time Range Selector */}
                     <div className="flex gap-2">
                         {(['7d', '14d', '30d'] as const).map((range) => (
                             <button
                                 key={range}
                                 onClick={() => setSelectedTimeRange(range)}
-                                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${selectedTimeRange === range
-                                    ? 'bg-[#00C896]/20 text-[#00C896] border border-[#00C896]/30'
-                                    : 'bg-[#0C0C0C] text-[#666666] border border-[#222] hover:border-[#333]'
-                                    }`}
+                                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                                    selectedTimeRange === range
+                                        ? 'bg-[#00C896]/20 text-[#00C896] border border-[#00C896]/30'
+                                        : 'bg-[#0C0C0C] text-[#666666] border border-[#222] hover:border-[#333]'
+                                }`}
                             >
                                 {range === '7d' ? '7 Days' : range === '14d' ? '14 Days' : '30 Days'}
                             </button>
                         ))}
                     </div>
 
-                    {/* History Chart */}
                     {filteredData.length > 0 && (
                         <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222]">
                             <h4 className="text-sm font-medium text-[#FAFAFA] mb-4 flex items-center gap-2">
@@ -523,6 +1037,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                         <YAxis
                                             tick={{ fill: '#666666', fontSize: 11 }}
                                             axisLine={{ stroke: '#222' }}
+                                            tickFormatter={(value: number) => formatMetricValue(value)}
                                         />
                                         <Tooltip
                                             contentStyle={{
@@ -530,12 +1045,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                                 border: '1px solid #222',
                                                 borderRadius: '8px',
                                             }}
-                                            formatter={(value: number) => [
-                                                ['sleep_duration', 'deep_sleep', 'rem_sleep'].includes(metricType)
-                                                    ? formatDurationFromSeconds(value)
-                                                    : `${value} ${effectiveUnit}`,
-                                                config.title
-                                            ]}
+                                            formatter={(value: number) => [formatMetricValue(value), config.title]}
                                             labelFormatter={(label) => formatISODateForDisplay(label, undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                                         />
                                         <Area
@@ -551,13 +1061,12 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                         </div>
                     )}
 
-                    {/* Category Breakdown */}
                     <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222]">
                         <div className="flex items-start justify-between gap-4 mb-3">
                             <h4 className="text-sm font-medium text-[#FAFAFA]">Category Ranges</h4>
-                            {currentOnScale !== null && (
+                            {currentValue !== null && currentValue !== undefined && (
                                 <span className="text-[11px] text-[#666666] font-mono">
-                                    Current: {formatThresholdValue(currentOnScale)}{usesMinuteThresholds ? '' : ` ${effectiveUnit}`}
+                                    Current: {formatMetricValue(currentValue)}
                                 </span>
                             )}
                         </div>
@@ -575,12 +1084,12 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                 ))}
                             </div>
                             <div className="relative h-8">
-                                {markerPercent !== null && markerLabelStyle && currentScaleDisplay && (
+                                {markerPercent !== null && markerLabelStyle && (
                                     <span
                                         className="absolute top-0 text-[10px] text-[#0C0C0C] font-semibold bg-[#FAFAFA] px-1.5 py-0.5 rounded whitespace-nowrap"
                                         style={markerLabelStyle}
                                     >
-                                        {currentScaleDisplay}
+                                        {formatMetricValue(currentValue)}
                                     </span>
                                 )}
                                 <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-[#1A1A1A] rounded-full overflow-hidden">
@@ -602,26 +1111,28 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                         </div>
 
                         <div className="space-y-3">
-                            {config.categories.map((cat, idx) => {
-                                const isOpenEndedCategory = OPEN_ENDED_RANGE_SENTINELS.has(cat.range[1]);
-                                const segmentStart = cat.range[0];
-                                const segmentEnd = isOpenEndedCategory ? axisMax : cat.range[1];
+                            {config.categories.map((category, idx) => {
+                                const isOpenEndedCategory = OPEN_ENDED_RANGE_SENTINELS.has(category.range[1]);
+                                const segmentStart = category.range[0];
+                                const segmentEnd = isOpenEndedCategory ? axisMax : category.range[1];
                                 const leftPct = toAxisPercent(Math.min(segmentStart, segmentEnd));
                                 const rightPct = toAxisPercent(Math.max(segmentStart, segmentEnd));
                                 const widthPct = Math.max(rightPct - leftPct, 1.5);
 
                                 return (
                                     <div key={idx} className="flex items-center gap-3">
-                                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
+                                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: category.color }} />
                                         <div className="flex-1 min-w-0">
                                             <div className="flex justify-between items-center mb-1 gap-3">
-                                                <span className="text-sm text-[#A0A0A0]">{cat.label}</span>
-                                                <span className="text-xs text-[#666666] font-mono whitespace-nowrap">{formatCategoryRangeLabel(cat.range)}</span>
+                                                <span className="text-sm text-[#A0A0A0]">{category.label}</span>
+                                                <span className="text-xs text-[#666666] font-mono whitespace-nowrap">
+                                                    {formatCategoryRangeLabel(category.range)}
+                                                </span>
                                             </div>
                                             <div className="relative h-2 bg-[#1A1A1A] rounded-full overflow-hidden">
                                                 <span
                                                     className="absolute top-0 h-full rounded-full"
-                                                    style={{ left: `${leftPct}%`, width: `${widthPct}%`, backgroundColor: cat.color }}
+                                                    style={{ left: `${leftPct}%`, width: `${widthPct}%`, backgroundColor: category.color }}
                                                 />
                                                 {markerPercent !== null && (
                                                     <span
@@ -640,7 +1151,6 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                         </p>
                     </div>
 
-                    {/* Insights */}
                     {getInsights().length > 0 && (
                         <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222]">
                             <h4 className="text-sm font-medium text-[#FAFAFA] mb-3 flex items-center gap-2">
@@ -655,71 +1165,52 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                         </div>
                     )}
 
-                    {/* Historical Stats */}
                     {historyData.length > 0 && (
                         <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222]">
                             <div className="mb-4">
                                 <h4 className="text-sm font-medium text-[#FAFAFA]">Historical Statistics</h4>
                                 <p className="text-xs text-[#666666] mt-1">
-                                    Average uses your {selectedTimeRange === '7d' ? '7-day' : selectedTimeRange === '14d' ? '14-day' : '30-day'} data. Best/Worst use your all-time history ({historyData.length} days). Click to see top entries.
+                                    Average uses your {selectedTimeRange === '7d' ? '7-day' : selectedTimeRange === '14d' ? '14-day' : '30-day'} data. Tap the other rows to inspect the all-time extremes.
                                 </p>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
-                                <IOSListItem
-                                    title="Average"
-                                    subtitle={
-                                        ['sleep_duration', 'deep_sleep', 'rem_sleep'].includes(metricType)
-                                            ? formatDurationFromSeconds(filteredData.reduce((sum, d) => sum + d.value, 0) / filteredData.length)
-                                            : `${(filteredData.reduce((sum, d) => sum + d.value, 0) / filteredData.length).toFixed(1)} ${effectiveUnit}`
-                                    }
-                                    icon={<div className="text-[#00C896]"><Minus className="w-4 h-4" /></div>}
-                                />
-                                <IOSListItem
-                                    title="Best (All Time)"
-                                    subtitle={
-                                        ['sleep_duration', 'deep_sleep', 'rem_sleep'].includes(metricType)
-                                            ? formatDurationFromSeconds(config.goodHigher ? Math.max(...historyData.map(d => d.value)) : Math.min(...historyData.map(d => d.value)))
-                                            : `${(config.goodHigher ? Math.max(...historyData.map(d => d.value)) : Math.min(...historyData.map(d => d.value))).toFixed(1)} ${effectiveUnit}`
-                                    }
-                                    icon={<div className="text-[#10B981]"><Trophy className="w-4 h-4" /></div>}
-                                    onClick={() => setSelectedStatistic(selectedStatistic === 'best' ? null : 'best')}
-                                />
-                                <IOSListItem
-                                    title="Worst (All Time)"
-                                    subtitle={
-                                        ['sleep_duration', 'deep_sleep', 'rem_sleep'].includes(metricType)
-                                            ? formatDurationFromSeconds(config.goodHigher ? Math.min(...historyData.map(d => d.value)) : Math.max(...historyData.map(d => d.value)))
-                                            : `${(config.goodHigher ? Math.min(...historyData.map(d => d.value)) : Math.max(...historyData.map(d => d.value))).toFixed(1)} ${effectiveUnit}`
-                                    }
-                                    icon={<div className="text-[#EF4444]"><TrendingDown className="w-4 h-4" /></div>}
-                                    onClick={() => setSelectedStatistic(selectedStatistic === 'worst' ? null : 'worst')}
-                                />
-                                <IOSListItem
-                                    title="Personal Percentile"
-                                    subtitle={`${currentValue !== null && currentValue !== undefined ? getPercentile(currentValue) : '--'}th compared to history`}
-                                    icon={<div className="text-[#3B82F6]"><TrendingUp className="w-4 h-4" /></div>}
-                                />
+                                {stats.map((stat) => (
+                                    <IOSListItem
+                                        key={stat.title}
+                                        title={stat.title}
+                                        subtitle={stat.subtitle}
+                                        icon={stat.icon}
+                                        onClick={stat.onClick}
+                                    />
+                                ))}
                             </div>
 
                             {selectedStatistic && (
                                 <div className="mt-4 pt-4 border-t border-[#222]">
                                     <h5 className="text-sm font-medium text-[#FAFAFA] mb-3 flex items-center gap-2">
-                                        {selectedStatistic === 'best' ? <Trophy className="w-4 h-4 text-[#10B981]" /> : <TrendingDown className="w-4 h-4 text-[#EF4444]" />}
-                                        Top 10 {selectedStatistic === 'best' ? 'Best' : 'Worst'} Days (All Time)
+                                        {selectedStatistic === 'best'
+                                            ? <Trophy className="w-4 h-4 text-[#10B981]" />
+                                            : <TrendingDown className="w-4 h-4 text-[#EF4444]" />}
+                                        Top 10 {selectedStatistic === 'best' ? topListBestLabel : topListWorstLabel} Days (All Time)
                                     </h5>
                                     <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar">
                                         {getTopEntries(selectedStatistic, 10).map((entry, idx) => (
                                             <div
-                                                key={entry.date}
-                                                className={`flex items-center justify-between p-3 rounded-lg ${idx === 0 ? 'bg-[#10B981]/10' : 'bg-[#1A1A1A]'
-                                                    }`}
+                                                key={`${entry.date}-${idx}`}
+                                                className={`flex items-center justify-between p-3 rounded-lg ${
+                                                    idx === 0 ? 'bg-[#10B981]/10' : 'bg-[#1A1A1A]'
+                                                }`}
                                             >
                                                 <div className="flex items-center gap-3">
-                                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${idx === 0 ? 'bg-[#10B981] text-black' :
-                                                            idx === 1 ? 'bg-[#C0C0C0] text-black' :
-                                                                idx === 2 ? 'bg-[#CD7F32] text-black' :
-                                                                    'bg-[#2A2A2A] text-[#666666]'
-                                                        }`}>
+                                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                                        idx === 0
+                                                            ? 'bg-[#10B981] text-black'
+                                                            : idx === 1
+                                                                ? 'bg-[#C0C0C0] text-black'
+                                                                : idx === 2
+                                                                    ? 'bg-[#CD7F32] text-black'
+                                                                    : 'bg-[#2A2A2A] text-[#666666]'
+                                                    }`}>
                                                         {idx + 1}
                                                     </div>
                                                     <div>
@@ -728,7 +1219,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                                                 weekday: 'short',
                                                                 month: 'short',
                                                                 day: 'numeric',
-                                                                year: 'numeric'
+                                                                year: 'numeric',
                                                             })}
                                                         </p>
                                                         {entry.label && (
@@ -738,16 +1229,11 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                                 </div>
                                                 <div className="text-right">
                                                     <p className="text-sm font-mono font-bold" style={{ color: effectiveColor }}>
-                                                        {['sleep_duration', 'deep_sleep', 'rem_sleep'].includes(metricType)
-                                                            ? formatDurationFromSeconds(entry.value)
-                                                            : `${entry.value} ${effectiveUnit}`}
+                                                        {formatMetricValue(entry.value)}
                                                     </p>
                                                     {idx === 0 && (
                                                         <p className={`text-xs ${selectedStatistic === 'best' ? 'text-[#10B981]' : 'text-[#EF4444]'}`}>
-                                                            {selectedStatistic === 'best'
-                                                                ? 'All-time best'
-                                                                : config.goodHigher ? 'All-time lowest' : 'All-time highest'
-                                                            }
+                                                            {selectedStatistic === 'best' ? bestBadge : worstBadge}
                                                         </p>
                                                     )}
                                                 </div>

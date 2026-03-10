@@ -31,7 +31,7 @@ interface UnavailableEntry {
 class OuraService {
   private unavailableEndpointsByAvailability = new Map<string, Set<string>>();
   private unavailableTimestamps = new Map<string, number>();
-  private readonly unavailableCacheKey = 'oura_unavailable_endpoints_v3';
+  private readonly unavailableCacheKey = 'oura_unavailable_endpoints_v4';
   private readonly maxWindowDays = 90;
   private readonly maxConcurrentWindowRequests = 2;
 
@@ -41,6 +41,7 @@ class OuraService {
     try {
       window.localStorage?.removeItem('oura_unavailable_endpoints_v1');
       window.localStorage?.removeItem('oura_unavailable_endpoints_v2');
+      window.localStorage?.removeItem('oura_unavailable_endpoints_v3');
     } catch {
       /* noop */
     }
@@ -221,6 +222,40 @@ class OuraService {
     }
   }
 
+  private async readErrorDetail(response: Response): Promise<string> {
+    try {
+      const raw = await response.text();
+      if (!raw) return '';
+
+      try {
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        const detail = [parsed.detail, parsed.error, parsed.message]
+          .find((value): value is string => typeof value === 'string' && value.trim().length > 0);
+        if (detail) return detail;
+      } catch {
+        // Fall back to the raw body below.
+      }
+
+      return raw;
+    } catch {
+      return '';
+    }
+  }
+
+  private logOptionalEndpointFailure(
+    availabilityKey: string,
+    endpoint: string,
+    status: number,
+    detail: string
+  ): void {
+    const suffix = detail ? `: ${detail}` : '';
+    console.warn(`Optional Oura endpoint ${endpoint} returned ${status}${suffix}`, {
+      availabilityKey,
+      endpoint,
+      status,
+    });
+  }
+
   private async fetchPaginated<T>(
     token: string,
     endpoint: string,
@@ -276,24 +311,26 @@ class OuraService {
       }
 
       if (!response.ok) {
+        const detail = await this.readErrorDetail(response);
+
         if (response.status === 401) {
-          if (optional) {
-            this.markEndpointUnavailable(availabilityKey, endpoint);
-            return results;
-          }
-          throw new Error('Unauthorized');
+          const suffix = detail ? `: ${detail}` : '';
+          throw new Error(`Unauthorized while fetching ${endpoint}${suffix}`);
         }
 
         if (optional && (response.status === 403 || response.status === 404)) {
+          this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
           this.markEndpointUnavailable(availabilityKey, endpoint);
           return results;
         }
 
         if (optional && (response.status === 400 || response.status === 429)) {
+          this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
           return results;
         }
 
-        throw new Error(`Failed to fetch ${endpoint} data`);
+        const suffix = detail ? `: ${detail}` : '';
+        throw new Error(`Failed to fetch ${endpoint} data${suffix}`);
       }
 
       const payload = await response.json();

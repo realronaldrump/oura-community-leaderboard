@@ -9,7 +9,7 @@ import SleepStagesChart from '../components/charts/SleepStagesChart';
 import HeartRateChart from '../components/charts/HeartRateChart';
 import ContributorsBreakdown from '../components/ContributorsBreakdown';
 import ScoreBreakdownModal from '../components/ScoreBreakdownModal';
-import MetricDetailModal from '../components/MetricDetailModal';
+import MetricDetailModal, { MetricDetailType } from '../components/MetricDetailModal';
 import LeaderboardUserDetailModal from '../components/LeaderboardUserDetailModal';
 import AppDialog from '../components/AppDialog';
 import DataExport from './DataExport';
@@ -59,6 +59,7 @@ const LIVE_DAILY_STATS_REFETCH_MS = 1000 * 60 * 5;
 type DayRange = { start: string; end: string };
 type ScoreType = 'readiness' | 'sleep' | 'activity';
 type ScoreHistoryPoint = { date: string; value: number };
+type MetricHistoryPoint = { date: string; value: number; label?: string };
 const COMPARE_PALETTE = ['#00C896', '#60A5FA', '#A855F7', '#F59E0B', '#F87171', '#22C55E', '#38BDF8', '#FB7185'];
 
 const filterByDayRange = <T extends { day?: string }>(items: T[] | undefined, range: DayRange | null): T[] => {
@@ -185,6 +186,117 @@ const getMostRecentComparableDay = (data?: DailyStats): string | undefined => {
     ) ?? orderedDays[0];
 };
 
+const getSessionHistoryDay = (session: SleepSession): string | undefined => {
+    if (isIsoDay(session.day)) return session.day;
+    return toIsoDayFromTimestamp(session.bedtime_end) || toIsoDayFromTimestamp(session.bedtime_start) || undefined;
+};
+
+const getPrimarySessionsByDay = (sessions: SleepSession[] | undefined): Array<{ day: string; session: SleepSession }> => {
+    if (!sessions?.length) return [];
+
+    const sessionsByDay = new Map<string, SleepSession[]>();
+    sessions.forEach((session) => {
+        const day = getSessionHistoryDay(session);
+        if (!day) return;
+        const existing = sessionsByDay.get(day) || [];
+        existing.push(session);
+        sessionsByDay.set(day, existing);
+    });
+
+    return Array.from(sessionsByDay.entries())
+        .map(([day, daySessions]) => {
+            const session = pickBestSession(daySessions);
+            return session ? { day, session } : null;
+        })
+        .filter((entry): entry is { day: string; session: SleepSession } => entry !== null)
+        .sort((left, right) => right.day.localeCompare(left.day));
+};
+
+const getLatestDailyEntries = <T extends { day?: string; timestamp?: string }>(items: T[] | undefined): Array<{ day: string; item: T }> => {
+    if (!items?.length) return [];
+
+    const sorted = [...items]
+        .filter((item): item is T & { day: string } => isIsoDay(item.day))
+        .sort((left, right) => {
+            const byDay = right.day.localeCompare(left.day);
+            if (byDay !== 0) return byDay;
+            return toTimestampMs(right.timestamp) - toTimestampMs(left.timestamp);
+        });
+
+    const seenDays = new Set<string>();
+    const latestEntries: Array<{ day: string; item: T }> = [];
+
+    sorted.forEach((item) => {
+        if (seenDays.has(item.day)) return;
+        seenDays.add(item.day);
+        latestEntries.push({ day: item.day, item });
+    });
+
+    return latestEntries;
+};
+
+const getMinutesOfDay = (value?: string | null): number | null => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return (date.getHours() * 60) + date.getMinutes();
+};
+
+const getNormalizedBedtimeMinutes = (value?: string | null): number | null => {
+    const minutes = getMinutesOfDay(value);
+    if (minutes == null) return null;
+    return minutes < 12 * 60 ? minutes + (24 * 60) : minutes;
+};
+
+const getStressSummaryLabel = (summary: DailyStress['day_summary'] | null | undefined): string => {
+    switch (summary) {
+        case 'restored':
+            return 'Restored';
+        case 'normal':
+            return 'Normal';
+        case 'stressful':
+            return 'Stressful';
+        default:
+            return '--';
+    }
+};
+
+const getResilienceLevelLabel = (level: DailyResilience['level'] | null | undefined): string => {
+    if (!level) return '--';
+    return level.charAt(0).toUpperCase() + level.slice(1);
+};
+
+const getResilienceScore = (resilience?: DailyResilience): number | null => {
+    if (!resilience) return null;
+
+    const sleepRecovery = resilience.contributors?.sleep_recovery;
+    const daytimeRecovery = resilience.contributors?.daytime_recovery;
+    const stress = resilience.contributors?.stress;
+
+    if (
+        sleepRecovery != null &&
+        daytimeRecovery != null &&
+        stress != null
+    ) {
+        return (sleepRecovery + daytimeRecovery + (100 - stress)) / 3;
+    }
+
+    switch (resilience.level) {
+        case 'exceptional':
+            return 95;
+        case 'strong':
+            return 82;
+        case 'solid':
+            return 65;
+        case 'adequate':
+            return 45;
+        case 'limited':
+            return 25;
+        default:
+            return null;
+    }
+};
+
 type CompareParticipant = {
     id: string;
     entry: LeaderboardEntry;
@@ -258,9 +370,9 @@ const Dashboard: React.FC = () => {
 
     const [metricDetailModal, setMetricDetailModal] = useState<{
         isOpen: boolean;
-        metricType: 'hrv' | 'heart_rate' | 'lowest_hr' | 'spo2' | 'stress' | 'resilience' | 'steps' | 'calories' | 'sleep_duration' | 'deep_sleep' | 'rem_sleep' | 'efficiency' | null;
+        metricType: MetricDetailType | null;
         currentValue: number | null;
-        historyData: { date: string; value: number }[];
+        historyData: MetricHistoryPoint[];
         unit?: string;
         color?: string;
         date?: string;
@@ -614,10 +726,24 @@ const Dashboard: React.FC = () => {
     const currentSpo2 = findLatestByDay(spo2History, referenceDay);
     const currentStress = findLatestByDay(stressHistory, referenceDay);
     const currentResilience = findLatestByDay(resilienceHistory, referenceDay);
+    const hasAnySpo2Data = spo2History.some((item) => item?.spo2_percentage?.average != null);
+    const hasAnyResilienceData = resilienceHistory.some((item) => typeof item?.level === 'string' && item.level.length > 0);
+    const currentSpo2DisplayValue = currentSpo2?.spo2_percentage?.average != null
+        ? currentSpo2.spo2_percentage.average.toFixed(1)
+        : (!hasAnySpo2Data ? 'N/A' : null);
+    const currentResilienceDisplayValue = currentResilience?.level
+        ? getResilienceLevelLabel(currentResilience.level)
+        : (!hasAnyResilienceData ? 'N/A' : null);
+    const currentResilienceScore = getResilienceScore(currentResilience);
     const bodyTempDeviationF = currentReadiness?.temperature_deviation != null
         ? currentReadiness.temperature_deviation * CELSIUS_DELTA_TO_FAHRENHEIT_DELTA
         : null;
-    const distanceMiles = ((currentActivity?.equivalent_walking_distance || 0) * METERS_TO_MILES).toFixed(1);
+    const currentBedtimeMinutes = getNormalizedBedtimeMinutes(currentSession?.bedtime_start);
+    const currentWakeTimeMinutes = getMinutesOfDay(currentSession?.bedtime_end);
+    const distanceMilesValue = currentActivity?.equivalent_walking_distance != null
+        ? Number((currentActivity.equivalent_walking_distance * METERS_TO_MILES).toFixed(1))
+        : null;
+    const distanceMiles = distanceMilesValue != null ? distanceMilesValue.toFixed(1) : '--';
 
     const readinessContributors = currentReadiness?.contributors ? [
         { label: 'Previous Night', value: currentReadiness.contributors.previous_night, color: '#3b82f6', key: 'previous_night' },
@@ -678,52 +804,145 @@ const Dashboard: React.FC = () => {
         return history;
     };
 
-    const getMetricHistoryData = (metricType: string, days: number = 30, data?: DailyStats) => {
+    const getMetricHistoryData = (metricType: MetricDetailType, data?: DailyStats): MetricHistoryPoint[] => {
         const dataSource = data || activeData;
         if (!dataSource) return [];
-        const { session: sh, activity: ah, spo2: sp, stress: st, resilience: rl } = dataSource;
 
-        // Build day-keyed lookup maps so we match by date, not array index
-        const activityByDay = new Map((ah || []).map(a => [a.day, a]));
-        const spo2ByDay = new Map((sp || []).map(s => [s.day, s]));
-        const stressByDay = new Map((st || []).map(s => [s.day, s]));
-        const resilienceByDay = new Map((rl || []).map(r => [r.day, r]));
+        const latestSessions = getPrimarySessionsByDay(dataSource.session);
+        const latestActivity = getLatestDailyEntries(dataSource.activity);
+        const latestReadiness = getLatestDailyEntries(dataSource.readiness);
+        const latestSpo2 = getLatestDailyEntries(dataSource.spo2);
+        const latestStress = getLatestDailyEntries(dataSource.stress);
+        const latestResilience = getLatestDailyEntries(dataSource.resilience);
 
-        const dataPoints: { date: string; value: number }[] = [];
-        const limit = Math.min(days, sh?.length || 0);
-        for (let i = 0; i < limit; i++) {
-            const session = sh?.[i];
-            if (!session?.day) continue;
-            const day = session.day;
-            const activity = activityByDay.get(day);
-            const spo2 = spo2ByDay.get(day);
-            const stress = stressByDay.get(day);
-            const resilience = resilienceByDay.get(day);
-
-            let value: number | null = null;
-            switch (metricType) {
-                case 'hrv': value = session.average_hrv ?? null; break;
-                case 'heart_rate': value = session.average_heart_rate ?? null; break;
-                case 'lowest_hr': value = session.lowest_heart_rate ?? null; break;
-                case 'spo2': value = spo2?.spo2_percentage?.average ?? null; break;
-                case 'stress': value = stress?.stress_high ?? null; break;
-                case 'resilience':
-                    if (resilience?.contributors) {
-                        const { sleep_recovery, daytime_recovery, stress: s } = resilience.contributors;
-                        value = sleep_recovery !== undefined && daytime_recovery !== undefined && s !== undefined
-                            ? (sleep_recovery + daytime_recovery - s) / 3 : null;
-                    } break;
-                case 'steps': value = activity?.steps ?? null; break;
-                case 'calories': value = activity?.active_calories ?? null; break;
-                case 'sleep_duration': value = session.total_sleep_duration ?? null; break;
-                case 'deep_sleep': value = session.deep_sleep_duration ?? null; break;
-                case 'rem_sleep': value = session.rem_sleep_duration ?? null; break;
-                case 'efficiency': value = session.efficiency ?? null; break;
-            }
-            const isHR = metricType === 'hrv' || metricType === 'heart_rate' || metricType === 'lowest_hr';
-            if (value !== null && (!isHR || value > 0)) dataPoints.push({ date: day, value });
+        switch (metricType) {
+            case 'hrv':
+                return latestSessions
+                    .map(({ day, session }) => ({ date: day, value: session.average_hrv ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null && point.value > 0);
+            case 'heart_rate':
+                return latestSessions
+                    .map(({ day, session }) => ({ date: day, value: session.average_heart_rate ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null && point.value > 0);
+            case 'lowest_hr':
+                return latestSessions
+                    .map(({ day, session }) => ({ date: day, value: session.lowest_heart_rate ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null && point.value > 0);
+            case 'sleep_duration':
+                return latestSessions
+                    .map(({ day, session }) => ({ date: day, value: session.total_sleep_duration ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'deep_sleep':
+                return latestSessions
+                    .map(({ day, session }) => ({ date: day, value: session.deep_sleep_duration ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'rem_sleep':
+                return latestSessions
+                    .map(({ day, session }) => ({ date: day, value: session.rem_sleep_duration ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'light_sleep':
+                return latestSessions
+                    .map(({ day, session }) => ({ date: day, value: session.light_sleep_duration ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'efficiency':
+                return latestSessions
+                    .map(({ day, session }) => ({ date: day, value: session.efficiency ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'bedtime':
+                return latestSessions
+                    .map(({ day, session }) => ({
+                        date: day,
+                        value: getNormalizedBedtimeMinutes(session.bedtime_start),
+                    }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'wake_time':
+                return latestSessions
+                    .map(({ day, session }) => ({
+                        date: day,
+                        value: getMinutesOfDay(session.bedtime_end),
+                    }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'latency':
+                return latestSessions
+                    .map(({ day, session }) => ({ date: day, value: session.latency ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'awake_time':
+                return latestSessions
+                    .map(({ day, session }) => ({ date: day, value: session.awake_time ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'breathing_rate':
+                return latestSessions
+                    .map(({ day, session }) => ({ date: day, value: session.average_breath ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null && point.value > 0);
+            case 'spo2':
+                return latestSpo2
+                    .map(({ day, item }) => ({ date: day, value: item.spo2_percentage?.average ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'stress':
+                return latestStress
+                    .map(({ day, item }) => ({
+                        date: day,
+                        value: item.stress_high ?? null,
+                        label: getStressSummaryLabel(item.day_summary),
+                    }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'resilience':
+                return latestResilience
+                    .map(({ day, item }) => ({
+                        date: day,
+                        value: getResilienceScore(item),
+                        label: getResilienceLevelLabel(item.level),
+                    }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'body_temperature':
+                return latestReadiness
+                    .map(({ day, item }) => ({
+                        date: day,
+                        value: item.temperature_deviation != null
+                            ? item.temperature_deviation * CELSIUS_DELTA_TO_FAHRENHEIT_DELTA
+                            : null,
+                    }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'steps':
+                return latestActivity
+                    .map(({ day, item }) => ({ date: day, value: item.steps ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'calories':
+                return latestActivity
+                    .map(({ day, item }) => ({ date: day, value: item.active_calories ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'total_calories':
+                return latestActivity
+                    .map(({ day, item }) => ({ date: day, value: item.total_calories ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'distance':
+                return latestActivity
+                    .map(({ day, item }) => ({
+                        date: day,
+                        value: item.equivalent_walking_distance != null
+                            ? Number((item.equivalent_walking_distance * METERS_TO_MILES).toFixed(1))
+                            : null,
+                    }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'high_activity_time':
+                return latestActivity
+                    .map(({ day, item }) => ({ date: day, value: item.high_activity_time ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'medium_activity_time':
+                return latestActivity
+                    .map(({ day, item }) => ({ date: day, value: item.medium_activity_time ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'low_activity_time':
+                return latestActivity
+                    .map(({ day, item }) => ({ date: day, value: item.low_activity_time ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            case 'sedentary_time':
+                return latestActivity
+                    .map(({ day, item }) => ({ date: day, value: item.sedentary_time ?? null }))
+                    .filter((point): point is MetricHistoryPoint => point.value != null);
+            default:
+                return [];
         }
-        return dataPoints;
     };
 
     const prefetchAllTimeStats = () => {
@@ -751,7 +970,7 @@ const Dashboard: React.FC = () => {
     };
 
     const handleMetricCardClick = (
-        metricType: 'hrv' | 'heart_rate' | 'lowest_hr' | 'spo2' | 'stress' | 'resilience' | 'steps' | 'calories' | 'sleep_duration' | 'deep_sleep' | 'rem_sleep' | 'efficiency',
+        metricType: MetricDetailType,
         currentValue: number | null,
         unit?: string,
         color?: string
@@ -763,9 +982,34 @@ const Dashboard: React.FC = () => {
         const cachedAllTime = queryClient.getQueryData(allTimeQueryKey) as DailyStats | undefined;
         const bestAvailable = cachedAllTime || activeData;
         const historyData = bestAvailable
-            ? getMetricHistoryData(metricType, bestAvailable.session?.length || 0, bestAvailable)
+            ? getMetricHistoryData(metricType, bestAvailable)
             : [];
-        setMetricDetailModal({ isOpen: true, metricType, currentValue, historyData, unit, color, date: currentSleep?.day });
+        setMetricDetailModal({ isOpen: true, metricType, currentValue, historyData, unit, color, date: referenceDay });
+
+        if (!cachedAllTime) {
+            void queryClient.fetchQuery({
+                queryKey: allTimeQueryKey,
+                queryFn: () => runWithAutoTokenRefresh(activeProfile.id, (token) =>
+                    fetchDailyStats(token, { start: FULL_HISTORY_START_DATE }, {
+                        grantedScopes: activeProfile.grantedScopes,
+                        availabilityKey: activeProfile.id,
+                    })
+                ),
+                staleTime: 1000 * 60 * 60 * 24,
+            }).then((fullHistory) => {
+                setMetricDetailModal((previous) => (
+                    previous.isOpen && previous.metricType === metricType
+                        ? {
+                            ...previous,
+                            historyData: getMetricHistoryData(metricType, fullHistory),
+                        }
+                        : previous
+                ));
+            }).catch((error) => {
+                console.error('Failed to load full metric history:', error);
+            });
+            return;
+        }
 
         prefetchAllTimeStats();
     };
@@ -1163,9 +1407,7 @@ const Dashboard: React.FC = () => {
         return `${start} - ${end}`;
     };
 
-    const getStressLabel = (summary: string | null | undefined) => {
-        switch (summary) { case 'restored': return 'Restored'; case 'normal': return 'Normal'; case 'stressful': return 'Stressful'; default: return '--'; }
-    };
+    const getStressLabel = (summary: string | null | undefined) => getStressSummaryLabel(summary as DailyStress['day_summary']);
     const getStressColor = (summary: string | null | undefined) => {
         switch (summary) { case 'restored': return '#34D399'; case 'normal': return '#FBBF24'; case 'stressful': return '#F87171'; default: return '#666'; }
     };
@@ -1669,14 +1911,14 @@ const Dashboard: React.FC = () => {
                             <div className="grid grid-cols-3 gap-3 mb-3">
                                 <MetricCard title="Deep Sleep" value={formatDuration(currentSession?.deep_sleep_duration)} color="#1E40AF" showDrillDownIndicator onClick={() => handleMetricCardClick('deep_sleep', currentSession?.deep_sleep_duration ?? null, 'hours', '#1E40AF')} />
                                 <MetricCard title="REM Sleep" value={formatDuration(currentSession?.rem_sleep_duration)} color="#8B5CF6" showDrillDownIndicator onClick={() => handleMetricCardClick('rem_sleep', currentSession?.rem_sleep_duration ?? null, 'hours', '#8B5CF6')} />
-                                <MetricCard title="Light Sleep" value={formatDuration(currentSession?.light_sleep_duration)} color="#93C5FD" />
+                                <MetricCard title="Light Sleep" value={formatDuration(currentSession?.light_sleep_duration)} color="#93C5FD" showDrillDownIndicator onClick={() => handleMetricCardClick('light_sleep', currentSession?.light_sleep_duration ?? null, 'hours', '#93C5FD')} />
                             </div>
                             {/* Timing & details */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-                                <MetricCard title="Bedtime" value={formatTime(currentSession?.bedtime_start)} subtext="Fell asleep" />
-                                <MetricCard title="Wake Time" value={formatTime(currentSession?.bedtime_end)} subtext="Woke up" />
-                                <MetricCard title="Latency" value={currentSession?.latency ? `${Math.round(currentSession.latency / 60)}` : null} unit="min" subtext="Time to fall asleep" />
-                                <MetricCard title="Awake Time" value={formatDuration(currentSession?.awake_time)} subtext="During sleep" />
+                                <MetricCard title="Bedtime" value={formatTime(currentSession?.bedtime_start)} subtext="Fell asleep" showDrillDownIndicator onClick={() => handleMetricCardClick('bedtime', currentBedtimeMinutes, undefined, '#818CF8')} />
+                                <MetricCard title="Wake Time" value={formatTime(currentSession?.bedtime_end)} subtext="Woke up" showDrillDownIndicator onClick={() => handleMetricCardClick('wake_time', currentWakeTimeMinutes, undefined, '#FACC15')} />
+                                <MetricCard title="Latency" value={currentSession?.latency ? `${Math.round(currentSession.latency / 60)}` : null} unit="min" subtext="Time to fall asleep" showDrillDownIndicator onClick={() => handleMetricCardClick('latency', currentSession?.latency ?? null, 'min', '#10B981')} />
+                                <MetricCard title="Awake Time" value={formatDuration(currentSession?.awake_time)} subtext="During sleep" showDrillDownIndicator onClick={() => handleMetricCardClick('awake_time', currentSession?.awake_time ?? null, 'hours', '#F97316')} />
                             </div>
                             {sessionHistory.length > 0 && (
                                 <div className="chart-container" style={{ height: 260 }}>
@@ -1700,17 +1942,19 @@ const Dashboard: React.FC = () => {
                             {/* Supporting vitals */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                                 <MetricCard title="Avg HR" value={currentSession?.average_heart_rate?.toFixed(0)} unit="bpm" color="#F87171" showDrillDownIndicator onClick={() => handleMetricCardClick('heart_rate', currentSession?.average_heart_rate ?? null, 'bpm', '#F87171')} />
-                                <MetricCard title="SpO2" value={currentSpo2?.spo2_percentage?.average?.toFixed(1)} unit="%" color="#06B6D4" showDrillDownIndicator onClick={() => handleMetricCardClick('spo2', currentSpo2?.spo2_percentage?.average ?? null, '%', '#06B6D4')} />
-                                <MetricCard title="Stress" value={getStressLabel(currentStress?.day_summary)} color={getStressColor(currentStress?.day_summary)} />
-                                <MetricCard title="Resilience" value={currentResilience?.level ? currentResilience.level.charAt(0).toUpperCase() + currentResilience.level.slice(1) : null} color={getResilienceColor(currentResilience?.level)} />
+                                <MetricCard title="SpO2" value={currentSpo2DisplayValue} unit="%" color="#06B6D4" showDrillDownIndicator onClick={() => handleMetricCardClick('spo2', currentSpo2?.spo2_percentage?.average ?? null, '%', '#06B6D4')} />
+                                <MetricCard title="Stress" value={getStressLabel(currentStress?.day_summary)} color={getStressColor(currentStress?.day_summary)} showDrillDownIndicator onClick={() => handleMetricCardClick('stress', currentStress?.stress_high ?? null, undefined, getStressColor(currentStress?.day_summary))} />
+                                <MetricCard title="Resilience" value={currentResilienceDisplayValue} color={getResilienceColor(currentResilience?.level)} showDrillDownIndicator onClick={() => handleMetricCardClick('resilience', currentResilienceScore, 'score', getResilienceColor(currentResilience?.level))} />
                             </div>
                             <div className="grid grid-cols-2 gap-3 mb-5">
-                                <MetricCard title="Breathing" value={currentSession?.average_breath?.toFixed(1)} unit="br/min" subtext="Average during sleep" />
+                                <MetricCard title="Breathing" value={currentSession?.average_breath?.toFixed(1)} unit="br/min" subtext="Average during sleep" showDrillDownIndicator onClick={() => handleMetricCardClick('breathing_rate', currentSession?.average_breath ?? null, 'br/min', '#22C55E')} />
                                 <MetricCard
                                     title="Body Temp"
                                     value={bodyTempDeviationF != null ? `${bodyTempDeviationF > 0 ? '+' : ''}${bodyTempDeviationF.toFixed(1)}` : null}
                                     unit="°F" subtext="From baseline"
                                     color={bodyTempDeviationF != null ? (Math.abs(bodyTempDeviationF) > 0.9 ? '#F87171' : '#34D399') : undefined}
+                                    showDrillDownIndicator
+                                    onClick={() => handleMetricCardClick('body_temperature', bodyTempDeviationF, '°F', bodyTempDeviationF != null ? (Math.abs(bodyTempDeviationF) > 0.9 ? '#F87171' : '#34D399') : '#F87171')}
                                 />
                             </div>
 
@@ -1752,14 +1996,14 @@ const Dashboard: React.FC = () => {
                                 <MetricCard title="Active Calories" value={currentActivity?.active_calories?.toLocaleString()} unit="kcal" color="#FBBF24" showDrillDownIndicator onClick={() => handleMetricCardClick('calories', currentActivity?.active_calories ?? null, 'kcal', '#FBBF24')} />
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-                                <MetricCard title="Total Calories" value={currentActivity?.total_calories?.toLocaleString()} unit="kcal" />
-                                <MetricCard title="Distance" value={distanceMiles} unit="mi" />
-                                <MetricCard title="High Activity" value={formatDuration(currentActivity?.high_activity_time)} color="#EF4444" />
-                                <MetricCard title="Medium Activity" value={formatDuration(currentActivity?.medium_activity_time)} color="#F59E0B" />
+                                <MetricCard title="Total Calories" value={currentActivity?.total_calories?.toLocaleString()} unit="kcal" showDrillDownIndicator onClick={() => handleMetricCardClick('total_calories', currentActivity?.total_calories ?? null, 'kcal', '#F97316')} />
+                                <MetricCard title="Distance" value={distanceMiles} unit="mi" showDrillDownIndicator onClick={() => handleMetricCardClick('distance', distanceMilesValue, 'mi', '#38BDF8')} />
+                                <MetricCard title="High Activity" value={formatDuration(currentActivity?.high_activity_time)} color="#EF4444" showDrillDownIndicator onClick={() => handleMetricCardClick('high_activity_time', currentActivity?.high_activity_time ?? null, 'hours', '#EF4444')} />
+                                <MetricCard title="Medium Activity" value={formatDuration(currentActivity?.medium_activity_time)} color="#F59E0B" showDrillDownIndicator onClick={() => handleMetricCardClick('medium_activity_time', currentActivity?.medium_activity_time ?? null, 'hours', '#F59E0B')} />
                             </div>
                             <div className="grid grid-cols-2 gap-3">
-                                <MetricCard title="Low Activity" value={formatDuration(currentActivity?.low_activity_time)} color="#22C55E" />
-                                <MetricCard title="Sedentary" value={formatDuration(currentActivity?.sedentary_time)} color="#64748B" />
+                                <MetricCard title="Low Activity" value={formatDuration(currentActivity?.low_activity_time)} color="#22C55E" showDrillDownIndicator onClick={() => handleMetricCardClick('low_activity_time', currentActivity?.low_activity_time ?? null, 'hours', '#22C55E')} />
+                                <MetricCard title="Sedentary" value={formatDuration(currentActivity?.sedentary_time)} color="#64748B" showDrillDownIndicator onClick={() => handleMetricCardClick('sedentary_time', currentActivity?.sedentary_time ?? null, 'hours', '#64748B')} />
                             </div>
                         </section>
 
