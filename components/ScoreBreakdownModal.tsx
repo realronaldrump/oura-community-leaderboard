@@ -215,10 +215,10 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
         }
     };
 
-    const factors = getFactorsForScoreType(scoreType, scoreData, sessionData);
-    const score = scoreData.score || 0;
+    const factors = scoreData ? getFactorsForScoreType(scoreType, scoreData, sessionData) : [];
+    const score = scoreData?.score ?? 0;
     const title = `${scoreType.charAt(0).toUpperCase() + scoreType.slice(1)} Score Breakdown`;
-    const date = scoreData.day;
+    const date = scoreData?.day ?? '';
     const scoreColor = scoreType === 'readiness' ? '#34D399' : scoreType === 'sleep' ? '#60A5FA' : '#FBBF24';
     const rangeDays = selectedTimeRange === '7d' ? 7 : selectedTimeRange === '14d' ? 14 : 30;
     const filteredHistory = useMemo(
