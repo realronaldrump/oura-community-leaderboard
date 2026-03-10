@@ -256,6 +256,15 @@ class OuraService {
     });
   }
 
+  private isMissingScopeError(status: number, detail: string): boolean {
+    if (status !== 401 && status !== 403) return false;
+    const normalizedDetail = detail.toLowerCase();
+    return (
+      (normalizedDetail.includes('not authorized access') && normalizedDetail.includes('scope')) ||
+      normalizedDetail.includes('missing scope')
+    );
+  }
+
   private async fetchPaginated<T>(
     token: string,
     endpoint: string,
@@ -312,6 +321,12 @@ class OuraService {
 
       if (!response.ok) {
         const detail = await this.readErrorDetail(response);
+
+        if (optional && this.isMissingScopeError(response.status, detail)) {
+          this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
+          this.markEndpointUnavailable(availabilityKey, endpoint);
+          return results;
+        }
 
         if (response.status === 401) {
           const suffix = detail ? `: ${detail}` : '';
@@ -521,7 +536,7 @@ class OuraService {
 
   async getVO2Max(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<any[]> {
     const { start_date, end_date } = this.getDateRange(start || 30, end);
-    return this.fetchDateWindowed<any>(token, 'vo2_max', start_date, end_date, {
+    return this.fetchDateWindowed<any>(token, 'vO2_max', start_date, end_date, {
       optional: true,
       availabilityKey: options?.availabilityKey,
     });

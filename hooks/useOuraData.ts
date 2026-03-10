@@ -239,6 +239,8 @@ export const fetchDailyStats = async (
     const canFetchWorkout = hasAnyScope(normalizedScopes, ['workout']);
     const canFetchSession = hasAnyScope(normalizedScopes, ['session']);
     const canFetchTag = hasAnyScope(normalizedScopes, ['tag', 'tag user', 'enhanced_tag']);
+    const canFetchRingConfiguration = hasAnyScope(normalizedScopes, ['ring_configuration']);
+    const canFetchHeartHealth = hasAnyScope(normalizedScopes, ['heart_health']);
     const end = dateRange?.end || getFetchEndDate();
     const start = dateRange?.start || shiftDate(end, -INITIAL_RECENT_DAYS);
 
@@ -269,8 +271,8 @@ export const fetchDailyStats = async (
         canFetchTag ? ouraService.getTags(token, start, end, { availabilityKey }) : Promise.resolve([]),
         canFetchTag ? ouraService.getEnhancedTags(token, start, end, { availabilityKey }) : Promise.resolve([]),
         ouraService.getRestModePeriods(token, start, end, { availabilityKey }),
-        includeStaticCollections ? ouraService.getRingConfiguration(token, { availabilityKey }) : Promise.resolve([]),
-        ouraService.getDailyCardiovascularAge(token, start, end, { availabilityKey }),
+        includeStaticCollections && canFetchRingConfiguration ? ouraService.getRingConfiguration(token, { availabilityKey }) : Promise.resolve([]),
+        canFetchHeartHealth ? ouraService.getDailyCardiovascularAge(token, start, end, { availabilityKey }) : Promise.resolve([]),
         ouraService.getVO2Max(token, start, end, { availabilityKey }),
     ];
 
