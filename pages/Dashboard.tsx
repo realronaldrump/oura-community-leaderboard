@@ -641,10 +641,23 @@ const Dashboard: React.FC = () => {
         return !todayReferenceDays.includes(todayIsoDay);
     }, [todayIsoDay, todayReferenceDays]);
 
+    // All days across all profiles from full-history queries, falling back to incremental data
+    const trendsAvailableDays = useMemo(() => {
+        const daySet = new Set<string>();
+        allTimeQueries.forEach((query, idx) => {
+            const data = (query.data as DailyStats | undefined) ?? (userQueries[idx]?.data as DailyStats | undefined);
+            if (!data) return;
+            data.sleep?.forEach((item) => item.day && daySet.add(item.day));
+            data.readiness?.forEach((item) => item.day && daySet.add(item.day));
+            data.activity?.forEach((item) => item.day && daySet.add(item.day));
+        });
+        return Array.from(daySet).sort((a, b) => b.localeCompare(a));
+    }, [allTimeQueries, userQueries]);
+
     const effectiveTrendsRange = useMemo<DayRange | null>(() => {
-        if (!availableDays.length) return null;
-        const newest = availableDays[0];
-        const oldest = availableDays[availableDays.length - 1];
+        if (!trendsAvailableDays.length) return null;
+        const newest = trendsAvailableDays[0];
+        const oldest = trendsAvailableDays[trendsAvailableDays.length - 1];
 
         if (!trendsRange) {
             return { start: oldest, end: newest };
@@ -658,7 +671,7 @@ const Dashboard: React.FC = () => {
         if (end > newest) end = newest;
         if (start > end) [start, end] = [end, start];
         return { start, end };
-    }, [availableDays, trendsRange]);
+    }, [trendsAvailableDays, trendsRange]);
 
     useEffect(() => {
         setDateIndex(0);
@@ -2236,7 +2249,7 @@ const Dashboard: React.FC = () => {
                             </div>
                             <DateRangePicker
                                 mode="range"
-                                dates={availableDays}
+                                dates={trendsAvailableDays}
                                 selectedDate={referenceDay}
                                 onSelectDate={handleSelectReferenceDay}
                                 range={effectiveTrendsRange || undefined}
