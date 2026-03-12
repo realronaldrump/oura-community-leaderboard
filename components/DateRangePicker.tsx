@@ -305,32 +305,20 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                                 </button>
                             </div>
 
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                <label className="date-picker-field">
-                                    <span>Start</span>
-                                    <input
-                                        type="date"
-                                        min={oldestDay}
-                                        max={newestDay}
-                                        value={normalizedDraftRange.start}
-                                        onChange={(event) => commitRange(event.target.value, normalizedDraftRange.end)}
-                                    />
-                                </label>
-                                <label className="date-picker-field">
-                                    <span>End</span>
-                                    <input
-                                        type="date"
-                                        min={oldestDay}
-                                        max={newestDay}
-                                        value={normalizedDraftRange.end}
-                                        onChange={(event) => commitRange(normalizedDraftRange.start, event.target.value)}
-                                    />
-                                </label>
-                            </div>
+                            <label className="date-picker-field">
+                                <span>Start</span>
+                                <input
+                                    type="date"
+                                    min={oldestDay}
+                                    max={newestDay}
+                                    value={normalizedDraftRange.start}
+                                    onChange={(event) => commitRange(event.target.value, newestDay)}
+                                />
+                            </label>
 
                             <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3 py-2 text-xs text-[var(--text-secondary)]">
                                 <span className="font-medium text-[var(--text-primary)]">{scopedDates.length.toLocaleString()} days</span>
-                                {' '}from {formatDayShort(normalizedDraftRange.start)} to {formatDayShort(normalizedDraftRange.end)}
+                                {' '}from {formatDayShort(normalizedDraftRange.start)} to {formatDayShort(newestDay)}
                             </div>
                         </div>
                     ) : (
