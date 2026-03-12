@@ -23,7 +23,6 @@ interface HistoryEntry {
 
 type SortField = 'date' | 'userName' | 'sleep' | 'readiness' | 'activity' | 'average';
 type SortDirection = 'asc' | 'desc';
-type DateRange = '7d' | '30d' | '90d' | '1y' | 'all';
 type Smoothing = 'raw' | '3d' | '7d' | '14d';
 
 const parseOuraDay = (day: string): Date => new Date(`${day}T12:00:00`);
@@ -39,7 +38,6 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
     const [chartMetric, setChartMetric] = useState<'sleep' | 'readiness' | 'activity' | 'average'>('average');
     const [filterUser, setFilterUser] = useState<string>('all');
 
-    const [dateRange, setDateRange] = useState<DateRange>('90d');
     const [showCommonDatesOnly, setShowCommonDatesOnly] = useState(false);
     const [smoothing, setSmoothing] = useState<Smoothing>('3d');
     const [visibleRows, setVisibleRows] = useState(TABLE_PAGE_SIZE);
@@ -105,20 +103,6 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
     const filteredData = useMemo(() => {
         let data = rawData;
 
-        if (dateRange !== 'all') {
-            const now = new Date();
-            const cutoff = new Date();
-
-            switch (dateRange) {
-                case '7d': cutoff.setDate(now.getDate() - 7); break;
-                case '30d': cutoff.setDate(now.getDate() - 30); break;
-                case '90d': cutoff.setDate(now.getDate() - 90); break;
-                case '1y': cutoff.setFullYear(now.getFullYear() - 1); break;
-            }
-            cutoff.setHours(0, 0, 0, 0);
-            data = data.filter(d => d.date >= cutoff);
-        }
-
         if (filterUser !== 'all') {
             data = data.filter(d => d.userId === filterUser);
         }
@@ -152,7 +136,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
         }
 
         return data;
-    }, [rawData, dateRange, showCommonDatesOnly, filterUser]);
+    }, [rawData, showCommonDatesOnly, filterUser]);
 
     const tableData = useMemo(() => {
         const direction = sortDirection === 'asc' ? 1 : -1;
@@ -192,7 +176,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
 
     useEffect(() => {
         setVisibleRows(TABLE_PAGE_SIZE);
-    }, [sortField, sortDirection, filterUser, dateRange, showCommonDatesOnly]);
+    }, [sortField, sortDirection, filterUser, showCommonDatesOnly]);
 
     const getInitialSortDirection = (field: SortField): SortDirection =>
         field === 'userName' ? 'asc' : 'desc';
@@ -284,22 +268,6 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                         </div>
 
                         <div className="flex flex-wrap items-center gap-4">
-                            {/* Date Range */}
-                            <div className="bg-white/5 p-1 rounded-lg flex gap-1">
-                                {(['7d', '30d', '90d', '1y', 'all'] as const).map(r => (
-                                    <button
-                                        key={r}
-                                        onClick={() => setDateRange(r)}
-                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${dateRange === r
-                                            ? 'bg-accent-cyan/20 text-accent-cyan shadow-sm'
-                                            : 'hover:text-white text-text-muted'
-                                            }`}
-                                    >
-                                        {r === 'all' ? 'Max' : r.toUpperCase()}
-                                    </button>
-                                ))}
-                            </div>
-
                             {/* Filters */}
                             <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer hover:text-white transition-colors">
                                 <input
@@ -419,7 +387,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                                             dataKey="y"
                                             stroke={userColors[idx % userColors.length]}
                                             strokeWidth={2}
-                                            dot={dateRange === '7d' || dateRange === '30d' ? { r: 3, fill: userColors[idx % userColors.length] } : false}
+                                            dot={filteredData.length <= 60 ? { r: 3, fill: userColors[idx % userColors.length] } : false}
                                             activeDot={{ r: 6 }}
                                             connectNulls
                                         />

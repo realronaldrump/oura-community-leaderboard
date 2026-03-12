@@ -301,7 +301,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                                     onClick={applyFullRange}
                                     className={`date-picker-chip ${activeQuickRange === 'all' ? 'is-active' : ''}`}
                                 >
-                                    All
+                                    Max
                                 </button>
                             </div>
 
