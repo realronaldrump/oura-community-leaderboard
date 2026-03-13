@@ -747,13 +747,14 @@ const Dashboard: React.FC = () => {
     const currentStress = findLatestByDay(stressHistory, referenceDay);
     const currentResilience = findLatestByDay(resilienceHistory, referenceDay);
     const hasAnySpo2Data = spo2History.some((item) => item?.spo2_percentage?.average != null);
+    const hasAnyStressData = stressHistory.some((item) => item?.day_summary != null || item?.stress_high != null);
     const hasAnyResilienceData = resilienceHistory.some((item) => typeof item?.level === 'string' && item.level.length > 0);
     const currentSpo2DisplayValue = currentSpo2?.spo2_percentage?.average != null
         ? currentSpo2.spo2_percentage.average.toFixed(1)
-        : (!hasAnySpo2Data ? 'N/A' : null);
+        : null;
     const currentResilienceDisplayValue = currentResilience?.level
         ? getResilienceLevelLabel(currentResilience.level)
-        : (!hasAnyResilienceData ? 'N/A' : null);
+        : null;
     const currentResilienceScore = getResilienceScore(currentResilience);
     const bodyTempDeviationF = currentReadiness?.temperature_deviation != null
         ? currentReadiness.temperature_deviation * CELSIUS_DELTA_TO_FAHRENHEIT_DELTA
@@ -1968,9 +1969,15 @@ const Dashboard: React.FC = () => {
                             {/* Supporting vitals */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                                 <MetricCard title="Avg HR" value={currentSession?.average_heart_rate?.toFixed(0)} unit="bpm" color="#F87171" showDrillDownIndicator onClick={() => handleMetricCardClick('heart_rate', currentSession?.average_heart_rate ?? null, 'bpm', '#F87171')} />
-                                <MetricCard title="SpO2" value={currentSpo2DisplayValue} unit="%" color="#06B6D4" showDrillDownIndicator onClick={() => handleMetricCardClick('spo2', currentSpo2?.spo2_percentage?.average ?? null, '%', '#06B6D4')} />
-                                <MetricCard title="Stress" value={getStressLabel(currentStress?.day_summary)} color={getStressColor(currentStress?.day_summary)} showDrillDownIndicator onClick={() => handleMetricCardClick('stress', currentStress?.stress_high ?? null, undefined, getStressColor(currentStress?.day_summary))} />
-                                <MetricCard title="Resilience" value={currentResilienceDisplayValue} color={getResilienceColor(currentResilience?.level)} showDrillDownIndicator onClick={() => handleMetricCardClick('resilience', currentResilienceScore, 'score', getResilienceColor(currentResilience?.level))} />
+                                {hasAnySpo2Data && (
+                                    <MetricCard title="SpO2" value={currentSpo2DisplayValue} unit="%" color="#06B6D4" showDrillDownIndicator onClick={() => handleMetricCardClick('spo2', currentSpo2?.spo2_percentage?.average ?? null, '%', '#06B6D4')} />
+                                )}
+                                {hasAnyStressData && (
+                                    <MetricCard title="Stress" value={getStressLabel(currentStress?.day_summary)} color={getStressColor(currentStress?.day_summary)} showDrillDownIndicator onClick={() => handleMetricCardClick('stress', currentStress?.stress_high ?? null, undefined, getStressColor(currentStress?.day_summary))} />
+                                )}
+                                {hasAnyResilienceData && (
+                                    <MetricCard title="Resilience" value={currentResilienceDisplayValue} color={getResilienceColor(currentResilience?.level)} showDrillDownIndicator onClick={() => handleMetricCardClick('resilience', currentResilienceScore, 'score', getResilienceColor(currentResilience?.level))} />
+                                )}
                             </div>
                             <div className="grid grid-cols-2 gap-3 mb-5">
                                 <MetricCard title="Breathing" value={currentSession?.average_breath?.toFixed(1)} unit="br/min" subtext="Average during sleep" showDrillDownIndicator onClick={() => handleMetricCardClick('breathing_rate', currentSession?.average_breath ?? null, 'br/min', '#22C55E')} />
