@@ -905,7 +905,7 @@ const Dashboard: React.FC = () => {
                         value: item.stress_high ?? null,
                         label: getStressSummaryLabel(item.day_summary),
                     }))
-                    .filter((point): point is MetricHistoryPoint => point.value != null);
+                    .filter((point): point is { date: string; value: number; label: string } => point.value != null);
             case 'resilience':
                 return latestResilience
                     .map(({ day, item }) => ({
@@ -913,7 +913,7 @@ const Dashboard: React.FC = () => {
                         value: getResilienceScore(item),
                         label: getResilienceLevelLabel(item.level),
                     }))
-                    .filter((point): point is MetricHistoryPoint => point.value != null);
+                    .filter((point): point is { date: string; value: number; label: string } => point.value != null);
             case 'body_temperature':
                 return latestReadiness
                     .map(({ day, item }) => ({
