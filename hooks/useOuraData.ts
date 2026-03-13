@@ -1,4 +1,3 @@
-import { useQuery } from '@tanstack/react-query';
 import { ouraService } from '../services/ouraService';
 import { DailyStats } from '../types';
 import { getOuraFetchEndISODate, shiftLocalISODate } from '../utils/date';
@@ -338,38 +337,3 @@ export const syncDailyStats = async (
     return existingData ? mergeDailyStats(existingData, delta) : delta;
 };
 
-export const useDailyStats = (
-    token: string,
-    enabled: boolean = true,
-    options?: { grantedScopes?: string[]; availabilityKey?: string }
-) => {
-    return useQuery({
-        queryKey: ['dailyStats', token],
-        queryFn: () => syncDailyStats(token, undefined, {
-            mode: 'incremental',
-            grantedScopes: options?.grantedScopes,
-            availabilityKey: options?.availabilityKey,
-        }),
-        enabled: !!token && enabled,
-        staleTime: 1000 * 60 * 30, // 30 minutes
-        gcTime: 1000 * 60 * 60 * 24, // Keep cache for 24 hours
-    });
-};
-
-export const useAllTimeStats = (
-    token: string,
-    enabled: boolean = true,
-    options?: { grantedScopes?: string[]; availabilityKey?: string }
-) => {
-    return useQuery({
-        queryKey: ['allTimeStats', token],
-        queryFn: () => syncDailyStats(token, undefined, {
-            mode: 'full',
-            grantedScopes: options?.grantedScopes,
-            availabilityKey: options?.availabilityKey,
-        }),
-        enabled: !!token && enabled,
-        staleTime: 1000 * 60 * 60 * 24, // 24 hours
-        gcTime: 1000 * 60 * 60 * 24,
-    });
-};

@@ -70,7 +70,7 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ data, dataKey, color, heigh
               fontSize: '12px'
             }}
             labelFormatter={(value) => {
-              const d = new Date(value);
+              const d = new Date(value + 'T12:00:00');
               return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             }}
             formatter={(value: number) => [value, '']}

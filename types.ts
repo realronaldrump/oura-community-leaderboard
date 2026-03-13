@@ -145,6 +145,7 @@ export interface ReadinessContributors {
   recovery_index?: number | null; // 1-100 contribution score
   resting_heart_rate?: number | null; // 1-100 contribution score (NOT bpm!)
   sleep_balance?: number | null; // 1-100 contribution score
+  sleep_regularity?: number | null; // 1-100 contribution score
 }
 
 export interface DailyReadiness {

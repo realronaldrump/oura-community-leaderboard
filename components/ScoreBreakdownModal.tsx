@@ -100,6 +100,13 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                         description: 'The intensity and volume of physical activity from the previous day. This factor considers whether your activity level was appropriate and how it impacts your current readiness.',
                         weight: readiness.contributors.previous_day_activity,
                         icon: <Zap className="w-4 h-4" />
+                    },
+                    {
+                        key: 'sleep_regularity',
+                        label: 'Sleep Regularity',
+                        description: 'How consistent your sleep schedule has been. Regular sleep and wake times help maintain your circadian rhythm and improve overall sleep quality and readiness.',
+                        weight: readiness.contributors.sleep_regularity,
+                        icon: <Calendar className="w-4 h-4" />
                     }
                 ];
 

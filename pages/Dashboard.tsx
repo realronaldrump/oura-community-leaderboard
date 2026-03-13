@@ -1780,7 +1780,7 @@ const Dashboard: React.FC = () => {
             <nav className="sticky top-0 z-40 bg-[#0C0C0C]/90 backdrop-blur-md border-b border-[#1C1C1C]">
                 <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <h1 className="text-base font-semibold tracking-tight text-[#E0E0E0]">{userName}</h1>
+                        <h1 className="text-base font-semibold tracking-tight !text-[#E0E0E0]">{userName}</h1>
                         <span className="text-[#888] text-xs font-mono hidden sm:inline">{formatLastSync(lastSyncTime)}</span>
                     </div>
                     <div className="flex items-center gap-2">
