@@ -15,10 +15,7 @@ export const hasAnyOuraScope = (scopeSet: Set<string>, candidates: string[]): bo
   return candidates.some((candidate) => scopeSet.has(normalizeOuraScope(candidate)));
 };
 
-const REQUIRED_CONSENT_SCOPES: Array<{ key: string; label: string }> = [
-  { key: 'ring_configuration', label: 'Ring Configuration' },
-  { key: 'heart_health', label: 'Heart Health' },
-];
+const REQUIRED_CONSENT_SCOPES: Array<{ key: string; label: string }> = [];
 
 export const getMissingRequiredOuraConsentScopes = (grantedScopes?: string[]): string[] => {
   const scopeSet = normalizeGrantedOuraScopes(grantedScopes);

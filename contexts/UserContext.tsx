@@ -119,10 +119,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const normalizedEmail = personalInfo.email?.toLowerCase() || null;
 
             // Match by stable Oura user id first, then email as fallback.
+            const ouraUserIdStr = ouraUserId ? String(ouraUserId) : null;
             const existingProfile = profiles.find(
-                (p) =>
-                    (ouraUserId && p.ouraUserId === ouraUserId) ||
-                    (normalizedEmail && p.email?.toLowerCase() === normalizedEmail)
+                (p) => {
+                    const existingIdStr = p.ouraUserId ? String(p.ouraUserId) : null;
+                    return (ouraUserIdStr && existingIdStr === ouraUserIdStr) ||
+                           (normalizedEmail && p.email?.toLowerCase() === normalizedEmail);
+                }
             );
             const profileId = existingProfile ? existingProfile.id : crypto.randomUUID();
             const expiresInSeconds =
