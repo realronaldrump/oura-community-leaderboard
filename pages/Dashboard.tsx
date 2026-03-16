@@ -2002,9 +2002,9 @@ const Dashboard: React.FC = () => {
                                     >
                                         <LineChart data={sessionHistory.slice(0, 30).reverse()}>
                                             <XAxis dataKey="day" tick={{ fill: '#444', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(val) => val.slice(5)} />
-                                            <YAxis tick={{ fill: '#444', fontSize: 10 }} axisLine={false} tickLine={false} unit=" ms" />
+                                            <YAxis domain={['dataMin - 2', 'dataMax + 2']} tick={{ fill: '#444', fontSize: 10 }} axisLine={false} tickLine={false} unit=" ms" />
                                             <Tooltip contentStyle={{ backgroundColor: '#1C1C1C', border: '1px solid #333', borderRadius: '8px', fontSize: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }} formatter={(value: number) => [`${value} ms`, 'HRV']} />
-                                            <Line type="monotone" dataKey="average_hrv" stroke="#A855F7" dot={false} strokeWidth={1.5} />
+                                            <Line type="monotone" dataKey="average_hrv" stroke="#A855F7" dot={false} strokeWidth={1.5} connectNulls />
                                         </LineChart>
                                     </ResponsiveContainer>
                                 </div>
