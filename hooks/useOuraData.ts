@@ -215,9 +215,12 @@ export const fetchDailyStats = async (
     const availabilityKey = config.availabilityKey;
     const normalizedScopes = normalizeGrantedOuraScopes(config.grantedScopes);
     const hasDailyScope = hasAnyOuraScope(normalizedScopes, ['daily']);
-    const canFetchSpO2 = hasAnyOuraScope(normalizedScopes, ['spo2Daily', 'daily_spo2', 'spo2']);
-    const canFetchStress = hasDailyScope || hasAnyOuraScope(normalizedScopes, ['stress', 'daily_stress']);
-    const canFetchResilience = hasDailyScope || hasAnyOuraScope(normalizedScopes, ['resilience', 'daily_resilience']);
+    // SpO2 requires the spo2Daily scope; stress & resilience fall under the daily scope
+    // but have no dedicated scope of their own. All three use optional:true in the fetch
+    // layer so failures are handled gracefully — always attempt the request.
+    const canFetchSpO2 = hasDailyScope || hasAnyOuraScope(normalizedScopes, ['spo2Daily', 'daily_spo2', 'spo2']);
+    const canFetchStress = hasDailyScope || hasAnyOuraScope(normalizedScopes, ['stress', 'daily_stress', 'daily']);
+    const canFetchResilience = hasDailyScope || hasAnyOuraScope(normalizedScopes, ['resilience', 'daily_resilience', 'daily']);
     const canFetchHeartrate = hasAnyOuraScope(normalizedScopes, ['heartrate']);
     const canFetchWorkout = hasAnyOuraScope(normalizedScopes, ['workout']);
     const canFetchSession = hasAnyOuraScope(normalizedScopes, ['session']);

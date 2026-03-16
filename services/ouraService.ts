@@ -21,7 +21,7 @@ type DateWindowOptions = FetchOptions & { windowDays?: number };
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_RETRIES = 2;
 const RETRY_BACKOFF_MS = [1_000, 3_000];
-const UNAVAILABLE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const UNAVAILABLE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 interface UnavailableEntry {
   endpoints: string[];
