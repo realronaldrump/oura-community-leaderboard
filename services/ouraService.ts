@@ -21,7 +21,7 @@ type DateWindowOptions = FetchOptions & { windowDays?: number };
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_RETRIES = 2;
 const RETRY_BACKOFF_MS = [1_000, 3_000];
-const UNAVAILABLE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const UNAVAILABLE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 interface UnavailableEntry {
   endpoints: string[];
@@ -333,9 +333,16 @@ class OuraService {
           throw new Error(`Unauthorized while fetching ${endpoint}${suffix}`);
         }
 
-        if (optional && (response.status === 403 || response.status === 404)) {
+        if (optional && response.status === 404) {
           this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
           this.markEndpointUnavailable(availabilityKey, endpoint);
+          return results;
+        }
+
+        if (optional && response.status === 403) {
+          this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
+          // Don't blacklist 403s — they may be transient (subscription lapses, server-side
+          // permission propagation delays). Retrying on the next sync is cheap.
           return results;
         }
 

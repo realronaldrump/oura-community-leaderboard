@@ -213,6 +213,9 @@ export const fetchDailyStats = async (
 ): Promise<DailyStats> => {
     const includeStaticCollections = config.includeStaticCollections ?? true;
     const availabilityKey = config.availabilityKey;
+    // Clear stale endpoint blacklists so optional endpoints (SpO2, Stress, Resilience)
+    // are always re-attempted instead of being silently skipped after a transient failure.
+    ouraService.clearUnavailableEndpoints(token, availabilityKey);
     const normalizedScopes = normalizeGrantedOuraScopes(config.grantedScopes);
     const hasDailyScope = hasAnyOuraScope(normalizedScopes, ['daily']);
     // SpO2 requires the spo2Daily scope; stress & resilience fall under the daily scope
