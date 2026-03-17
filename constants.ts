@@ -5,12 +5,17 @@ export const REDIRECT_URI = typeof window !== 'undefined' ? window.location.orig
 export const OAUTH_STATE_KEY = 'oura_oauth_state_v1';
 export const POST_AUTH_DESTINATION_KEY = 'oura_post_auth_destination_v1';
 
-/**
- * Leave scopes unspecified by default so Oura can present all currently available
- * scopes for consent. This prevents stale hardcoded scope lists from blocking
- * newly added data routes.
- */
-const REQUESTED_SCOPES: string[] = [];
+const REQUESTED_SCOPES: string[] = [
+  'email',
+  'personal',
+  'daily',
+  'heartrate',
+  'workout',
+  'session',
+  'tag',
+  'spo2Daily',
+  'heart_health',
+];
 
 // Dynamically determine the redirect URI based on the current environment.
 export const getAuthUrl = (state: string) => {

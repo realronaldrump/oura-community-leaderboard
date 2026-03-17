@@ -429,8 +429,6 @@ const Dashboard: React.FC = () => {
         if (!activeProfile) return;
         setIsSyncing(true);
         setShowSyncModal(true);
-        // Clear stale endpoint blacklists so all data types are re-attempted
-        ouraService.clearUnavailableEndpoints(activeProfile.token, activeProfile.id);
         try {
             const existingData = queryClient.getQueryData(['dailyStats', activeProfile.id]) as DailyStats | undefined;
             const syncedData = await runWithAutoTokenRefresh(activeProfile.id, (token) =>
@@ -445,7 +443,11 @@ const Dashboard: React.FC = () => {
             await markProfileSyncSuccess(activeProfile.id);
         } catch (err) {
             console.error('Sync failed:', err);
-            setSyncProgress(prev => ({ ...prev, status: 'error', error: 'Something went wrong. Please try again.' }));
+            const message = err instanceof Error ? err.message.toLowerCase() : '';
+            const errorMessage = (message.includes('missing required oura consent') || message.includes('missing oura consent scopes'))
+                ? 'Reconnect your Oura account to grant the required scopes.'
+                : 'Something went wrong. Please try again.';
+            setSyncProgress(prev => ({ ...prev, status: 'error', error: errorMessage }));
             await markProfileSyncError(activeProfile.id, err);
         } finally {
             setIsSyncing(false);

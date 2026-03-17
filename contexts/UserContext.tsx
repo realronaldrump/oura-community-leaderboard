@@ -4,6 +4,7 @@ import { createOAuthState, getAuthUrl, OAUTH_STATE_KEY, POST_AUTH_DESTINATION_KE
 import { ouraService } from '../services/ouraService';
 import { firebaseService } from '../services/firebaseService';
 import { oauthService } from '../services/oauthService';
+import { sanitizeGrantedOuraScopes } from '../utils/ouraScopes';
 
 interface AddProfileOptions {
     accessToken: string;
@@ -110,6 +111,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAuthStatus(AuthStatus.LOADING);
         try {
             const { accessToken, refreshToken = null } = options;
+            const grantedScopes = sanitizeGrantedOuraScopes(options.grantedScopes);
+            if (grantedScopes.length === 0) {
+                throw new Error('Missing Oura consent scopes in token response. Reconnect and grant the requested permissions.');
+            }
             // Fetch user details to identify them
             const personalInfo = await ouraService.getPersonalInfo(accessToken);
             const ouraUserId =
@@ -145,7 +150,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 email: normalizedEmail || existingProfile?.email || null,
                 token: accessToken,
                 refreshToken: refreshToken || existingProfile?.refreshToken || null,
-                grantedScopes: options.grantedScopes?.length ? options.grantedScopes : existingProfile?.grantedScopes,
+                grantedScopes,
                 tokenExpiresAt,
                 lastSuccessfulSyncAt: existingProfile?.lastSuccessfulSyncAt || null,
                 lastSyncError: null,
@@ -208,6 +213,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         const refreshed = await oauthService.refreshAccessToken(profile.refreshToken);
+        const refreshedScopes = sanitizeGrantedOuraScopes(refreshed.grantedScopes);
         const expiresInSeconds =
             typeof refreshed.expiresInSeconds === 'number' && Number.isFinite(refreshed.expiresInSeconds)
                 ? refreshed.expiresInSeconds
@@ -220,7 +226,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const refreshedProfilePatch: Partial<UserProfile> = {
             token: refreshed.accessToken,
             refreshToken: refreshed.refreshToken || profile.refreshToken || null,
-            grantedScopes: refreshed.grantedScopes?.length ? refreshed.grantedScopes : profile.grantedScopes,
+            grantedScopes: refreshedScopes.length > 0 ? refreshedScopes : profile.grantedScopes,
             tokenExpiresAt,
             lastSyncError: null,
             lastSyncErrorAt: null,
@@ -228,6 +234,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         await firebaseService.patchProfile(profile.id, refreshedProfilePatch);
+        ouraService.clearUnavailableEndpoints(refreshed.accessToken, profile.id);
         return refreshed.accessToken;
     }, []);
 

@@ -17,31 +17,35 @@ type QueryParams = Record<string, string | undefined>;
 type DateWindow = { start: string; end: string };
 type FetchOptions = { optional?: boolean; availabilityKey?: string };
 type DateWindowOptions = FetchOptions & { windowDays?: number };
+type UnavailableReason = 'missing_scope' | 'not_found';
 
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_RETRIES = 2;
 const RETRY_BACKOFF_MS = [1_000, 3_000];
 const UNAVAILABLE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-interface UnavailableEntry {
-  endpoints: string[];
+interface UnavailableEndpointState {
+  reason: UnavailableReason;
   timestamp: number;
 }
 
+interface UnavailableEntry {
+  endpoints: Record<string, UnavailableEndpointState>;
+}
+
 class OuraService {
-  private unavailableEndpointsByAvailability = new Map<string, Set<string>>();
-  private unavailableTimestamps = new Map<string, number>();
-  private readonly unavailableCacheKey = 'oura_unavailable_endpoints_v4';
+  private unavailableEndpointsByAvailability = new Map<string, Map<string, UnavailableEndpointState>>();
+  private readonly unavailableCacheKey = 'oura_unavailable_endpoints_v5';
   private readonly maxWindowDays = 90;
   private readonly maxConcurrentWindowRequests = 2;
 
   constructor() {
     this.loadUnavailableCache();
-    // Remove stale cache keys from prior formats.
     try {
       window.localStorage?.removeItem('oura_unavailable_endpoints_v1');
       window.localStorage?.removeItem('oura_unavailable_endpoints_v2');
       window.localStorage?.removeItem('oura_unavailable_endpoints_v3');
+      window.localStorage?.removeItem('oura_unavailable_endpoints_v4');
     } catch {
       /* noop */
     }
@@ -81,7 +85,6 @@ class OuraService {
     if (scopedKey) {
       return `profile:${scopedKey}`;
     }
-    // Backward-compatible fallback when no profile key is provided.
     return `token:${token.slice(0, 20)}`;
   }
 
@@ -93,9 +96,16 @@ class OuraService {
       const parsed = JSON.parse(raw) as Record<string, UnavailableEntry>;
       const now = Date.now();
       Object.entries(parsed).forEach(([availabilityKey, entry]) => {
-        if (now - entry.timestamp < UNAVAILABLE_CACHE_TTL_MS) {
-          this.unavailableEndpointsByAvailability.set(availabilityKey, new Set(entry.endpoints));
-          this.unavailableTimestamps.set(availabilityKey, entry.timestamp);
+        const endpoints = new Map<string, UnavailableEndpointState>();
+        Object.entries(entry.endpoints || {}).forEach(([endpoint, state]) => {
+          if (!state || typeof state !== 'object') return;
+          if (state.reason === 'missing_scope' || now - state.timestamp < UNAVAILABLE_CACHE_TTL_MS) {
+            endpoints.set(endpoint, state);
+          }
+        });
+
+        if (endpoints.size > 0) {
+          this.unavailableEndpointsByAvailability.set(availabilityKey, endpoints);
         }
       });
     } catch {
@@ -109,8 +119,7 @@ class OuraService {
       const payload: Record<string, UnavailableEntry> = {};
       this.unavailableEndpointsByAvailability.forEach((endpoints, availabilityKey) => {
         payload[availabilityKey] = {
-          endpoints: Array.from(endpoints),
-          timestamp: this.unavailableTimestamps.get(availabilityKey) ?? Date.now(),
+          endpoints: Object.fromEntries(endpoints.entries()),
         };
       });
       window.localStorage.setItem(this.unavailableCacheKey, JSON.stringify(payload));
@@ -120,28 +129,35 @@ class OuraService {
   }
 
   private isEndpointUnavailable(availabilityKey: string, endpoint: string): boolean {
-    const ts = this.unavailableTimestamps.get(availabilityKey);
-    if (ts && Date.now() - ts >= UNAVAILABLE_CACHE_TTL_MS) {
-      this.unavailableEndpointsByAvailability.delete(availabilityKey);
-      this.unavailableTimestamps.delete(availabilityKey);
+    const endpointStates = this.unavailableEndpointsByAvailability.get(availabilityKey);
+    if (!endpointStates) return false;
+
+    const state = endpointStates.get(endpoint);
+    if (!state) return false;
+    if (state.reason === 'missing_scope') return true;
+
+    if (Date.now() - state.timestamp >= UNAVAILABLE_CACHE_TTL_MS) {
+      endpointStates.delete(endpoint);
+      if (endpointStates.size === 0) {
+        this.unavailableEndpointsByAvailability.delete(availabilityKey);
+      }
       this.persistUnavailableCache();
       return false;
     }
-    return this.unavailableEndpointsByAvailability.get(availabilityKey)?.has(endpoint) ?? false;
+
+    return true;
   }
 
-  private markEndpointUnavailable(availabilityKey: string, endpoint: string): void {
-    const unavailable = this.unavailableEndpointsByAvailability.get(availabilityKey) ?? new Set<string>();
-    unavailable.add(endpoint);
+  private markEndpointUnavailable(availabilityKey: string, endpoint: string, reason: UnavailableReason): void {
+    const unavailable = this.unavailableEndpointsByAvailability.get(availabilityKey) ?? new Map<string, UnavailableEndpointState>();
+    unavailable.set(endpoint, { reason, timestamp: Date.now() });
     this.unavailableEndpointsByAvailability.set(availabilityKey, unavailable);
-    this.unavailableTimestamps.set(availabilityKey, Date.now());
     this.persistUnavailableCache();
   }
 
   clearUnavailableEndpoints(token: string, availabilityKey?: string): void {
     const key = this.getAvailabilityKey(token, availabilityKey);
     this.unavailableEndpointsByAvailability.delete(key);
-    this.unavailableTimestamps.delete(key);
     this.persistUnavailableCache();
   }
 
@@ -324,7 +340,7 @@ class OuraService {
 
         if (optional && this.isMissingScopeError(response.status, detail)) {
           this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
-          this.markEndpointUnavailable(availabilityKey, endpoint);
+          this.markEndpointUnavailable(availabilityKey, endpoint, 'missing_scope');
           return results;
         }
 
@@ -335,7 +351,7 @@ class OuraService {
 
         if (optional && response.status === 404) {
           this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
-          this.markEndpointUnavailable(availabilityKey, endpoint);
+          this.markEndpointUnavailable(availabilityKey, endpoint, 'not_found');
           return results;
         }
 

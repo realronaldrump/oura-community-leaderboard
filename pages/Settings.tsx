@@ -224,7 +224,11 @@ const Settings: React.FC = () => {
             await markProfileSyncSuccess(activeProfile.id);
         } catch (err) {
             console.error('Full sync failed:', err);
-            setSyncProgress(prev => ({ ...prev, status: 'error', error: 'Something went wrong. Please try again.' }));
+            const message = err instanceof Error ? err.message.toLowerCase() : '';
+            const errorMessage = (message.includes('missing required oura consent') || message.includes('missing oura consent scopes'))
+                ? 'Reconnect your Oura account to grant the required scopes.'
+                : 'Something went wrong. Please try again.';
+            setSyncProgress(prev => ({ ...prev, status: 'error', error: errorMessage }));
             await markProfileSyncError(activeProfile.id, err);
         }
     };
@@ -386,7 +390,7 @@ const Settings: React.FC = () => {
         } catch (error) {
             const rawMessage = error instanceof Error ? error.message : 'Unknown error';
             const lower = rawMessage.toLowerCase();
-            const message = (lower.includes('unauthorized') || lower.includes('401'))
+            const message = (lower.includes('unauthorized') || lower.includes('401') || lower.includes('missing required oura consent') || lower.includes('missing oura consent scopes'))
                 ? 'Oura check failed: authorization expired. Reconnect your Oura account.'
                 : 'Oura check failed. Please try again.';
 

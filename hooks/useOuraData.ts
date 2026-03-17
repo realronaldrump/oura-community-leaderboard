@@ -213,21 +213,19 @@ export const fetchDailyStats = async (
 ): Promise<DailyStats> => {
     const includeStaticCollections = config.includeStaticCollections ?? true;
     const availabilityKey = config.availabilityKey;
-    // Clear stale endpoint blacklists so optional endpoints (SpO2, Stress, Resilience)
-    // are always re-attempted instead of being silently skipped after a transient failure.
-    ouraService.clearUnavailableEndpoints(token, availabilityKey);
     const normalizedScopes = normalizeGrantedOuraScopes(config.grantedScopes);
     const hasDailyScope = hasAnyOuraScope(normalizedScopes, ['daily']);
-    // SpO2 requires the spo2Daily scope; stress & resilience fall under the daily scope
-    // but have no dedicated scope of their own. All three use optional:true in the fetch
-    // layer so failures are handled gracefully — always attempt the request.
-    const canFetchSpO2 = hasDailyScope || hasAnyOuraScope(normalizedScopes, ['spo2Daily', 'daily_spo2', 'spo2']);
-    const canFetchStress = hasDailyScope || hasAnyOuraScope(normalizedScopes, ['stress', 'daily_stress', 'daily']);
-    const canFetchResilience = hasDailyScope || hasAnyOuraScope(normalizedScopes, ['resilience', 'daily_resilience', 'daily']);
+    if (!hasDailyScope) {
+        throw new Error('Missing required Oura consent: daily. Reconnect your account.');
+    }
+
+    const canFetchSpO2 = hasAnyOuraScope(normalizedScopes, ['spo2Daily']);
+    const canFetchStress = hasDailyScope;
+    const canFetchResilience = hasDailyScope;
     const canFetchHeartrate = hasAnyOuraScope(normalizedScopes, ['heartrate']);
     const canFetchWorkout = hasAnyOuraScope(normalizedScopes, ['workout']);
     const canFetchSession = hasAnyOuraScope(normalizedScopes, ['session']);
-    const canFetchTag = hasAnyOuraScope(normalizedScopes, ['tag', 'tag user', 'enhanced_tag']);
+    const canFetchTag = hasAnyOuraScope(normalizedScopes, ['tag']);
     const canFetchRingConfiguration = hasAnyOuraScope(normalizedScopes, ['ring_configuration']);
     const canFetchHeartHealth = hasAnyOuraScope(normalizedScopes, ['heart_health']);
     const end = dateRange?.end || getFetchEndDate();
@@ -262,7 +260,7 @@ export const fetchDailyStats = async (
         ouraService.getRestModePeriods(token, start, end, { availabilityKey }),
         includeStaticCollections && canFetchRingConfiguration ? ouraService.getRingConfiguration(token, { availabilityKey }) : Promise.resolve([]),
         canFetchHeartHealth ? ouraService.getDailyCardiovascularAge(token, start, end, { availabilityKey }) : Promise.resolve([]),
-        ouraService.getVO2Max(token, start, end, { availabilityKey }),
+        canFetchHeartHealth ? ouraService.getVO2Max(token, start, end, { availabilityKey }) : Promise.resolve([]),
     ];
 
     const suppSettled = await Promise.allSettled(supplementaryRequests);

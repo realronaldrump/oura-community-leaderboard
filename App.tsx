@@ -57,6 +57,9 @@ const formatAuthFailureMessage = (error: unknown): string => {
 
     if (error instanceof Error) {
         const message = error.message.toLowerCase();
+        if (message.includes('missing oura consent scopes')) {
+            return 'Authentication failed: Oura did not return the granted scope list. Reconnect and grant the requested permissions.';
+        }
         if (message.includes('unauthorized') || message.includes('401')) {
             return 'Authentication failed: received token could not access Oura personal info.';
         }
