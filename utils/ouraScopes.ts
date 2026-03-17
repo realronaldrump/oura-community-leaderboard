@@ -1,6 +1,19 @@
 const normalizeOuraScope = (scope: string): string =>
   scope.toLowerCase().replace(/[^a-z0-9]/g, '');
 
+export const OURA_SCOPE_CANDIDATES = {
+  daily: ['daily', 'daily_sleep', 'daily_readiness', 'daily_activity'],
+  spo2: ['spo2Daily', 'daily_spo2', 'spo2'],
+  stress: ['stress', 'daily_stress', 'daily'],
+  resilience: ['resilience', 'daily_resilience', 'daily'],
+  heartrate: ['heartrate', 'heart_rate'],
+  workout: ['workout'],
+  session: ['session'],
+  tag: ['tag', 'tag user', 'enhanced_tag'],
+  ringConfiguration: ['ring_configuration'],
+  heartHealth: ['heart_health', 'daily_cardiovascular_age', 'vO2_max', 'vo2_max'],
+} as const;
+
 export const sanitizeGrantedOuraScopes = (grantedScopes?: string[]): string[] => {
   if (!grantedScopes?.length) return [];
 
@@ -35,15 +48,15 @@ export const hasAnyOuraScope = (scopeSet: Set<string>, candidates: string[]): bo
   return candidates.some((candidate) => scopeSet.has(normalizeOuraScope(candidate)));
 };
 
-const REQUIRED_CONSENT_SCOPES: Array<{ key: string; label: string }> = [
-  { key: 'daily', label: 'daily data' },
-  { key: 'heart_health', label: 'heart health' },
+const REQUIRED_CONSENT_SCOPES: Array<{ keys: readonly string[]; label: string }> = [
+  { keys: OURA_SCOPE_CANDIDATES.heartHealth, label: 'heart health' },
 ];
 
 export const getMissingRequiredOuraConsentScopes = (grantedScopes?: string[]): string[] => {
   const scopeSet = normalizeGrantedOuraScopes(grantedScopes);
+  if (scopeSet.size === 0) return [];
 
   return REQUIRED_CONSENT_SCOPES
-    .filter(({ key }) => !scopeSet.has(normalizeOuraScope(key)))
+    .filter(({ keys }) => !hasAnyOuraScope(scopeSet, [...keys]))
     .map(({ label }) => label);
 };

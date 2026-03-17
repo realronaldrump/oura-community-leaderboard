@@ -393,6 +393,35 @@ const Dashboard: React.FC = () => {
 
     const queryClient = useQueryClient();
 
+    const getDashboardErrorState = (error: unknown): { title: string; message: string } => {
+        const raw = error instanceof Error ? error.message : String(error || '');
+        const message = raw.toLowerCase();
+
+        if (
+            message.includes('unauthorized') ||
+            message.includes('401') ||
+            message.includes('missing_refresh_token') ||
+            message.includes('refresh_failed')
+        ) {
+            return {
+                title: 'Session Expired',
+                message: 'Your Oura connection has expired. Please securely reconnect your ring to continue syncing your data.',
+            };
+        }
+
+        if (message.includes('missing required oura consent') || message.includes('missing oura consent scopes')) {
+            return {
+                title: 'Reconnect Required',
+                message: 'Your Oura connection is active, but required permissions were not granted. Reconnect your ring and approve the requested access to continue syncing.',
+            };
+        }
+
+        return {
+            title: 'Could Not Load Data',
+            message: 'There was a problem loading your Oura data. Try again, and reconnect your ring if the problem persists.',
+        };
+    };
+
     const runWithAutoTokenRefresh = async <T,>(profileId: string, operation: (token: string) => Promise<T>): Promise<T> => {
         const firstToken = await getAccessTokenForProfile(profileId);
         try {
@@ -1706,15 +1735,16 @@ const Dashboard: React.FC = () => {
     const activeQueryError = userQueries.find((q, idx) => profiles[idx].id === activeProfile?.id && q.isError);
 
     if (activeQueryError) {
+        const errorState = getDashboardErrorState(activeQueryError.error);
         return (
             <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#0C0C0C]">
                 <div className="w-full max-w-sm text-center">
                     <div className="w-16 h-16 bg-[#141414] border border-[#222] rounded-2xl flex items-center justify-center mx-auto mb-6">
                         <Settings className="w-8 h-8 text-[#F87171]" />
                     </div>
-                    <h2 className="text-xl font-bold tracking-tight text-[#FAFAFA] mb-2">Session Expired</h2>
+                    <h2 className="text-xl font-bold tracking-tight text-[#FAFAFA] mb-2">{errorState.title}</h2>
                     <p className="text-[#666] text-sm mb-8">
-                        Your Oura connection has expired. Please securely reconnect your ring to continue syncing your data.
+                        {errorState.message}
                     </p>
                     <button onClick={login} className="w-full py-3.5 bg-[#00C896] text-[#0C0C0C] font-semibold rounded-lg hover:opacity-90 transition-opacity text-sm mb-4">
                         Reconnect Oura Ring

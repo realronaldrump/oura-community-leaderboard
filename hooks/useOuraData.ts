@@ -1,7 +1,7 @@
 import { ouraService } from '../services/ouraService';
 import { DailyStats } from '../types';
 import { getOuraFetchEndISODate, shiftLocalISODate } from '../utils/date';
-import { hasAnyOuraScope, normalizeGrantedOuraScopes } from '../utils/ouraScopes';
+import { hasAnyOuraScope, normalizeGrantedOuraScopes, OURA_SCOPE_CANDIDATES } from '../utils/ouraScopes';
 
 export const FULL_HISTORY_START_DATE = '2016-01-01';
 const INITIAL_RECENT_DAYS = 28;
@@ -214,20 +214,16 @@ export const fetchDailyStats = async (
     const includeStaticCollections = config.includeStaticCollections ?? true;
     const availabilityKey = config.availabilityKey;
     const normalizedScopes = normalizeGrantedOuraScopes(config.grantedScopes);
-    const hasDailyScope = hasAnyOuraScope(normalizedScopes, ['daily']);
-    if (!hasDailyScope) {
-        throw new Error('Missing required Oura consent: daily. Reconnect your account.');
-    }
-
-    const canFetchSpO2 = hasAnyOuraScope(normalizedScopes, ['spo2Daily']);
+    const hasDailyScope = hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.daily]);
+    const canFetchSpO2 = hasDailyScope || hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.spo2]);
     const canFetchStress = hasDailyScope;
     const canFetchResilience = hasDailyScope;
-    const canFetchHeartrate = hasAnyOuraScope(normalizedScopes, ['heartrate']);
-    const canFetchWorkout = hasAnyOuraScope(normalizedScopes, ['workout']);
-    const canFetchSession = hasAnyOuraScope(normalizedScopes, ['session']);
-    const canFetchTag = hasAnyOuraScope(normalizedScopes, ['tag']);
-    const canFetchRingConfiguration = hasAnyOuraScope(normalizedScopes, ['ring_configuration']);
-    const canFetchHeartHealth = hasAnyOuraScope(normalizedScopes, ['heart_health']);
+    const canFetchHeartrate = hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.heartrate]);
+    const canFetchWorkout = hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.workout]);
+    const canFetchSession = hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.session]);
+    const canFetchTag = hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.tag]);
+    const canFetchRingConfiguration = hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.ringConfiguration]);
+    const canFetchHeartHealth = hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.heartHealth]);
     const end = dateRange?.end || getFetchEndDate();
     const start = dateRange?.start || shiftDate(end, -INITIAL_RECENT_DAYS);
 

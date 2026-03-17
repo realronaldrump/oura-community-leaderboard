@@ -112,9 +112,6 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             const { accessToken, refreshToken = null } = options;
             const grantedScopes = sanitizeGrantedOuraScopes(options.grantedScopes);
-            if (grantedScopes.length === 0) {
-                throw new Error('Missing Oura consent scopes in token response. Reconnect and grant the requested permissions.');
-            }
             // Fetch user details to identify them
             const personalInfo = await ouraService.getPersonalInfo(accessToken);
             const ouraUserId =
@@ -141,6 +138,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 expiresInSeconds && expiresInSeconds > 0
                     ? new Date(Date.now() + (expiresInSeconds * 1000)).toISOString()
                     : null;
+            const resolvedGrantedScopes = grantedScopes.length > 0
+                ? grantedScopes
+                : existingProfile?.grantedScopes;
 
             const newProfile: UserProfile = {
                 ...existingProfile,
@@ -150,7 +150,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 email: normalizedEmail || existingProfile?.email || null,
                 token: accessToken,
                 refreshToken: refreshToken || existingProfile?.refreshToken || null,
-                grantedScopes,
+                grantedScopes: resolvedGrantedScopes,
                 tokenExpiresAt,
                 lastSuccessfulSyncAt: existingProfile?.lastSuccessfulSyncAt || null,
                 lastSyncError: null,
