@@ -9,7 +9,9 @@ import { ouraService } from '../services/ouraService';
 import { webhookService } from '../services/webhookService';
 import { DailyStats } from '../types';
 import { getProfileDisplayName } from '../utils/profileName';
-import { formatLocalISODate } from '../utils/date';\n\ntype QuickCheckStatus = 'idle' | 'running' | 'ok' | 'warning' | 'error';
+import { formatLocalISODate } from '../utils/date';
+
+type QuickCheckStatus = 'idle' | 'running' | 'ok' | 'warning' | 'error';
 
 type QuickCheckState = {
     status: QuickCheckStatus;
