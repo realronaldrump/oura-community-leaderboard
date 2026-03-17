@@ -51,7 +51,6 @@ import {
     isISODateString,
     shiftLocalISODate,
 } from '../utils/date';
-import { getMissingRequiredOuraConsentScopes } from '../utils/ouraScopes';
 
 const METERS_TO_MILES = 0.000621371;
 const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
@@ -569,12 +568,6 @@ const Dashboard: React.FC = () => {
             const lastSuccessfulSyncMs = profile.lastSuccessfulSyncAt ? new Date(profile.lastSuccessfulSyncAt).getTime() : 0;
             const tokenExpiryMs = profile.tokenExpiresAt ? new Date(profile.tokenExpiresAt).getTime() : 0;
             const missingRefresh = !profile.refreshToken;
-            const missingConsentScopes = getMissingRequiredOuraConsentScopes(profile.grantedScopes);
-
-            if (missingConsentScopes.length > 0) {
-                map.set(profile.id, { level: 'error', label: `Reconnect to grant ${missingConsentScopes.join(' + ')}` });
-                return;
-            }
 
             if (query?.isError || profile.lastSyncError) {
                 map.set(profile.id, { level: 'error', label: 'Needs reconnect' });

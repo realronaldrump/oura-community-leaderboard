@@ -52,6 +52,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
     const [retryCount, setRetryCount] = useState(0);
     const refreshInFlightRef = useRef(new Map<string, Promise<string>>());
+    const profilesRef = useRef(profiles);
+    useEffect(() => { profilesRef.current = profiles; }, [profiles]);
 
     // Subscribe to Firebase profiles with error handling
     useEffect(() => {
@@ -121,8 +123,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const normalizedEmail = personalInfo.email?.toLowerCase() || null;
 
             // Match by stable Oura user id first, then email as fallback.
+            // Use the ref to get the latest profiles (avoids stale closure after OAuth redirect).
+            const currentProfiles = profilesRef.current;
             const ouraUserIdStr = ouraUserId ? String(ouraUserId) : null;
-            const existingProfile = profiles.find(
+            const existingProfile = currentProfiles.find(
                 (p) => {
                     const existingIdStr = p.ouraUserId ? String(p.ouraUserId) : null;
                     return (ouraUserIdStr && existingIdStr === ouraUserIdStr) ||

@@ -9,10 +9,7 @@ import { ouraService } from '../services/ouraService';
 import { webhookService } from '../services/webhookService';
 import { DailyStats } from '../types';
 import { getProfileDisplayName } from '../utils/profileName';
-import { formatLocalISODate } from '../utils/date';
-import { getMissingRequiredOuraConsentScopes } from '../utils/ouraScopes';
-
-type QuickCheckStatus = 'idle' | 'running' | 'ok' | 'warning' | 'error';
+import { formatLocalISODate } from '../utils/date';\n\ntype QuickCheckStatus = 'idle' | 'running' | 'ok' | 'warning' | 'error';
 
 type QuickCheckState = {
     status: QuickCheckStatus;
@@ -114,10 +111,6 @@ const Settings: React.FC = () => {
         details: [],
         checkedAt: null,
     });
-    const missingConsentScopes = React.useMemo(
-        () => getMissingRequiredOuraConsentScopes(activeProfile?.grantedScopes),
-        [activeProfile?.grantedScopes]
-    );
 
     React.useEffect(() => {
         if (activeProfile) {
@@ -491,22 +484,6 @@ const Settings: React.FC = () => {
             </nav>
 
             <div className="max-w-2xl mx-auto px-4 pt-8 pb-12">
-                {missingConsentScopes.length > 0 && (
-                    <section className="mb-6">
-                        <div className="rounded-lg border border-[#4A2626] bg-[#211313] p-4">
-                            <p className="text-sm font-medium text-[#FCA5A5]">Reconnect required</p>
-                            <p className="mt-1 text-sm text-[#F3D0D0]">
-                                This profile is missing Oura consent for {missingConsentScopes.join(' and ')}. Reconnect to grant the new scopes and complete sync.
-                            </p>
-                            <button
-                                onClick={login}
-                                className="mt-3 inline-flex min-h-9 items-center rounded-md bg-[#00C896] px-3 text-xs font-semibold text-[#0C0C0C] transition-opacity hover:opacity-90"
-                            >
-                                Reconnect Oura Ring
-                            </button>
-                        </div>
-                    </section>
-                )}
 
                 {/* Profile */}
                 <section className="mb-8">
