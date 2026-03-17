@@ -7,6 +7,7 @@ import {
   Cog6ToothIcon
 } from '@heroicons/react/24/outline';
 import { useHapticFeedback } from './ios';
+import Footer from './Footer';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -99,6 +100,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onNavigate, onLogo
           <div className="max-w-7xl mx-auto pb-24 md:pb-8">
             {children}
           </div>
+          <Footer />
         </main>
 
         {/* Mobile Bottom Nav - iOS Style */}
