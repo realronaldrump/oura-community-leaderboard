@@ -120,11 +120,13 @@ const resolveInvitePreview = async (invite: CompetitionInvite): Promise<Competit
 
 export const competitionService = {
     subscribeToCompetitions: (
+        profileId: string,
         callback: (competitions: Competition[]) => void,
         onError?: (error: unknown) => void
     ) => {
         const competitionsQuery = query(
             collection(db, COMPETITIONS_COLLECTION),
+            where('participantProfileIds', 'array-contains', profileId),
             orderBy('updatedAt', 'desc')
         );
 

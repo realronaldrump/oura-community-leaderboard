@@ -8,10 +8,17 @@ export const useCompetitions = (activeProfileId?: string | null) => {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        if (!activeProfileId) {
+            setCompetitions([]);
+            setIsLoading(false);
+            return;
+        }
+
         setIsLoading(true);
         setError(null);
 
         const unsubscribe = competitionService.subscribeToCompetitions(
+            activeProfileId,
             (nextCompetitions) => {
                 setCompetitions(nextCompetitions);
                 setIsLoading(false);
@@ -24,14 +31,11 @@ export const useCompetitions = (activeProfileId?: string | null) => {
         );
 
         return () => unsubscribe();
-    }, []);
+    }, [activeProfileId]);
 
     const visibleCompetitions = useMemo(() => {
         if (!activeProfileId) return [];
-        return competitions.filter((competition) =>
-            competition.createdByProfileId === activeProfileId ||
-            competition.participantProfileIds.includes(activeProfileId)
-        );
+        return competitions;
     }, [activeProfileId, competitions]);
 
     return {
