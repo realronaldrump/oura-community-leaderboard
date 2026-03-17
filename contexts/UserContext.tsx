@@ -123,8 +123,16 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const normalizedEmail = personalInfo.email?.toLowerCase() || null;
 
             // Match by stable Oura user id first, then email as fallback.
-            // Use the ref to get the latest profiles (avoids stale closure after OAuth redirect).
-            const currentProfiles = profilesRef.current;
+            // Use the ref if profiles are already loaded; otherwise fetch directly
+            // from Firebase to avoid the race where the snapshot hasn't arrived yet.
+            let currentProfiles = profilesRef.current;
+            if (currentProfiles.length === 0) {
+                try {
+                    currentProfiles = await firebaseService.getProfiles();
+                } catch {
+                    // If the direct fetch fails, proceed with empty (worst case: new profile)
+                }
+            }
             const ouraUserIdStr = ouraUserId ? String(ouraUserId) : null;
             const existingProfile = currentProfiles.find(
                 (p) => {

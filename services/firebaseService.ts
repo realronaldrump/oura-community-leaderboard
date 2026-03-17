@@ -4,6 +4,7 @@ import {
     doc,
     setDoc,
     deleteDoc,
+    getDocs,
     onSnapshot,
     QuerySnapshot,
     DocumentData
@@ -40,6 +41,18 @@ export const firebaseService = {
                 }
             }
         );
+    },
+
+    /**
+     * One-shot fetch of all profiles (bypasses the realtime subscription).
+     */
+    getProfiles: async (): Promise<UserProfile[]> => {
+        const snapshot = await getDocs(collection(db, PROFILES_COLLECTION));
+        const profiles: UserProfile[] = [];
+        snapshot.forEach((doc) => {
+            profiles.push(doc.data() as UserProfile);
+        });
+        return profiles;
     },
 
     /**

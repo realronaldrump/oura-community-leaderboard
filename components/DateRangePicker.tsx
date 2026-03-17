@@ -195,15 +195,16 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
         if (!isRangeMode || !dates.length) return '';
         if (normalizedDraftRange.end !== newestDay) return '';
 
+        // If the selected range covers all available data, show "Max" as active.
+        if (normalizedDraftRange.start === oldestDay) {
+            return 'all';
+        }
+
         for (const quickRange of QUICK_RANGES) {
             const startIndex = Math.min(quickRange.days - 1, dates.length - 1);
             if (normalizedDraftRange.start === dates[startIndex]) {
                 return quickRange.key;
             }
-        }
-
-        if (normalizedDraftRange.start === oldestDay && normalizedDraftRange.end === newestDay) {
-            return 'all';
         }
 
         return '';
