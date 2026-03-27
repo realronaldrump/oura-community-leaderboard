@@ -780,8 +780,8 @@ const Dashboard: React.FC = () => {
         ? getResilienceLevelLabel(currentResilience.level)
         : null;
     const currentResilienceScore = getResilienceScore(currentResilience);
-    const bodyTempDeviationF = currentReadiness?.temperature_deviation != null
-        ? currentReadiness.temperature_deviation * CELSIUS_DELTA_TO_FAHRENHEIT_DELTA
+    const bodyTempDeviationF = (currentReadiness?.temperature_deviation ?? currentReadiness?.temperature_trend_deviation) != null
+        ? (currentReadiness!.temperature_deviation ?? currentReadiness!.temperature_trend_deviation!) * CELSIUS_DELTA_TO_FAHRENHEIT_DELTA
         : null;
     const currentBedtimeMinutes = getNormalizedBedtimeMinutes(currentSession?.bedtime_start);
     const currentWakeTimeMinutes = getMinutesOfDay(currentSession?.bedtime_end);

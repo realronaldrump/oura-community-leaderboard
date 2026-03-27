@@ -14,6 +14,9 @@ const REQUESTED_SCOPES: string[] = [
   'session',
   'tag',
   'spo2Daily',
+  'daily_spo2',
+  'daily_stress',
+  'daily_resilience',
 ];
 
 // Dynamically determine the redirect URI based on the current environment.
