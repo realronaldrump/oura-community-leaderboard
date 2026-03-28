@@ -191,8 +191,31 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
     };
 
     const SortIcon = ({ field }: { field: SortField }) => {
-        if (sortField !== field) return <span className="text-black/20 ml-1">{'\u2195'}</span>;
-        return <span className="text-accent-cyan ml-1">{sortDirection === 'asc' ? '\u2191' : '\u2193'}</span>;
+        const isActive = sortField === field;
+        return (
+            <span
+                className={`inline-flex items-center justify-center w-5 h-5 ml-1.5 rounded-md transition-all duration-200 ${
+                    isActive
+                        ? 'bg-accent-cyan/15 shadow-[0_1px_3px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.5)]'
+                        : 'bg-black/[0.04] shadow-[0_1px_2px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.3)]'
+                }`}
+            >
+                {!isActive ? (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="opacity-30">
+                        <path d="M5 2L7 4.5H3L5 2Z" fill="currentColor" />
+                        <path d="M5 8L3 5.5H7L5 8Z" fill="currentColor" />
+                    </svg>
+                ) : sortDirection === 'asc' ? (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="text-accent-cyan">
+                        <path d="M5 1.5L8 5.5H2L5 1.5Z" fill="currentColor" />
+                    </svg>
+                ) : (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="text-accent-cyan">
+                        <path d="M5 8.5L2 4.5H8L5 8.5Z" fill="currentColor" />
+                    </svg>
+                )}
+            </span>
+        );
     };
 
     // 4. Prepare Chart Data (Moving Averages)
