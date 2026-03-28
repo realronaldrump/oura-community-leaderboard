@@ -339,8 +339,6 @@ const getAnyScoredDaysFromStats = (data?: DailyStats): Set<string> => {
 const formatContributionCaption = (label: string, value?: number | null): string =>
     value != null ? `${label} ${Math.round(value)}` : 'No score';
 
-const formatContributionCaption = (label: string, value?: number | null): string =>
-    value != null ? `${label} ${Math.round(value)}` : 'No score';
 
 // ============================================
 // PERSONAL RECORDS STRIP – Quick-access best/worst scores
