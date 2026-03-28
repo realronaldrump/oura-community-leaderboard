@@ -64,10 +64,12 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ data, dataKey, color, heigh
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #2a2a2a',
-              borderRadius: '6px',
-              fontSize: '12px'
+              backgroundColor: '#FFFFFF',
+              border: '1px solid rgba(0,0,0,0.1)',
+              borderRadius: '12px',
+              fontSize: '12px',
+              color: '#2D2A26',
+              boxShadow: '4px 4px 8px rgba(0,0,0,0.06), -4px -4px 8px rgba(255,255,255,0.8)',
             }}
             labelFormatter={(value) => {
               const d = new Date(value + 'T12:00:00');

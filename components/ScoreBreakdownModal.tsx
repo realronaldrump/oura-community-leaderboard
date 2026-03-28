@@ -226,7 +226,7 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
     const score = scoreData?.score ?? 0;
     const title = `${scoreType.charAt(0).toUpperCase() + scoreType.slice(1)} Score Breakdown`;
     const date = scoreData?.day ?? '';
-    const scoreColor = scoreType === 'readiness' ? '#34D399' : scoreType === 'sleep' ? '#60A5FA' : '#FBBF24';
+    const scoreColor = scoreType === 'readiness' ? '#7BC4A0' : scoreType === 'sleep' ? '#7BA8D4' : '#D4B87B';
     const rangeDays = selectedTimeRange === '7d' ? 7 : selectedTimeRange === '14d' ? 14 : 30;
     const filteredHistory = useMemo(
         () => historyData.slice(0, rangeDays).reverse(),
@@ -273,7 +273,7 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                         <p className="text-sm font-medium" style={{ color: scoreColor }}>
                             Score: {score}/100
                         </p>
-                        <p className="text-[#666666] text-xs mt-1">
+                        <p className="text-[#A8A29E] text-xs mt-1">
                             {formatISODateForDisplay(date, undefined, {
                                 weekday: 'long',
                                 year: 'numeric',
@@ -286,25 +286,25 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
 
                 {/* Content */}
                 <div className="overflow-y-auto ios-scroll max-h-[68vh] space-y-6">
-                    <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222]">
+                    <div className="bg-white p-4 rounded-xl border border-[rgba(0,0,0,0.06)]" style={{ boxShadow: '4px 4px 8px rgba(0,0,0,0.06), -4px -4px 8px rgba(255,255,255,0.8)' }}>
                         <div className="flex items-end justify-between gap-4">
                             <div>
-                                <p className="text-[#666666] text-sm mb-1">Current Score</p>
+                                <p className="text-[#A8A29E] text-sm mb-1">Current Score</p>
                                 <div className="flex items-baseline gap-2">
                                     <span className="text-4xl font-bold font-mono" style={{ color: scoreColor }}>
                                         {score}
                                     </span>
-                                    <span className="text-[#666666] text-sm font-medium">/100</span>
+                                    <span className="text-[#A8A29E] text-sm font-medium">/100</span>
                                 </div>
                             </div>
                             {trend && (
                                 <div
                                     className={`flex items-center gap-1 text-sm font-medium ${
                                         trend.direction === 'stable'
-                                            ? 'text-[#8A8A8A]'
+                                            ? 'text-[#A8A29E]'
                                             : trend.direction === 'up'
-                                                ? 'text-[#34D399]'
-                                                : 'text-[#F87171]'
+                                                ? 'text-[#7BC4A0]'
+                                                : 'text-[#D4897B]'
                                     }`}
                                 >
                                     {trend.direction === 'up'
@@ -313,26 +313,26 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                                             ? <TrendingDown className="w-4 h-4" />
                                             : <Minus className="w-4 h-4" />}
                                     <span>{Math.abs(trend.change).toFixed(1)}%</span>
-                                    <span className="text-[#666666] text-xs">vs prior window</span>
+                                    <span className="text-[#A8A29E] text-xs">vs prior window</span>
                                 </div>
                             )}
                         </div>
                     </div>
 
                     <div className="mb-6">
-                        <p className="text-[#A0A0A0] text-sm">
+                        <p className="text-[#7A756E] text-sm">
                             Your {scoreType} score is calculated by weighting various health factors.
                             Each factor contributes to overall score based on its importance and your individual metrics.
                         </p>
                     </div>
 
                     {/* Score Calculation Explanation */}
-                    <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222] mb-6">
-                        <h4 className="text-sm font-medium text-[#FAFAFA] mb-2 flex items-center gap-2">
+                    <div className="bg-white p-4 rounded-xl border border-[rgba(0,0,0,0.06)] mb-6" style={{ boxShadow: '4px 4px 8px rgba(0,0,0,0.06), -4px -4px 8px rgba(255,255,255,0.8)' }}>
+                        <h4 className="text-sm font-medium text-[#2D2A26] mb-2 flex items-center gap-2">
                             <Calculator className="w-4 h-4" />
                             How Score is Calculated
                         </h4>
-                        <p className="text-[#A0A0A0] text-sm">
+                        <p className="text-[#7A756E] text-sm">
                             Your {scoreType} score of <strong>{score}/100</strong> is calculated by Oura's proprietary algorithm that combines
                             multiple health factors. Each factor receives a score (1-100) based on your performance in that area.
                             These factor scores are then weighted and combined to produce your final {scoreType} score.
@@ -346,8 +346,8 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                                 onClick={() => setSelectedTimeRange(range)}
                                 className={`flex-1 min-h-11 rounded-lg border px-3 py-2 text-sm font-medium transition-all ${
                                     selectedTimeRange === range
-                                        ? 'border-[#00C896]/30 bg-[#00C896]/20 text-[#00C896]'
-                                        : 'border-[#222] bg-[#0C0C0C] text-[#666666] hover:border-[#333]'
+                                        ? 'border-[#6B9E8A]/30 bg-[#6B9E8A]/15 text-[#6B9E8A]'
+                                        : 'border-[rgba(0,0,0,0.08)] bg-white text-[#7A756E] hover:border-[rgba(0,0,0,0.15)]'
                                 }`}
                             >
                                 {range === '7d' ? '7 Days' : range === '14d' ? '14 Days' : '30 Days'}
@@ -355,8 +355,8 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                         ))}
                     </div>
 
-                    <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222]">
-                        <h4 className="text-sm font-medium text-[#FAFAFA] mb-4 flex items-center gap-2">
+                    <div className="bg-white p-4 rounded-xl border border-[rgba(0,0,0,0.06)]" style={{ boxShadow: '4px 4px 8px rgba(0,0,0,0.06), -4px -4px 8px rgba(255,255,255,0.8)' }}>
+                        <h4 className="text-sm font-medium text-[#2D2A26] mb-4 flex items-center gap-2">
                             <Calendar className="w-4 h-4" />
                             {title} History
                         </h4>
@@ -376,25 +376,27 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                                                 <stop offset="95%" stopColor={scoreColor} stopOpacity={0} />
                                             </linearGradient>
                                         </defs>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#222" />
+                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
                                         <XAxis
                                             dataKey="date"
-                                            tick={{ fill: '#666666', fontSize: 11 }}
+                                            tick={{ fill: '#A8A29E', fontSize: 11 }}
                                             tickFormatter={(value) => formatISODateForDisplay(value, undefined, { month: 'short', day: 'numeric' })}
-                                            axisLine={{ stroke: '#222' }}
+                                            axisLine={{ stroke: 'rgba(0,0,0,0.08)' }}
                                             minTickGap={20}
                                         />
                                         <YAxis
                                             domain={chartDomain}
-                                            tick={{ fill: '#666666', fontSize: 11 }}
-                                            axisLine={{ stroke: '#222' }}
+                                            tick={{ fill: '#A8A29E', fontSize: 11 }}
+                                            axisLine={{ stroke: 'rgba(0,0,0,0.08)' }}
                                             tickCount={5}
                                         />
                                         <Tooltip
                                             contentStyle={{
-                                                backgroundColor: '#0C0C0C',
-                                                border: '1px solid #222',
-                                                borderRadius: '8px',
+                                                backgroundColor: '#FFFFFF',
+                                                border: '1px solid rgba(0,0,0,0.1)',
+                                                borderRadius: '12px',
+                                                color: '#2D2A26',
+                                                boxShadow: '4px 4px 8px rgba(0,0,0,0.06), -4px -4px 8px rgba(255,255,255,0.8)',
                                             }}
                                             formatter={(value: number) => [`${value}/100`, 'Score']}
                                             labelFormatter={(label) => formatISODateForDisplay(label, undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
@@ -405,13 +407,13 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                                             stroke={scoreColor}
                                             strokeWidth={2}
                                             fill={`url(#score-history-${scoreType})`}
-                                            activeDot={{ r: 5, strokeWidth: 2, stroke: scoreColor, fill: '#0C0C0C' }}
+                                            activeDot={{ r: 5, strokeWidth: 2, stroke: scoreColor, fill: '#FFFFFF' }}
                                         />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </div>
                         ) : (
-                            <div className="flex min-h-[10rem] items-center justify-center rounded-lg border border-dashed border-[#222] bg-[#090909] px-4 text-center text-sm text-[#666666]">
+                            <div className="flex min-h-[10rem] items-center justify-center rounded-lg border border-dashed border-[rgba(0,0,0,0.1)] bg-[#FAF7F4] px-4 text-center text-sm text-[#A8A29E]">
                                 Not enough score history yet to draw a chart.
                             </div>
                         )}
@@ -424,14 +426,14 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                                 key={factor.key}
                                 title={factor.label}
                                 subtitle={factor.description}
-                                icon={<div className="text-[#00C896] ios-touch-target">{factor.icon}</div>}
+                                icon={<div className="text-[#6B9E8A] ios-touch-target">{factor.icon}</div>}
                                 rightElement={
                                     <div className="text-right">
-                                        <div className="text-[#FAFAFA] font-mono font-bold">
+                                        <div className="text-[#2D2A26] font-mono font-bold">
                                             {factor.weight || '--'}
                                         </div>
                                         {factor.actualValue && (
-                                            <div className="text-[#666666] text-xs">
+                                            <div className="text-[#A8A29E] text-xs">
                                                 {factor.actualValue}
                                             </div>
                                         )}
@@ -442,8 +444,8 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                     </div>
 
                     {/* Summary */}
-                    <div className="mt-6 p-4 bg-[#0C0C0C] rounded-xl border border-[#222]">
-                        <p className="text-[#A0A0A0] text-sm">
+                    <div className="mt-6 p-4 bg-[#FAF7F4] rounded-xl border border-[rgba(0,0,0,0.06)]" style={{ boxShadow: 'inset 2px 2px 4px rgba(0,0,0,0.04), inset -2px -2px 4px rgba(255,255,255,0.6)' }}>
+                        <p className="text-[#7A756E] text-sm">
                             <strong>Note:</strong> Each factor receives an individual score (1-100) based on your performance in that area.
                             Higher factor scores indicate better performance in that specific health area.
                         </p>

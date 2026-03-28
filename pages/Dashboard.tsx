@@ -812,11 +812,11 @@ const Dashboard: React.FC = () => {
     ] : [];
 
     const activityContributors = currentActivity?.contributors ? [
-        { label: 'Meet Daily Targets', value: currentActivity.contributors.meet_daily_targets, color: '#22c55e', key: 'meet_daily_targets' },
+        { label: 'Meet Daily Targets', value: currentActivity.contributors.meet_daily_targets, color: '#7BC4A0', key: 'meet_daily_targets' },
         { label: 'Move Every Hour', value: currentActivity.contributors.move_every_hour, color: '#7BC4A0', key: 'move_every_hour' },
-        { label: 'Recovery Time', value: currentActivity.contributors.recovery_time, color: '#60a5fa', key: 'recovery_time' },
+        { label: 'Recovery Time', value: currentActivity.contributors.recovery_time, color: '#7BA8D4', key: 'recovery_time' },
         { label: 'Stay Active', value: currentActivity.contributors.stay_active, color: '#D4A574', key: 'stay_active' },
-        { label: 'Training Frequency', value: currentActivity.contributors.training_frequency, color: '#a855f7', key: 'training_frequency' },
+        { label: 'Training Frequency', value: currentActivity.contributors.training_frequency, color: '#A08BBE', key: 'training_frequency' },
         { label: 'Training Volume', value: currentActivity.contributors.training_volume, color: '#D4A574', key: 'training_volume' },
     ] : [];
 
@@ -1961,16 +1961,16 @@ const Dashboard: React.FC = () => {
                             </div>
                             {/* Sleep stages */}
                             <div className="grid grid-cols-3 gap-3 mb-3">
-                                <MetricCard title="Deep Sleep" value={formatDuration(currentSession?.deep_sleep_duration)} color="#1E40AF" showDrillDownIndicator onClick={() => handleMetricCardClick('deep_sleep', currentSession?.deep_sleep_duration ?? null, 'hours', '#1E40AF')} />
-                                <MetricCard title="REM Sleep" value={formatDuration(currentSession?.rem_sleep_duration)} color="#8B5CF6" showDrillDownIndicator onClick={() => handleMetricCardClick('rem_sleep', currentSession?.rem_sleep_duration ?? null, 'hours', '#8B5CF6')} />
-                                <MetricCard title="Light Sleep" value={formatDuration(currentSession?.light_sleep_duration)} color="#93C5FD" showDrillDownIndicator onClick={() => handleMetricCardClick('light_sleep', currentSession?.light_sleep_duration ?? null, 'hours', '#93C5FD')} />
+                                <MetricCard title="Deep Sleep" value={formatDuration(currentSession?.deep_sleep_duration)} color="#7BA8D4" showDrillDownIndicator onClick={() => handleMetricCardClick('deep_sleep', currentSession?.deep_sleep_duration ?? null, 'hours', '#7BA8D4')} />
+                                <MetricCard title="REM Sleep" value={formatDuration(currentSession?.rem_sleep_duration)} color="#A08BBE" showDrillDownIndicator onClick={() => handleMetricCardClick('rem_sleep', currentSession?.rem_sleep_duration ?? null, 'hours', '#A08BBE')} />
+                                <MetricCard title="Light Sleep" value={formatDuration(currentSession?.light_sleep_duration)} color="#7BA8D4" showDrillDownIndicator onClick={() => handleMetricCardClick('light_sleep', currentSession?.light_sleep_duration ?? null, 'hours', '#7BA8D4')} />
                             </div>
                             {/* Timing & details */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-                                <MetricCard title="Bedtime" value={formatTime(currentSession?.bedtime_start)} subtext="Fell asleep" showDrillDownIndicator onClick={() => handleMetricCardClick('bedtime', currentBedtimeMinutes, undefined, '#818CF8')} />
-                                <MetricCard title="Wake Time" value={formatTime(currentSession?.bedtime_end)} subtext="Woke up" showDrillDownIndicator onClick={() => handleMetricCardClick('wake_time', currentWakeTimeMinutes, undefined, '#FACC15')} />
+                                <MetricCard title="Bedtime" value={formatTime(currentSession?.bedtime_start)} subtext="Fell asleep" showDrillDownIndicator onClick={() => handleMetricCardClick('bedtime', currentBedtimeMinutes, undefined, '#A08BBE')} />
+                                <MetricCard title="Wake Time" value={formatTime(currentSession?.bedtime_end)} subtext="Woke up" showDrillDownIndicator onClick={() => handleMetricCardClick('wake_time', currentWakeTimeMinutes, undefined, '#D4B87B')} />
                                 <MetricCard title="Latency" value={currentSession?.latency ? `${Math.round(currentSession.latency / 60)}` : null} unit="min" subtext="Time to fall asleep" showDrillDownIndicator onClick={() => handleMetricCardClick('latency', currentSession?.latency ?? null, 'min', '#7BC4A0')} />
-                                <MetricCard title="Awake Time" value={formatDuration(currentSession?.awake_time)} subtext="During sleep" showDrillDownIndicator onClick={() => handleMetricCardClick('awake_time', currentSession?.awake_time ?? null, 'hours', '#F97316')} />
+                                <MetricCard title="Awake Time" value={formatDuration(currentSession?.awake_time)} subtext="During sleep" showDrillDownIndicator onClick={() => handleMetricCardClick('awake_time', currentSession?.awake_time ?? null, 'hours', '#D4897B')} />
                             </div>
                             {sessionHistory.length > 0 && (
                                 <div className="chart-container" style={{ height: 260 }}>
@@ -1994,7 +1994,7 @@ const Dashboard: React.FC = () => {
                             {/* Supporting vitals */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                                 <MetricCard title="Avg HR" value={currentSession?.average_heart_rate?.toFixed(0)} unit="bpm" color="#D4897B" showDrillDownIndicator onClick={() => handleMetricCardClick('heart_rate', currentSession?.average_heart_rate ?? null, 'bpm', '#D4897B')} />
-                                <MetricCard title="SpO2" value={currentSpo2DisplayValue} unit="%" color="#06B6D4" showDrillDownIndicator onClick={() => handleMetricCardClick('spo2', currentSpo2?.spo2_percentage?.average ?? null, '%', '#06B6D4')} />
+                                <MetricCard title="SpO2" value={currentSpo2DisplayValue} unit="%" color="#7BA8D4" showDrillDownIndicator onClick={() => handleMetricCardClick('spo2', currentSpo2?.spo2_percentage?.average ?? null, '%', '#7BA8D4')} />
                                 <MetricCard title="Stress" value={getStressLabel(currentStress?.day_summary)} color={getStressColor(currentStress?.day_summary)} showDrillDownIndicator onClick={() => handleMetricCardClick('stress', currentStress?.stress_high ?? null, undefined, getStressColor(currentStress?.day_summary))} />
                                 <MetricCard title="Resilience" value={currentResilienceDisplayValue} color={getResilienceColor(currentResilience?.level)} showDrillDownIndicator onClick={() => handleMetricCardClick('resilience', currentResilienceScore, 'score', getResilienceColor(currentResilience?.level))} />
                             </div>
@@ -2048,7 +2048,7 @@ const Dashboard: React.FC = () => {
                                 <MetricCard title="Active Calories" value={currentActivity?.active_calories?.toLocaleString()} unit="kcal" color="#D4B87B" showDrillDownIndicator onClick={() => handleMetricCardClick('calories', currentActivity?.active_calories ?? null, 'kcal', '#D4B87B')} />
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-                                <MetricCard title="Total Calories" value={currentActivity?.total_calories?.toLocaleString()} unit="kcal" showDrillDownIndicator onClick={() => handleMetricCardClick('total_calories', currentActivity?.total_calories ?? null, 'kcal', '#F97316')} />
+                                <MetricCard title="Total Calories" value={currentActivity?.total_calories?.toLocaleString()} unit="kcal" showDrillDownIndicator onClick={() => handleMetricCardClick('total_calories', currentActivity?.total_calories ?? null, 'kcal', '#D4897B')} />
                                 <MetricCard title="Distance" value={distanceMiles} unit="mi" showDrillDownIndicator onClick={() => handleMetricCardClick('distance', distanceMilesValue, 'mi', '#7BA8D4')} />
                                 <MetricCard title="High Activity" value={formatDuration(currentActivity?.high_activity_time)} color="#D4897B" showDrillDownIndicator onClick={() => handleMetricCardClick('high_activity_time', currentActivity?.high_activity_time ?? null, 'hours', '#D4897B')} />
                                 <MetricCard title="Medium Activity" value={formatDuration(currentActivity?.medium_activity_time)} color="#D4A574" showDrillDownIndicator onClick={() => handleMetricCardClick('medium_activity_time', currentActivity?.medium_activity_time ?? null, 'hours', '#D4A574')} />
@@ -2174,15 +2174,15 @@ const Dashboard: React.FC = () => {
                                             </div>
 
                                             <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
-                                                <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-[#0E0E0E] px-3 py-2">
+                                                <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] px-3 py-2">
                                                     <p className="text-[#A8A29E]">Readiness</p>
                                                     <p className="mt-1 font-mono text-sm text-[#2D2A26]">{snapshot.readiness?.score ?? '--'}</p>
                                                 </div>
-                                                <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-[#0E0E0E] px-3 py-2">
+                                                <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] px-3 py-2">
                                                     <p className="text-[#A8A29E]">Sleep</p>
                                                     <p className="mt-1 font-mono text-sm text-[#2D2A26]">{snapshot.sleep?.score ?? '--'}</p>
                                                 </div>
-                                                <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-[#0E0E0E] px-3 py-2">
+                                                <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] px-3 py-2">
                                                     <p className="text-[#A8A29E]">Activity</p>
                                                     <p className="mt-1 font-mono text-sm text-[#2D2A26]">{snapshot.activity?.score ?? '--'}</p>
                                                 </div>
@@ -2313,7 +2313,7 @@ const InsightsView: React.FC<{ profiles: any[]; userQueries: any[]; allTimeQueri
                     { key: 'streaks', label: 'Streaks' }, { key: 'patterns', label: 'Patterns' },
                     { key: 'milestones', label: 'Milestones' }, { key: 'snapshot', label: 'Snapshot' },
                 ] as const).map(t => (
-                    <button key={t.key} onClick={() => setTab(t.key)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${tab === t.key ? 'bg-[#222] text-[#2D2A26]' : 'text-[#A8A29E] hover:text-[#7A756E] hover:bg-[#FAF7F4]'}`}>{t.label}</button>
+                    <button key={t.key} onClick={() => setTab(t.key)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${tab === t.key ? 'bg-[#6B9E8A]/15 text-[#6B9E8A]' : 'text-[#A8A29E] hover:text-[#7A756E] hover:bg-[#FAF7F4]'}`}>{t.label}</button>
                 ))}
             </div>
             {tab === 'timeline' && <TimelineView profiles={profiles} usersData={recentUsersData} />}

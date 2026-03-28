@@ -16,7 +16,7 @@ const LeaderboardUserDetailModal: React.FC<LeaderboardUserDetailModalProps> = ({
         if (score >= 85) return { label: 'Excellent', color: '#7BC4A0' };
         if (score >= 70) return { label: 'Great', color: '#7BA8D4' };
         if (score >= 55) return { label: 'Good', color: '#D4A574' };
-        if (score >= 40) return { label: 'Fair', color: '#F97316' };
+        if (score >= 40) return { label: 'Fair', color: '#D4B87B' };
         return { label: 'Needs Improvement', color: '#D4897B' };
     };
 
@@ -83,7 +83,7 @@ const LeaderboardUserDetailModal: React.FC<LeaderboardUserDetailModalProps> = ({
                             <IOSListItem
                                 title="Steps"
                                 subtitle={user.steps?.toLocaleString()}
-                                icon={<div className="text-[#06B6D4]"><Activity className="w-4 h-4" /></div>}
+                                icon={<div className="text-[#7BA8D4]"><Activity className="w-4 h-4" /></div>}
                             />
                         )}
                         {user.activeCalories !== undefined && (
@@ -104,7 +104,7 @@ const LeaderboardUserDetailModal: React.FC<LeaderboardUserDetailModalProps> = ({
                             <IOSListItem
                                 title="Avg HRV (Sleep)"
                                 subtitle={`${user.averageHrv} ms`}
-                                icon={<div className="text-[#8B5CF6]"><Heart className="w-4 h-4" /></div>}
+                                icon={<div className="text-[#A08BBE]"><Heart className="w-4 h-4" /></div>}
                             />
                         )}
                         {user.restingHeartRate !== undefined && (
