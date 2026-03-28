@@ -229,7 +229,13 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
             // Sort by date asc for MA calculation
             entries.sort((a, b) => a.date.getTime() - b.date.getTime());
 
-            const processed = entries.map((entry, idx, arr) => {
+            // Filter out entries where the selected metric is 0 (erroneous/missing data)
+            const nonZeroEntries = entries.filter((entry) => {
+                const val = entry[chartMetric === 'average' ? 'average' : chartMetric];
+                return val > 0;
+            });
+
+            const processed = nonZeroEntries.map((entry, idx, arr) => {
                 let yVal = entry[chartMetric === 'average' ? 'average' : chartMetric];
 
                 // Calculate Moving Average
@@ -239,9 +245,6 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                     for (let i = 0; i < windowSize; i++) {
                         if (idx - i >= 0) {
                             const prev = arr[idx - i];
-                            // Basic check to ensure continuity?
-                            // If dates are skipped, MA might be misleading if we just look at array index.
-                            // But for simplicity, we'll just take last N points available.
                             sum += prev[chartMetric === 'average' ? 'average' : chartMetric];
                             count++;
                         }
@@ -266,6 +269,44 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
     // User Colors
     const userColors = ['#A08BBE', '#7BA8D4', '#7BC4A0', '#D4A574', '#D4897B'];
 
+    // Friendly chart summary
+    const chartSummary = useMemo(() => {
+        if (filteredData.length === 0) return null;
+
+        // Get entries for the selected metric, excluding zeros
+        const validEntries = filteredData.filter(d => {
+            const val = d[chartMetric === 'average' ? 'average' : chartMetric];
+            return val > 0;
+        });
+
+        if (validEntries.length < 3) return null;
+
+        const sorted = [...validEntries].sort((a, b) => a.dateStr.localeCompare(b.dateStr));
+        const values = sorted.map(e => e[chartMetric === 'average' ? 'average' : chartMetric]);
+        const allTimeAvg = Math.round(values.reduce((s, v) => s + v, 0) / values.length);
+        const recentCount = Math.min(7, values.length);
+        const recentSlice = values.slice(-recentCount);
+        const recentAvg = Math.round(recentSlice.reduce((s, v) => s + v, 0) / recentSlice.length);
+        const allTimeBest = Math.max(...values);
+        const allTimeWorst = Math.min(...values);
+        const metricLabel = chartMetric.charAt(0).toUpperCase() + chartMetric.slice(1);
+
+        const parts: string[] = [];
+        parts.push(`Your all-time ${metricLabel.toLowerCase()} average is ${allTimeAvg}`);
+
+        if (values.length >= 14) {
+            const diff = recentAvg - allTimeAvg;
+            if (diff > 3) parts.push(`and your recent week (${recentAvg}) is trending above that`);
+            else if (diff < -3) parts.push(`but your recent week (${recentAvg}) is a bit below`);
+            else parts.push(`and you've been right around that lately (${recentAvg})`);
+        }
+
+        return {
+            text: parts.join(', ') + '.',
+            stats: { allTimeAvg, recentAvg, best: allTimeBest, worst: allTimeWorst, totalDays: values.length },
+        };
+    }, [filteredData, chartMetric]);
+
     return (
         <div className="space-y-6 animate-fade-in">
             {/* Controls & Chart */}
@@ -277,6 +318,22 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                             <h3 className="text-xl font-bold">History Visualization</h3>
                             {isHistoryFetching && (
                                 <p className="text-xs text-text-muted mt-1">Syncing older history in the background...</p>
+                            )}
+                            {chartSummary && (
+                                <p className="text-sm text-text-secondary mt-2 max-w-xl leading-relaxed">{chartSummary.text}</p>
+                            )}
+                            {chartSummary && (
+                                <div className="flex flex-wrap gap-3 mt-2">
+                                    <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-[#7BC4A0]" /> Best: <span className="font-mono font-semibold text-text-primary">{chartSummary.stats.best}</span>
+                                    </span>
+                                    <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-[#D4897B]" /> Lowest: <span className="font-mono font-semibold text-text-primary">{chartSummary.stats.worst}</span>
+                                    </span>
+                                    <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-[#7BA8D4]" /> {chartSummary.stats.totalDays} days tracked
+                                    </span>
+                                </div>
                             )}
                         </div>
 
