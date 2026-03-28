@@ -1,5 +1,6 @@
 import React from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Dot } from 'recharts';
+import { CLAY_TOOLTIP_STYLE } from '../utils/chartStyles';
 
 interface HistoryChartProps {
   data: any[];
@@ -63,14 +64,7 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ data, dataKey, color, heigh
             hide
           />
           <Tooltip
-            contentStyle={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid rgba(0,0,0,0.1)',
-              borderRadius: '12px',
-              fontSize: '12px',
-              color: '#2D2A26',
-              boxShadow: '4px 4px 8px rgba(0,0,0,0.06), -4px -4px 8px rgba(255,255,255,0.8)',
-            }}
+            contentStyle={CLAY_TOOLTIP_STYLE}
             labelFormatter={(value) => {
               const d = new Date(value + 'T12:00:00');
               return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });

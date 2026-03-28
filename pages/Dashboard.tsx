@@ -13,6 +13,7 @@ import MetricDetailModal, { MetricDetailType } from '../components/MetricDetailM
 import LeaderboardUserDetailModal from '../components/LeaderboardUserDetailModal';
 import AppDialog from '../components/AppDialog';
 import DataExport from './DataExport';
+import { CLAY_TOOLTIP_STYLE } from '../utils/chartStyles';
 import {
     LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip
 } from 'recharts';
@@ -1426,6 +1427,13 @@ const Dashboard: React.FC = () => {
     }, [profiles.length, queryClient]);
 
     const userName = activeProfile?.firstName || activeProfile?.email?.split('@')[0] || 'there';
+
+    const getTimeGreeting = () => {
+        const hour = new Date().getHours();
+        if (hour < 12) return 'Good morning';
+        if (hour < 17) return 'Good afternoon';
+        return 'Good evening';
+    };
     const inviteLanding = isInviteLocation(window.location.pathname, window.location.search);
     const clearCompetitionInviteToken = () => {
         if (typeof window === 'undefined') return;
@@ -1806,8 +1814,10 @@ const Dashboard: React.FC = () => {
             <nav className="sticky top-0 z-40 bg-[#F2EDE8]/90 backdrop-blur-md border-b border-[rgba(0,0,0,0.06)]">
                 <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <h1 className="text-base font-semibold tracking-tight !text-[#9A9A9A]">{userName}</h1>
-                        <span className="text-[#888] text-xs font-mono hidden sm:inline">{formatLastSync(lastSyncTime)}</span>
+                        <h1 className="text-sm font-medium tracking-tight text-[#7A756E]">
+                            {getTimeGreeting()}, <span className="font-semibold text-[#6B9E8A]">{userName}</span>
+                        </h1>
+                        <span className="text-[#A8A29E] text-[11px] font-mono hidden sm:inline">{formatLastSync(lastSyncTime)}</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <PrimaryProfileSwitcher
@@ -1816,19 +1826,19 @@ const Dashboard: React.FC = () => {
                         />
                         <button
                             onClick={() => setIsInviteModalOpen(true)}
-                            className="inline-flex min-h-9 items-center gap-2 rounded-md border border-[rgba(107,158,138,0.2)] bg-[rgba(107,158,138,0.06)] px-3 text-xs font-medium text-[#6B9E8A] transition-colors hover:bg-[rgba(107,158,138,0.1)]"
+                            className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-[rgba(107,158,138,0.2)] bg-[rgba(107,158,138,0.06)] px-3 text-xs font-medium text-[#6B9E8A] transition-colors hover:bg-[rgba(107,158,138,0.1)]"
                             title="Invite a friend"
                         >
                             <Users className="h-4 w-4" />
                             <span className="hidden md:inline">Invite</span>
                         </button>
-                        <button onClick={handleSyncAllData} disabled={isSyncing} className="p-2 rounded-md hover:bg-[#FAF7F4] text-[#A8A29E] hover:text-[#2D2A26] transition-colors disabled:opacity-40" title="Refresh data">
+                        <button onClick={handleSyncAllData} disabled={isSyncing} className="p-2 rounded-xl hover:bg-[#FAF7F4] text-[#A8A29E] hover:text-[#2D2A26] transition-colors disabled:opacity-40" title="Refresh data">
                             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
                         </button>
-                        <button onClick={login} className="p-2 rounded-md hover:bg-[#FAF7F4] text-[#A8A29E] hover:text-[#2D2A26] transition-colors" title="Add profile">
+                        <button onClick={login} className="p-2 rounded-xl hover:bg-[#FAF7F4] text-[#A8A29E] hover:text-[#2D2A26] transition-colors" title="Add profile">
                             <Plus className="w-4 h-4" />
                         </button>
-                        <button onClick={() => { window.history.pushState({}, '', '/settings'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="p-2 rounded-md hover:bg-[#FAF7F4] text-[#A8A29E] hover:text-[#2D2A26] transition-colors" title="Settings">
+                        <button onClick={() => { window.history.pushState({}, '', '/settings'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="p-2 rounded-xl hover:bg-[#FAF7F4] text-[#A8A29E] hover:text-[#2D2A26] transition-colors" title="Settings">
                             <Settings className="w-4 h-4" />
                         </button>
                     </div>
@@ -1848,7 +1858,7 @@ const Dashboard: React.FC = () => {
                         <button
                             key={tab.key}
                             onClick={() => setViewMode(tab.key as any)}
-                            className={`px-4 py-2.5 text-[13px] font-medium transition-all border-b-2 whitespace-nowrap ${viewMode === tab.key ? 'border-[#6B9E8A] text-[#2D2A26]' : 'border-transparent text-[#C8C2BB] hover:text-[#7A756E]'}`}
+                            className={`px-4 py-2.5 text-[13px] font-medium transition-all border-b-2 whitespace-nowrap rounded-t-lg ${viewMode === tab.key ? 'border-[#6B9E8A] text-[#2D2A26] bg-[#6B9E8A]/6' : 'border-transparent text-[#C8C2BB] hover:text-[#7A756E] hover:bg-[#FAF7F4]'}`}
                         >
                             {tab.label}
                         </button>
@@ -1858,7 +1868,7 @@ const Dashboard: React.FC = () => {
 
             <main className="max-w-5xl mx-auto px-4 pb-16">
                 {profilesNeedingAttention.length > 0 && (
-                    <div className="mt-6 p-4 bg-[#FAF7F4] border border-[rgba(0,0,0,0.10)] rounded-lg">
+                    <div className="mt-6 p-4 bg-[#FAF7F4] border border-[rgba(0,0,0,0.08)] rounded-2xl shadow-clay-sm">
                         <p className="text-[#2D2A26] text-sm font-medium mb-2">Sync attention needed</p>
                         <div className="space-y-1">
                             {profilesNeedingAttention.map((profile) => {
@@ -1891,7 +1901,7 @@ const Dashboard: React.FC = () => {
                                     <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-1.5">
                                         {formatDayLabel(referenceDay)}
                                     </h2>
-                                    <p className="text-[#777] text-sm leading-relaxed">
+                                    <p className="text-[#7A756E] text-sm leading-relaxed">
                                         {getDailyInsight()}
                                     </p>
                                     {hasIncompleteTodayCoverage && (
@@ -1942,7 +1952,7 @@ const Dashboard: React.FC = () => {
                                             </span>
                                         </div>
                                         <span className="text-xs text-[#888] font-medium tracking-wide">{label}</span>
-                                        {quality && <span className="text-[10px] text-[#C8C2BB] mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">{quality}</span>}
+                                        {quality && <span className="text-[10px] text-[#C8C2BB] mt-0.5 opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">{quality}</span>}
                                     </button>
                                 );
                             })}
@@ -2026,9 +2036,9 @@ const Dashboard: React.FC = () => {
                                         initialDimension={{ width: 480, height: 100 }}
                                     >
                                         <LineChart data={sessionHistory.slice(0, 30).reverse()}>
-                                            <XAxis dataKey="day" tick={{ fill: '#444', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(val) => val.slice(5)} />
-                                            <YAxis domain={['dataMin - 2', 'dataMax + 2']} tick={{ fill: '#444', fontSize: 10 }} axisLine={false} tickLine={false} unit=" ms" />
-                                            <Tooltip contentStyle={{ backgroundColor: '#FFFFFF', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '8px', fontSize: '12px', boxShadow: '4px 4px 8px rgba(0,0,0,0.06)' }} formatter={(value: number) => [`${value} ms`, 'HRV']} />
+                                            <XAxis dataKey="day" tick={{ fill: '#A8A29E', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(val) => val.slice(5)} />
+                                            <YAxis domain={['dataMin - 2', 'dataMax + 2']} tick={{ fill: '#A8A29E', fontSize: 10 }} axisLine={false} tickLine={false} unit=" ms" />
+                                            <Tooltip contentStyle={CLAY_TOOLTIP_STYLE} formatter={(value: number) => [`${value} ms`, 'HRV']} />
                                             <Line type="monotone" dataKey="average_hrv" stroke="#A08BBE" dot={false} strokeWidth={1.5} connectNulls />
                                         </LineChart>
                                     </ResponsiveContainer>

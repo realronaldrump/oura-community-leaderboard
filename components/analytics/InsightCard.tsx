@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AutomatedInsight } from '../../types/analyticsTypes';
 import { ChevronDown, ChevronUp, TrendingUp, TrendingDown, Lightbulb, Activity, Moon, Heart } from 'lucide-react';
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
+import { CLAY_TOOLTIP_STYLE } from '../../utils/chartStyles';
 
 interface InsightCardProps {
     insight: AutomatedInsight;
@@ -17,37 +18,37 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
 
     if (insight.strength === 'strong') {
         if (insight.type === 'positive_habit') {
-            gradientClass = 'from-emerald-50 to-[var(--bg-elevated)] border-emerald-300/40';
-            iconColor = 'text-emerald-400';
+            gradientClass = 'from-[#7BC4A0]/10 to-[var(--bg-elevated)] border-[#7BC4A0]/30';
+            iconColor = 'text-[#7BC4A0]';
             BadgeIcon = TrendingUp;
         } else if (insight.type === 'negative_habit') {
-            gradientClass = 'from-rose-50 to-[var(--bg-elevated)] border-rose-300/40';
-            iconColor = 'text-rose-400';
+            gradientClass = 'from-[#D4897B]/10 to-[var(--bg-elevated)] border-[#D4897B]/30';
+            iconColor = 'text-[#D4897B]';
             BadgeIcon = TrendingDown;
         } else {
-            gradientClass = 'from-indigo-50 to-[var(--bg-elevated)] border-indigo-300/40';
-            iconColor = 'text-indigo-400';
+            gradientClass = 'from-[#7BA8D4]/10 to-[var(--bg-elevated)] border-[#7BA8D4]/30';
+            iconColor = 'text-[#7BA8D4]';
         }
     } else {
         // Moderate strength
         if (insight.type === 'positive_habit') {
-            iconColor = 'text-emerald-500';
+            iconColor = 'text-[#7BC4A0]';
             BadgeIcon = TrendingUp;
         } else if (insight.type === 'negative_habit') {
-            iconColor = 'text-rose-500';
+            iconColor = 'text-[#D4897B]';
             BadgeIcon = TrendingDown;
         }
     }
 
     // Determine an icon to represent the primary metric
     const getMetricIcon = (metricKey: string) => {
-        if (metricKey.includes('sleep') || metricKey.includes('bedtime')) return <Moon className="w-5 h-5 text-indigo-400 mb-2" />;
-        if (metricKey.includes('hr') || metricKey.includes('temp')) return <Heart className="w-5 h-5 text-rose-400 mb-2" />;
-        return <Activity className="w-5 h-5 text-amber-400 mb-2" />;
+        if (metricKey.includes('sleep') || metricKey.includes('bedtime')) return <Moon className="w-5 h-5 text-[#7BA8D4] mb-2" />;
+        if (metricKey.includes('hr') || metricKey.includes('temp')) return <Heart className="w-5 h-5 text-[#D4897B] mb-2" />;
+        return <Activity className="w-5 h-5 text-[#D4B87B] mb-2" />;
     };
 
     return (
-        <div className={`rounded-xl border bg-gradient-to-br ${gradientClass} transition-all duration-300 overflow-hidden`}>
+        <div className={`rounded-2xl border bg-gradient-to-br ${gradientClass} shadow-clay-sm transition-all duration-300 overflow-hidden`}>
             {/* Clickable Header Area */}
             <div
                 className="p-5 cursor-pointer hover:bg-black/5 transition-colors"
@@ -126,13 +127,7 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
                                 />
                                 <RechartsTooltip
                                     cursor={{ strokeDasharray: '3 3' }}
-                                    contentStyle={{
-                                        backgroundColor: '#FFFFFF',
-                                        border: '1px solid rgba(0,0,0,0.10)',
-                                        borderRadius: '8px',
-                                        fontSize: '12px',
-                                        color: '#2D2A26'
-                                    }}
+                                    contentStyle={CLAY_TOOLTIP_STYLE}
                                     formatter={(value: number) => value.toFixed(1)}
                                     labelFormatter={() => ''}
                                 />

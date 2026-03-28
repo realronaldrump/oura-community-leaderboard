@@ -3,6 +3,7 @@ import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, ReferenceL
 import { HeartRate } from '../../types';
 import { IOSModal, IOSButton, IOSListItem } from '../ios';
 import { Clock, Info } from 'lucide-react';
+import { CLAY_TOOLTIP_STYLE, CLAY_TOOLTIP_LABEL_STYLE } from '../../utils/chartStyles';
 
 type TimeRange = '6h' | '12h' | '24h' | '48h';
 
@@ -159,15 +160,8 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                             />
                         )}
                         <Tooltip
-                            contentStyle={{
-                                backgroundColor: '#FFFFFF',
-                                border: '1px solid rgba(0,0,0,0.1)',
-                                borderRadius: '12px',
-                                fontSize: '12px',
-                                color: '#2D2A26',
-                                boxShadow: '4px 4px 8px rgba(0,0,0,0.06), -4px -4px 8px rgba(255,255,255,0.8)',
-                            }}
-                            labelStyle={{ color: '#7A756E' }}
+                            contentStyle={CLAY_TOOLTIP_STYLE}
+                            labelStyle={CLAY_TOOLTIP_LABEL_STYLE}
                             labelFormatter={(timestamp: number) => new Date(timestamp).toLocaleTimeString('en-US', {
                                 hour: 'numeric',
                                 minute: '2-digit',

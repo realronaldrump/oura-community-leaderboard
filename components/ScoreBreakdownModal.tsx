@@ -4,6 +4,7 @@ import { AreaChart, Area, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { DailyReadiness, DailySleep, DailyActivity, SleepSession } from '../types';
 import { IOSModal, IOSListItem, IOSButton } from './ios';
 import { formatISODateForDisplay } from '../utils/date';
+import { CLAY_TOOLTIP_STYLE, CLAY_GRID_STROKE, CLAY_AXIS_STYLE, CLAY_ACTIVE_DOT } from '../utils/chartStyles';
 
 interface ScoreHistoryPoint {
     date: string;
@@ -286,7 +287,7 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
 
                 {/* Content */}
                 <div className="overflow-y-auto ios-scroll max-h-[68vh] space-y-6">
-                    <div className="bg-white p-4 rounded-xl border border-[rgba(0,0,0,0.06)]" style={{ boxShadow: '4px 4px 8px rgba(0,0,0,0.06), -4px -4px 8px rgba(255,255,255,0.8)' }}>
+                    <div className="bg-white p-4 rounded-xl border border-[rgba(0,0,0,0.06)] shadow-clay-sm">
                         <div className="flex items-end justify-between gap-4">
                             <div>
                                 <p className="text-[#A8A29E] text-sm mb-1">Current Score</p>
@@ -355,7 +356,7 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                         ))}
                     </div>
 
-                    <div className="bg-white p-4 rounded-xl border border-[rgba(0,0,0,0.06)]" style={{ boxShadow: '4px 4px 8px rgba(0,0,0,0.06), -4px -4px 8px rgba(255,255,255,0.8)' }}>
+                    <div className="bg-white p-4 rounded-xl border border-[rgba(0,0,0,0.06)] shadow-clay-sm">
                         <h4 className="text-sm font-medium text-[#2D2A26] mb-4 flex items-center gap-2">
                             <Calendar className="w-4 h-4" />
                             {title} History
@@ -376,28 +377,22 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                                                 <stop offset="95%" stopColor={scoreColor} stopOpacity={0} />
                                             </linearGradient>
                                         </defs>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                                        <CartesianGrid strokeDasharray="3 3" stroke={CLAY_GRID_STROKE} />
                                         <XAxis
                                             dataKey="date"
-                                            tick={{ fill: '#A8A29E', fontSize: 11 }}
+                                            tick={CLAY_AXIS_STYLE.tick}
                                             tickFormatter={(value) => formatISODateForDisplay(value, undefined, { month: 'short', day: 'numeric' })}
-                                            axisLine={{ stroke: 'rgba(0,0,0,0.08)' }}
+                                            axisLine={CLAY_AXIS_STYLE.axisLine}
                                             minTickGap={20}
                                         />
                                         <YAxis
                                             domain={chartDomain}
-                                            tick={{ fill: '#A8A29E', fontSize: 11 }}
-                                            axisLine={{ stroke: 'rgba(0,0,0,0.08)' }}
+                                            tick={CLAY_AXIS_STYLE.tick}
+                                            axisLine={CLAY_AXIS_STYLE.axisLine}
                                             tickCount={5}
                                         />
                                         <Tooltip
-                                            contentStyle={{
-                                                backgroundColor: '#FFFFFF',
-                                                border: '1px solid rgba(0,0,0,0.1)',
-                                                borderRadius: '12px',
-                                                color: '#2D2A26',
-                                                boxShadow: '4px 4px 8px rgba(0,0,0,0.06), -4px -4px 8px rgba(255,255,255,0.8)',
-                                            }}
+                                            contentStyle={CLAY_TOOLTIP_STYLE}
                                             formatter={(value: number) => [`${value}/100`, 'Score']}
                                             labelFormatter={(label) => formatISODateForDisplay(label, undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                                         />
@@ -407,7 +402,7 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                                             stroke={scoreColor}
                                             strokeWidth={2}
                                             fill={`url(#score-history-${scoreType})`}
-                                            activeDot={{ r: 5, strokeWidth: 2, stroke: scoreColor, fill: '#FFFFFF' }}
+                                            activeDot={{ ...CLAY_ACTIVE_DOT, stroke: scoreColor }}
                                         />
                                     </AreaChart>
                                 </ResponsiveContainer>

@@ -19,6 +19,7 @@ import {
 import { IOSModal, IOSListItem, IOSButton } from './ios';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatISODateForDisplay } from '../utils/date';
+import { CLAY_TOOLTIP_STYLE, CLAY_GRID_STROKE, CLAY_AXIS_STYLE } from '../utils/chartStyles';
 
 interface MetricDataPoint {
     date: string;
@@ -951,10 +952,10 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                 <div
                                     className={`flex items-center gap-1 text-sm font-medium ${
                                         trend.direction === 'stable'
-                                            ? 'text-gray-400'
+                                            ? 'text-[#A8A29E]'
                                             : isTrendImproving
-                                                ? 'text-green-400'
-                                                : 'text-red-400'
+                                                ? 'text-[#7BC4A0]'
+                                                : 'text-[#D4897B]'
                                     }`}
                                 >
                                     {trend.direction === 'up'
@@ -1040,13 +1041,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                             tickFormatter={(value: number) => formatMetricValue(value)}
                                         />
                                         <Tooltip
-                                            contentStyle={{
-                                                backgroundColor: '#FFFFFF',
-                                                border: '1px solid rgba(0,0,0,0.1)',
-                                                borderRadius: '12px',
-                                                color: '#2D2A26',
-                                                boxShadow: '4px 4px 8px rgba(0,0,0,0.06)',
-                                            }}
+                                            contentStyle={CLAY_TOOLTIP_STYLE}
                                             formatter={(value: number) => [formatMetricValue(value), config.title]}
                                             labelFormatter={(label) => formatISODateForDisplay(label, undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                                         />

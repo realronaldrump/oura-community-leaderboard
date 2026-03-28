@@ -337,21 +337,19 @@ const ContributorsBreakdown: React.FC<Props> = ({ title, contributors, onContrib
                                     {item.value ?? '--'}
                                 </span>
                             </div>
-                            <div className="h-1.5 bg-black/5 rounded-full overflow-hidden">
+                            <div className="h-2 bg-black/5 rounded-full overflow-hidden shadow-clay-inset">
                                 <div
                                     className="h-full rounded-full transition-all duration-700 ease-out relative"
                                     style={{
                                         width: `${item.value ?? 0}%`,
                                         backgroundColor: item.color,
-                                        boxShadow: `0 0 10px ${item.color}60`,
                                     }}
                                 >
-                                    {/* Shimmer effect */}
+                                    {/* Subtle shine effect */}
                                     <div
-                                        className="absolute inset-0 animate-shimmer"
+                                        className="absolute inset-0 rounded-full"
                                         style={{
-                                            background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
-                                            backgroundSize: '200% 100%',
+                                            background: 'linear-gradient(180deg, rgba(255,255,255,0.35) 0%, transparent 60%)',
                                         }}
                                     />
                                 </div>

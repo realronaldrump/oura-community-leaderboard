@@ -56,10 +56,10 @@ const ChallengeManager: React.FC = () => {
 
     const getIcon = (type: string) => {
         switch (type) {
-            case 'sleep_consistency': return <Crown className="w-5 h-5 text-yellow-400" />;
-            case 'readiness_streak': return <Zap className="w-5 h-5 text-green-400" />;
-            case 'step_goal': return <Footprints className="w-5 h-5 text-blue-400" />;
-            case 'early_bedtime': return <Moon className="w-5 h-5 text-purple-400" />;
+            case 'sleep_consistency': return <Crown className="w-5 h-5 text-[#D4B87B]" />;
+            case 'readiness_streak': return <Zap className="w-5 h-5 text-[#7BC4A0]" />;
+            case 'step_goal': return <Footprints className="w-5 h-5 text-[#7BA8D4]" />;
+            case 'early_bedtime': return <Moon className="w-5 h-5 text-[#A08BBE]" />;
             default: return <Crown className="w-5 h-5" />;
         }
     };
@@ -118,7 +118,7 @@ const ChallengeManager: React.FC = () => {
             {/* Available Challenges */}
             <div>
                 <h3 className="section-header flex items-center gap-2">
-                    <Crown className="w-5 h-5 text-yellow-400" />
+                    <Crown className="w-5 h-5 text-[#D4B87B]" />
                     Available Challenges
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -142,7 +142,7 @@ const ChallengeManager: React.FC = () => {
                                     onClick={() => handleJoin(def)}
                                     disabled={isActive || isJoining === def.id}
                                     className={`w-full py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all ${isActive
-                                            ? 'bg-green-500/20 text-green-400 cursor-default'
+                                            ? 'bg-[#7BC4A0]/20 text-[#7BC4A0] cursor-default'
                                             : 'btn-primary'
                                         }`}
                                 >
@@ -168,7 +168,7 @@ const ChallengeManager: React.FC = () => {
             {pastChallenges.length > 0 && (
                 <div>
                     <h3 className="section-header flex items-center gap-2">
-                        <CheckCircle className="w-5 h-5 text-gray-400" />
+                        <CheckCircle className="w-5 h-5 text-[#C8C2BB]" />
                         History
                     </h3>
                     <div className="space-y-2">
@@ -178,8 +178,8 @@ const ChallengeManager: React.FC = () => {
                                 <div key={c.id} className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)]">
                                     <div className="flex items-center gap-3">
                                         {c.status === 'completed'
-                                            ? <CheckCircle className="w-5 h-5 text-green-400" />
-                                            : <XCircle className="w-5 h-5 text-red-400" />
+                                            ? <CheckCircle className="w-5 h-5 text-[#7BC4A0]" />
+                                            : <XCircle className="w-5 h-5 text-[#D4897B]" />
                                         }
                                         <div>
                                             <p className="font-medium text-[var(--text-primary)]">{def?.name || 'Unknown Challenge'}</p>
@@ -188,7 +188,7 @@ const ChallengeManager: React.FC = () => {
                                             </p>
                                         </div>
                                     </div>
-                                    <span className={`text-xs font-bold uppercase tracking-wider px-2 py-1 rounded ${c.status === 'completed' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                                    <span className={`text-xs font-bold uppercase tracking-wider px-2 py-1 rounded ${c.status === 'completed' ? 'bg-[#7BC4A0]/10 text-[#7BC4A0]' : 'bg-[#D4897B]/10 text-[#D4897B]'
                                         }`}>
                                         {c.status}
                                     </span>

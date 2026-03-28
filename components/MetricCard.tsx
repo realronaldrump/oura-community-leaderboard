@@ -53,13 +53,8 @@ const MetricCard: React.FC<MetricCardProps> = ({
   return (
     <div
       ref={cardRef}
-      className={`bg-white rounded-2xl border border-[rgba(0,0,0,0.06)] p-4 flex flex-col justify-between min-h-[96px] ${onClick ? 'cursor-pointer ios-card' : ''} relative group/card transition-all duration-200`}
-      style={{
-        ...(tiltEnabled ? tiltStyle : {}),
-        boxShadow: isPressed
-          ? 'inset 3px 3px 6px rgba(0,0,0,0.08), inset -3px -3px 6px rgba(255,255,255,0.7)'
-          : '4px 4px 8px rgba(0,0,0,0.06), -4px -4px 8px rgba(255,255,255,0.8), inset 1px 1px 2px rgba(255,255,255,0.6), inset -1px -1px 1px rgba(0,0,0,0.02)',
-      }}
+      className={`bg-white rounded-2xl border border-[rgba(0,0,0,0.06)] p-4 flex flex-col justify-between min-h-[96px] ${isPressed ? 'shadow-clay-inset' : 'shadow-clay-sm'} ${onClick ? 'cursor-pointer ios-card hover:shadow-clay hover:-translate-y-0.5' : ''} relative group/card transition-all duration-200`}
+      style={tiltEnabled ? tiltStyle : undefined}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onClick={onClick}

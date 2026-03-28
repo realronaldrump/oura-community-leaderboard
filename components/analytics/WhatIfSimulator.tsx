@@ -34,7 +34,7 @@ const SCENARIO_OPTIONS: MetricOption[] = [
         step: 15,
         defaultAdjustment: 30,
         Icon: BedDouble,
-        color: 'text-blue-400'
+        color: 'text-[#7BA8D4]'
     },
     {
         metric: 'steps',
@@ -45,7 +45,7 @@ const SCENARIO_OPTIONS: MetricOption[] = [
         step: 1000,
         defaultAdjustment: 2000,
         Icon: Footprints,
-        color: 'text-green-400'
+        color: 'text-[#7BC4A0]'
     },
     {
         metric: 'hrv',
@@ -56,7 +56,7 @@ const SCENARIO_OPTIONS: MetricOption[] = [
         step: 5,
         defaultAdjustment: 5,
         Icon: Heart,
-        color: 'text-rose-400'
+        color: 'text-[#D4897B]'
     },
     {
         metric: 'sleep_duration',
@@ -67,7 +67,7 @@ const SCENARIO_OPTIONS: MetricOption[] = [
         step: 15,
         defaultAdjustment: 30,
         Icon: Moon,
-        color: 'text-purple-400'
+        color: 'text-[#A08BBE]'
     }
 ];
 
@@ -96,17 +96,17 @@ const DEFAULT_OUTLIER_TRIM = 0.05;
 const RELIABILITY_UI: Record<'high' | 'medium' | 'low', { label: string; badge: string; hint: string }> = {
     high: {
         label: 'High confidence',
-        badge: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40',
+        badge: 'bg-[#7BC4A0]/20 text-[#7BC4A0] border border-[#7BC4A0]/40',
         hint: 'This model has enough consistent history to trust as a strong directional signal.'
     },
     medium: {
         label: 'Medium confidence',
-        badge: 'bg-amber-500/20 text-amber-300 border border-amber-500/40',
+        badge: 'bg-[#D4B87B]/20 text-[#D4B87B] border border-[#D4B87B]/40',
         hint: 'Useful signal, but expect normal day-to-day variation around the estimate.'
     },
     low: {
         label: 'Low confidence',
-        badge: 'bg-rose-500/20 text-rose-300 border border-rose-500/40',
+        badge: 'bg-[#D4897B]/20 text-[#D4897B] border border-[#D4897B]/40',
         hint: 'Treat as exploratory. Use this for experimentation, not firm planning.'
     }
 };
@@ -266,7 +266,7 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                         <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider block">
                             Change Amount
                         </label>
-                        <p className={`text-lg font-bold font-mono ${adjustment >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        <p className={`text-lg font-bold font-mono ${adjustment >= 0 ? 'text-[#7BC4A0]' : 'text-[#D4897B]'}`}>
                             {formatAdjustment(adjustment, selectedMetric.unit)}
                         </p>
                     </div>
@@ -354,14 +354,14 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="card p-4">
                         <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Average Impact</p>
-                        <p className={`text-2xl font-mono font-bold mt-1 ${summary.averageChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        <p className={`text-2xl font-mono font-bold mt-1 ${summary.averageChange >= 0 ? 'text-[#7BC4A0]' : 'text-[#D4897B]'}`}>
                             {formatSigned(summary.averageChange)}
                         </p>
                     </div>
                     <div className="card p-4">
                         <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Top Responder</p>
                         <p className="text-lg font-semibold text-[var(--text-primary)] mt-1">{summary.topResponder.userName}</p>
-                        <p className={`text-sm font-mono ${summary.topResponder.projectedChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        <p className={`text-sm font-mono ${summary.topResponder.projectedChange >= 0 ? 'text-[#7BC4A0]' : 'text-[#D4897B]'}`}>
                             {formatSigned(summary.topResponder.projectedChange)}
                         </p>
                     </div>
@@ -389,7 +389,7 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                                         </p>
                                     </div>
                                     <div className="text-right">
-                                        <p className={`text-2xl font-bold font-mono ${result.projectedChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        <p className={`text-2xl font-bold font-mono ${result.projectedChange >= 0 ? 'text-[#7BC4A0]' : 'text-[#D4897B]'}`}>
                                             {formatSigned(result.projectedChange)}
                                         </p>
                                         <span className={`inline-block mt-1 text-xs px-2 py-1 rounded-full font-medium ${reliability.badge}`}>
@@ -448,7 +448,7 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
             {visibleResults.length > 1 && (
                 <div className="card p-4 bg-[var(--bg-elevated)]">
                     <div className="flex items-start gap-3">
-                        <Lightbulb className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                        <Lightbulb className="w-5 h-5 text-[#D4B87B] flex-shrink-0 mt-0.5" />
                         <p className="text-sm text-[var(--text-secondary)]">
                             Focus on changes that are both positive and medium/high confidence, then validate over the next week.
                         </p>

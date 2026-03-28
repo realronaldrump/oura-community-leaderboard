@@ -67,9 +67,9 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
 
     const getInsightIcon = (type: string) => {
         switch (type) {
-            case 'sleep_timing': return <BedDouble className="w-4 h-4 text-blue-400" />;
-            case 'activity': return <Activity className="w-4 h-4 text-green-400" />;
-            default: return <Heart className="w-4 h-4 text-red-400" />;
+            case 'sleep_timing': return <BedDouble className="w-4 h-4 text-[#7BA8D4]" />;
+            case 'activity': return <Activity className="w-4 h-4 text-[#7BC4A0]" />;
+            default: return <Heart className="w-4 h-4 text-[#D4897B]" />;
         }
     };
 

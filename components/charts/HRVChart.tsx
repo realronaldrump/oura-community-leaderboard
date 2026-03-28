@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, ReferenceLine, Area, AreaChart } from 'recharts';
 import { SleepSession } from '../../types';
+import { CLAY_TOOLTIP_STYLE, CLAY_TOOLTIP_LABEL_STYLE } from '../../utils/chartStyles';
 
 interface Props {
     session: SleepSession | null | undefined;
@@ -108,15 +109,8 @@ const HRVChart: React.FC<Props> = ({ session, showLabels = false }) => {
                         />
                     )}
                     <Tooltip
-                        contentStyle={{
-                            backgroundColor: '#FFFFFF',
-                            border: '1px solid rgba(0,0,0,0.1)',
-                            borderRadius: '12px',
-                            fontSize: '12px',
-                            color: '#2D2A26',
-                            boxShadow: '4px 4px 8px rgba(0,0,0,0.06), -4px -4px 8px rgba(255,255,255,0.8)',
-                        }}
-                        labelStyle={{ color: '#7A756E' }}
+                        contentStyle={CLAY_TOOLTIP_STYLE}
+                        labelStyle={CLAY_TOOLTIP_LABEL_STYLE}
                         labelFormatter={(timestamp: number) => new Date(timestamp).toLocaleTimeString('en-US', {
                             hour: 'numeric',
                             minute: '2-digit',

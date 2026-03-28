@@ -41,23 +41,18 @@ export const IOSButton: React.FC<IOSButtonProps> = ({
     destructive: 'bg-[#D4897B] text-white'
   };
 
-  const getBoxShadow = () => {
-    if (isPressed) {
-      return 'inset 3px 3px 6px rgba(0,0,0,0.12), inset -3px -3px 6px rgba(255,255,255,0.3)';
-    }
-    if (variant === 'secondary') {
-      return '3px 3px 6px rgba(0,0,0,0.06), -3px -3px 6px rgba(255,255,255,0.8), inset 1px 1px 1px rgba(255,255,255,0.5)';
-    }
-    return '4px 4px 8px rgba(0,0,0,0.1), -2px -2px 6px rgba(255,255,255,0.3), inset 1px 1px 2px rgba(255,255,255,0.2)';
-  };
+  const shadowClass = isPressed
+    ? 'shadow-clay-button-pressed'
+    : variant === 'secondary'
+      ? 'shadow-clay-sm'
+      : 'shadow-clay-button';
 
   return (
     <button
-      className={`${baseClasses} ${sizeClasses[size]} ${variantClasses[variant]} ${className}`}
+      className={`${baseClasses} ${sizeClasses[size]} ${variantClasses[variant]} ${shadowClass} ${className}`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onClick={onClick}
-      style={{ boxShadow: getBoxShadow() }}
       {...props}
     >
       {children}
@@ -87,17 +82,10 @@ export const IOSCard: React.FC<IOSCardProps> = ({ children, onClick, className =
 
   return (
     <div
-      className={`bg-white rounded-2xl border border-[rgba(0,0,0,0.06)] ${onClick ? 'ios-card cursor-pointer' : ''} ${className}`}
+      className={`bg-white rounded-2xl border border-[rgba(0,0,0,0.06)] transition-all duration-150 ${isPressed ? 'shadow-clay-inset scale-[0.98]' : 'shadow-clay'} ${onClick ? 'ios-card cursor-pointer hover:shadow-clay-lg hover:-translate-y-0.5' : ''} ${className}`}
       onTouchStart={onClick ? handleTouchStart : undefined}
       onTouchEnd={onClick ? handleTouchEnd : undefined}
       onClick={onClick}
-      style={{
-        transform: isPressed ? 'scale(0.98)' : 'scale(1)',
-        transition: 'transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.15s ease',
-        boxShadow: isPressed
-          ? 'inset 3px 3px 6px rgba(0,0,0,0.06), inset -3px -3px 6px rgba(255,255,255,0.7)'
-          : '6px 6px 12px rgba(0,0,0,0.08), -6px -6px 12px rgba(255,255,255,0.9), inset 1px 1px 2px rgba(255,255,255,0.7), inset -1px -1px 2px rgba(0,0,0,0.04)',
-      }}
     >
       {children}
     </div>

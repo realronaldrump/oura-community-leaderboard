@@ -17,22 +17,22 @@ const getMilestoneIcon = (type: string, iconId?: string) => {
     // If an explicit icon identifier is provided from the service, use it
     if (iconId) {
         switch (iconId) {
-            case 'trophy': return <Trophy className="w-6 h-6 text-yellow-400" />;
-            case 'target': return <Target className="w-6 h-6 text-red-400" />;
-            case 'calendar': return <Calendar className="w-6 h-6 text-blue-400" />;
-            case 'sleep': return <BedDouble className="w-6 h-6 text-purple-400" />;
-            case 'bed': return <BedDouble className="w-6 h-6 text-indigo-400" />;
-            case 'users': return <Users className="w-6 h-6 text-cyan-400" />;
+            case 'trophy': return <Trophy className="w-6 h-6 text-[#D4B87B]" />;
+            case 'target': return <Target className="w-6 h-6 text-[#D4897B]" />;
+            case 'calendar': return <Calendar className="w-6 h-6 text-[#7BA8D4]" />;
+            case 'sleep': return <BedDouble className="w-6 h-6 text-[#A08BBE]" />;
+            case 'bed': return <BedDouble className="w-6 h-6 text-[#7BA8D4]" />;
+            case 'users': return <Users className="w-6 h-6 text-[#7BA8D4]" />;
         }
     }
 
     switch (type) {
-        case 'days_tracked': return <Calendar className="w-6 h-6 text-blue-400" />;
-        case 'total_sleep_hours': return <BedDouble className="w-6 h-6 text-purple-400" />;
-        case 'total_steps': return <Footprints className="w-6 h-6 text-green-400" />;
-        case 'streak_achievement': return <Flame className="w-6 h-6 text-orange-400" />;
-        case 'score_improvement': return <TrendingUp className="w-6 h-6 text-cyan-400" />;
-        default: return <Target className="w-6 h-6 text-gray-400" />;
+        case 'days_tracked': return <Calendar className="w-6 h-6 text-[#7BA8D4]" />;
+        case 'total_sleep_hours': return <BedDouble className="w-6 h-6 text-[#A08BBE]" />;
+        case 'total_steps': return <Footprints className="w-6 h-6 text-[#7BC4A0]" />;
+        case 'streak_achievement': return <Flame className="w-6 h-6 text-[#D4897B]" />;
+        case 'score_improvement': return <TrendingUp className="w-6 h-6 text-[#7BA8D4]" />;
+        default: return <Target className="w-6 h-6 text-[#C8C2BB]" />;
     }
 };
 
@@ -300,11 +300,11 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
     const getHeatmapColor = (day: CalendarGridDay) => {
         if (!day.hasAnyData) return 'bg-[var(--bg-elevated)]';
         if (!day.hasMetricData) return 'bg-[var(--bg-elevated)]/70 border border-[var(--border-subtle)]';
-        if (day.value < 50) return 'bg-red-900/50';
-        if (day.value < 65) return 'bg-orange-800/50';
-        if (day.value < 75) return 'bg-yellow-700/50';
-        if (day.value < 85) return 'bg-green-700/50';
-        return 'bg-green-500/70';
+        if (day.value < 50) return 'bg-[#D4897B]/50';
+        if (day.value < 65) return 'bg-[#D4897B]/35';
+        if (day.value < 75) return 'bg-[#D4B87B]/50';
+        if (day.value < 85) return 'bg-[#7BC4A0]/40';
+        return 'bg-[#7BC4A0]/70';
     };
 
     const getMilestoneHistory = (milestone: Milestone) => {
@@ -396,7 +396,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
             {achievedMilestones.length > 0 && (
                 <div>
                     <h4 className="section-header flex items-center gap-2">
-                        <Trophy className="w-5 h-5 text-yellow-400" /> Achieved
+                        <Trophy className="w-5 h-5 text-[#D4B87B]" /> Achieved
                     </h4>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                         {achievedMilestones.slice(0, 12).map(milestone => (
@@ -425,7 +425,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
             {upcomingMilestones.length > 0 && (
                 <div>
                     <h4 className="section-header flex items-center gap-2">
-                        <Target className="w-5 h-5 text-blue-400" /> Next Goals
+                        <Target className="w-5 h-5 text-[#7BA8D4]" /> Next Goals
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {upcomingMilestones.map(milestone => {
@@ -477,7 +477,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                 <div className="flex flex-col gap-3 mb-4">
                     <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
                         <h4 className="section-header mb-0 flex items-center gap-2">
-                            <Calendar className="w-5 h-5 text-blue-400" /> Score History
+                            <Calendar className="w-5 h-5 text-[#7BA8D4]" /> Score History
                         </h4>
 
                         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
@@ -632,11 +632,11 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                         <div className="flex items-center gap-2">
                             <span className="text-xs text-[var(--text-muted)]">Less</span>
                             <div className="flex gap-1">
-                                <div className="w-3 h-3 rounded-sm bg-red-900/50" />
-                                <div className="w-3 h-3 rounded-sm bg-orange-800/50" />
-                                <div className="w-3 h-3 rounded-sm bg-yellow-700/50" />
-                                <div className="w-3 h-3 rounded-sm bg-green-700/50" />
-                                <div className="w-3 h-3 rounded-sm bg-green-500/70" />
+                                <div className="w-3 h-3 rounded-sm bg-[#D4897B]/50" />
+                                <div className="w-3 h-3 rounded-sm bg-[#D4897B]/35" />
+                                <div className="w-3 h-3 rounded-sm bg-[#D4B87B]/50" />
+                                <div className="w-3 h-3 rounded-sm bg-[#7BC4A0]/40" />
+                                <div className="w-3 h-3 rounded-sm bg-[#7BC4A0]/70" />
                             </div>
                             <span className="text-xs text-[var(--text-muted)]">More</span>
                         </div>
@@ -648,7 +648,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
             {groupMilestones.length > 0 && (
                 <div>
                     <h4 className="section-header flex items-center gap-2">
-                        <Users className="w-5 h-5 text-cyan-400" /> Group Achievements
+                        <Users className="w-5 h-5 text-[#7BA8D4]" /> Group Achievements
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {groupMilestones.slice(0, 4).map(milestone => {
@@ -662,7 +662,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                                     <div className="flex items-center justify-between mb-2">
                                         <div className="flex items-center gap-2">
                                             {milestone.isAchieved
-                                                ? <Check className="w-5 h-5 text-green-400" />
+                                                ? <Check className="w-5 h-5 text-[#7BC4A0]" />
                                                 : <Target className="w-5 h-5 text-[var(--text-muted)]" />
                                             }
                                             <h5 className="font-medium text-[var(--text-primary)]">

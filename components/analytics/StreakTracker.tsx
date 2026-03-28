@@ -28,24 +28,24 @@ interface StreakTrackerProps {
 type DetailContext = 'active' | 'record' | 'badge';
 
 const tierColors: Record<BadgeTier, string> = {
-    bronze: 'from-amber-600 to-amber-800',
-    silver: 'from-gray-300 to-gray-500',
-    gold: 'from-yellow-400 to-yellow-600',
-    platinum: 'from-purple-300 to-purple-500'
+    bronze: 'from-[#D4B87B] to-[#D4B87B]/60',
+    silver: 'from-[#C8C2BB] to-[#C8C2BB]/60',
+    gold: 'from-[#D4B87B] to-[#D4B87B]/70',
+    platinum: 'from-[#A08BBE] to-[#A08BBE]/60'
 };
 
 const tierBorderColors: Record<BadgeTier, string> = {
-    bronze: 'border-amber-600/50',
-    silver: 'border-gray-400/50',
-    gold: 'border-yellow-500/50',
-    platinum: 'border-purple-400/50'
+    bronze: 'border-[#D4B87B]/50',
+    silver: 'border-[#C8C2BB]/50',
+    gold: 'border-[#D4B87B]/50',
+    platinum: 'border-[#A08BBE]/50'
 };
 
 const tierTextColors: Record<BadgeTier, string> = {
-    bronze: 'text-amber-500',
-    silver: 'text-gray-300',
-    gold: 'text-yellow-400',
-    platinum: 'text-purple-400'
+    bronze: 'text-[#D4B87B]',
+    silver: 'text-[#C8C2BB]',
+    gold: 'text-[#D4B87B]',
+    platinum: 'text-[#A08BBE]'
 };
 
 const TIER_ORDER: BadgeTier[] = ['bronze', 'silver', 'gold', 'platinum'];
@@ -53,20 +53,20 @@ const TIER_ORDER: BadgeTier[] = ['bronze', 'silver', 'gold', 'platinum'];
 const getStreakIcon = (type: StreakType, iconId?: string) => {
     if (iconId) {
         switch (iconId) {
-            case 'crown': return <Crown className="w-5 h-5 text-yellow-400" />;
-            case 'zap': return <Zap className="w-5 h-5 text-green-400" />;
-            case 'footprints': return <Footprints className="w-5 h-5 text-blue-400" />;
-            case 'moon': return <Moon className="w-5 h-5 text-purple-400" />;
-            case 'heart': return <HeartPulse className="w-5 h-5 text-red-500" />;
+            case 'crown': return <Crown className="w-5 h-5 text-[#D4B87B]" />;
+            case 'zap': return <Zap className="w-5 h-5 text-[#7BC4A0]" />;
+            case 'footprints': return <Footprints className="w-5 h-5 text-[#7BA8D4]" />;
+            case 'moon': return <Moon className="w-5 h-5 text-[#A08BBE]" />;
+            case 'heart': return <HeartPulse className="w-5 h-5 text-[#D4897B]" />;
         }
     }
 
     switch (type) {
-        case 'sleep_consistency': return <Crown className="w-5 h-5 text-yellow-400" />;
-        case 'readiness_streak': return <Zap className="w-5 h-5 text-green-400" />;
-        case 'step_goal': return <Footprints className="w-5 h-5 text-blue-400" />;
-        case 'early_bedtime': return <Moon className="w-5 h-5 text-purple-400" />;
-        default: return <HeartPulse className="w-5 h-5 text-red-500" />;
+        case 'sleep_consistency': return <Crown className="w-5 h-5 text-[#D4B87B]" />;
+        case 'readiness_streak': return <Zap className="w-5 h-5 text-[#7BC4A0]" />;
+        case 'step_goal': return <Footprints className="w-5 h-5 text-[#7BA8D4]" />;
+        case 'early_bedtime': return <Moon className="w-5 h-5 text-[#A08BBE]" />;
+        default: return <HeartPulse className="w-5 h-5 text-[#D4897B]" />;
     }
 };
 
@@ -319,7 +319,7 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
 
             <div>
                 <h3 className="section-header flex items-center gap-2">
-                    <Star className="w-5 h-5 text-yellow-400" />
+                    <Star className="w-5 h-5 text-[#D4B87B]" />
                     Streak Rules
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -371,7 +371,7 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
 
             <div>
                 <h3 className="section-header flex items-center gap-2">
-                    <Flame className="w-5 h-5 text-orange-400" />
+                    <Flame className="w-5 h-5 text-[#D4897B]" />
                     Active Now
                     <InfoTooltip
                         title="Active Streaks"
@@ -431,13 +431,13 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                                             {nextBadge.remaining} days to {nextBadge.tier} ({nextBadge.requirement}-day) badge
                                         </p>
                                     ) : (
-                                        <p className="text-xs text-green-400 mt-3">
+                                        <p className="text-xs text-[#7BC4A0] mt-3">
                                             All badge tiers unlocked for this streak
                                         </p>
                                     )}
 
                                     {streak.impactOnTrend != null && streak.impactOnTrend !== 0 && (
-                                        <p className={`text-xs mt-2 flex items-center gap-1 ${streak.impactOnTrend > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        <p className={`text-xs mt-2 flex items-center gap-1 ${streak.impactOnTrend > 0 ? 'text-[#7BC4A0]' : 'text-[#D4897B]'}`}>
                                             {streak.impactOnTrend > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                                             {Math.abs(streak.impactOnTrend).toFixed(1)}% readiness delta during this run
                                         </p>
@@ -451,7 +451,7 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
 
             <div>
                 <h3 className="section-header flex items-center gap-2">
-                    <Trophy className="w-5 h-5 text-yellow-400" />
+                    <Trophy className="w-5 h-5 text-[#D4B87B]" />
                     Badge Progression
                     <InfoTooltip
                         title="Badge Progress"
@@ -537,7 +537,7 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
 
             <div>
                 <h3 className="section-header flex items-center gap-2">
-                    <Star className="w-5 h-5 text-yellow-400" />
+                    <Star className="w-5 h-5 text-[#D4B87B]" />
                     All Streaks
                     <InfoTooltip
                         title="Current vs Record"

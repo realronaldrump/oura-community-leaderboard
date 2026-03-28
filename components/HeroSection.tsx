@@ -178,10 +178,8 @@ const ScoreOrb: React.FC<ScoreOrbProps> = ({ score, label, color, onClick }) => 
     return (
         <div className="flex flex-col items-center group cursor-pointer" onClick={onClick}>
             <div
-                className="relative w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center transition-all duration-300 group-hover:scale-105"
+                className="relative w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center transition-all duration-300 group-hover:scale-105 bg-white shadow-clay"
                 style={{
-                    background: '#FFFFFF',
-                    boxShadow: '6px 6px 12px rgba(0,0,0,0.08), -6px -6px 12px rgba(255,255,255,0.9), inset 2px 2px 4px rgba(255,255,255,0.8), inset -1px -1px 3px rgba(0,0,0,0.04)',
                     border: `2px solid ${color}30`,
                 }}
             >

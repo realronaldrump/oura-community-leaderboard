@@ -221,9 +221,9 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
 
                                                     {challengeDefinition && (
                                                         <div className="daily-snapshot-export__challenge">
-                                                            <Crown className="w-3 h-3 text-yellow-400" />
+                                                            <Crown className="w-3 h-3 text-[#D4B87B]" />
                                                             <span>{challengeDefinition.name}</span>
-                                                            <span className={hitTarget ? 'text-green-300' : 'text-[var(--text-secondary)]'}>
+                                                            <span className={hitTarget ? 'text-[#7BC4A0]' : 'text-[var(--text-secondary)]'}>
                                                                 {hitTarget ? 'target hit' : `day ${activeChallenge.progress + 1}`}
                                                             </span>
                                                         </div>
@@ -295,7 +295,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                         <button
                             onClick={handlePin}
                             className={`px-4 py-3 rounded-lg font-medium transition-all flex items-center gap-2 ${isPinned
-                                ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                                ? 'bg-[#D4B87B]/20 text-[#D4B87B] border border-[#D4B87B]/30'
                                 : 'btn-secondary'
                                 }`}
                         >
@@ -342,15 +342,15 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                                         <div className="grid grid-cols-3 gap-2 text-sm">
                                             <div className="bg-[var(--bg-elevated)] rounded p-2">
                                                 <p className="text-xs text-[var(--text-muted)]">Sleep</p>
-                                                <p className="font-mono font-medium text-blue-400">{user.sleep}</p>
+                                                <p className="font-mono font-medium text-[#7BA8D4]">{user.sleep}</p>
                                             </div>
                                             <div className="bg-[var(--bg-elevated)] rounded p-2">
                                                 <p className="text-xs text-[var(--text-muted)]">Readiness</p>
-                                                <p className="font-mono font-medium text-green-400">{user.readiness}</p>
+                                                <p className="font-mono font-medium text-[#7BC4A0]">{user.readiness}</p>
                                             </div>
                                             <div className="bg-[var(--bg-elevated)] rounded p-2">
                                                 <p className="text-xs text-[var(--text-muted)]">Activity</p>
-                                                <p className="font-mono font-medium text-amber-400">{user.activity}</p>
+                                                <p className="font-mono font-medium text-[#D4B87B]">{user.activity}</p>
                                             </div>
                                         </div>
                                         {user.steps != null && (
@@ -377,7 +377,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
             {pinnedSnapshots.length > 0 && (
                 <div>
                     <h4 className="section-header flex items-center gap-2">
-                        <Pin className="w-5 h-5 text-yellow-400" /> Highlight Reel
+                        <Pin className="w-5 h-5 text-[#D4B87B]" /> Highlight Reel
                     </h4>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                         {pinnedSnapshots.map(snap => (

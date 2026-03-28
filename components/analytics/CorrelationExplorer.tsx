@@ -97,7 +97,7 @@ const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, use
             {/* Header */}
             <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="p-2.5 bg-indigo-500/20 text-indigo-400 rounded-xl">
+                    <div className="p-2.5 bg-[#7BA8D4]/20 text-[#7BA8D4] rounded-xl">
                         <Sparkles className="w-6 h-6" />
                     </div>
                     <div>
@@ -136,13 +136,13 @@ const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, use
                     </button>
                     <button
                         onClick={() => setFilterType('positive_habit')}
-                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${filterType === 'positive_habit' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-black/5'}`}
+                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${filterType === 'positive_habit' ? 'bg-[#7BC4A0]/20 text-[#7BC4A0] border border-[#7BC4A0]/30' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-black/5'}`}
                     >
                         Positive Habits
                     </button>
                     <button
                         onClick={() => setFilterType('negative_habit')}
-                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${filterType === 'negative_habit' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-black/5'}`}
+                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${filterType === 'negative_habit' ? 'bg-[#D4897B]/20 text-[#D4897B] border border-[#D4897B]/30' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-black/5'}`}
                     >
                         Negative Habits
                     </button>

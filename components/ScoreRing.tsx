@@ -54,12 +54,10 @@ const ScoreRing: React.FC<ScoreRingProps> = ({
   return (
     <div className="flex flex-col items-center justify-center group">
       <div
-        className="relative transition-transform duration-300 group-hover:scale-105 rounded-full"
+        className="relative transition-transform duration-300 group-hover:scale-105 rounded-full bg-white shadow-clay"
         style={{
           width: size,
           height: size,
-          boxShadow: '6px 6px 12px rgba(0,0,0,0.08), -6px -6px 12px rgba(255,255,255,0.9), inset 2px 2px 4px rgba(255,255,255,0.7), inset -1px -1px 3px rgba(0,0,0,0.04)',
-          background: '#FFFFFF',
         }}
       >
         <svg className="w-full h-full -rotate-90">

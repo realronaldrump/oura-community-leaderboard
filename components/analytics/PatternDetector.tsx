@@ -12,23 +12,23 @@ interface PatternDetectorProps {
 
 const getPatternIcon = (type: PatternType) => {
     switch (type) {
-        case 'day_of_week': return <Calendar className="w-5 h-5 text-blue-400" />;
-        case 'activity_sleep': return <Activity className="w-5 h-5 text-green-400" />;
-        case 'hrv_readiness': return <Heart className="w-5 h-5 text-purple-400" />;
-        case 'cross_user': return <Users className="w-5 h-5 text-cyan-400" />;
-        case 'seasonal': return <Sun className="w-5 h-5 text-orange-400" />;
-        case 'weekend_effect': return <PartyPopper className="w-5 h-5 text-pink-400" />;
-        default: return <Info className="w-5 h-5 text-gray-400" />;
+        case 'day_of_week': return <Calendar className="w-5 h-5 text-[#7BA8D4]" />;
+        case 'activity_sleep': return <Activity className="w-5 h-5 text-[#7BC4A0]" />;
+        case 'hrv_readiness': return <Heart className="w-5 h-5 text-[#A08BBE]" />;
+        case 'cross_user': return <Users className="w-5 h-5 text-[#7BA8D4]" />;
+        case 'seasonal': return <Sun className="w-5 h-5 text-[#D4897B]" />;
+        case 'weekend_effect': return <PartyPopper className="w-5 h-5 text-[#D4897B]" />;
+        default: return <Info className="w-5 h-5 text-[#C8C2BB]" />;
     }
 };
 
 const patternColors: Record<PatternType, string> = {
-    day_of_week: 'border-l-blue-500',
-    activity_sleep: 'border-l-green-500',
-    hrv_readiness: 'border-l-purple-500',
-    cross_user: 'border-l-cyan-500',
-    seasonal: 'border-l-orange-500',
-    weekend_effect: 'border-l-pink-500'
+    day_of_week: 'border-l-[#7BA8D4]',
+    activity_sleep: 'border-l-[#7BC4A0]',
+    hrv_readiness: 'border-l-[#A08BBE]',
+    cross_user: 'border-l-[#7BA8D4]',
+    seasonal: 'border-l-[#D4897B]',
+    weekend_effect: 'border-l-[#D4897B]'
 };
 
 type FilterType = 'all' | PatternType;
@@ -160,9 +160,9 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
                                         <h4 className="font-semibold text-[var(--text-primary)]">
                                             {pattern.title}
                                         </h4>
-                                        <span className={`text-xs px-2 py-0.5 rounded-full ${pattern.confidence >= 0.8 ? 'bg-green-500/20 text-green-400' :
-                                            pattern.confidence >= 0.6 ? 'bg-yellow-500/20 text-yellow-400' :
-                                                'bg-gray-500/20 text-gray-400'
+                                        <span className={`text-xs px-2 py-0.5 rounded-full ${pattern.confidence >= 0.8 ? 'bg-[#7BC4A0]/20 text-[#7BC4A0]' :
+                                            pattern.confidence >= 0.6 ? 'bg-[#D4B87B]/20 text-[#D4B87B]' :
+                                                'bg-[#C8C2BB]/20 text-[#C8C2BB]'
                                             }`}>
                                             {(pattern.confidence * 100).toFixed(0)}% confident
                                         </span>
@@ -173,7 +173,7 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
                                     </p>
 
                                     <div className="flex items-center gap-4 mt-2 text-xs text-[var(--text-muted)]">
-                                        <span className={`font-mono ${pattern.impact > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        <span className={`font-mono ${pattern.impact > 0 ? 'text-[#7BC4A0]' : 'text-[#D4897B]'}`}>
                                             {pattern.impact > 0 ? '+' : ''}{pattern.impact.toFixed(1)}% impact
                                         </span>
                                         <span>•</span>
@@ -242,7 +242,7 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
                                         <div className="h-8 bg-[var(--bg-base)] rounded-lg overflow-hidden relative flex items-center">
                                             <div className="absolute left-1/2 w-px h-full bg-[var(--border-default)]" />
                                             <div
-                                                className={`h-4 rounded-full ${pattern.impact > 0 ? 'bg-green-500' : 'bg-red-500'}`}
+                                                className={`h-4 rounded-full ${pattern.impact > 0 ? 'bg-[#7BC4A0]' : 'bg-[#D4897B]'}`}
                                                 style={{
                                                     width: `${Math.min(50, Math.abs(pattern.impact) * 2)}%`,
                                                     marginLeft: pattern.impact > 0 ? '50%' : `${50 - Math.min(50, Math.abs(pattern.impact) * 2)}%`
