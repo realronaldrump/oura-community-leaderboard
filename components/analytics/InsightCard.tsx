@@ -17,15 +17,15 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
 
     if (insight.strength === 'strong') {
         if (insight.type === 'positive_habit') {
-            gradientClass = 'from-emerald-900/20 to-[var(--bg-elevated)] border-emerald-500/30';
+            gradientClass = 'from-emerald-50 to-[var(--bg-elevated)] border-emerald-300/40';
             iconColor = 'text-emerald-400';
             BadgeIcon = TrendingUp;
         } else if (insight.type === 'negative_habit') {
-            gradientClass = 'from-rose-900/20 to-[var(--bg-elevated)] border-rose-500/30';
+            gradientClass = 'from-rose-50 to-[var(--bg-elevated)] border-rose-300/40';
             iconColor = 'text-rose-400';
             BadgeIcon = TrendingDown;
         } else {
-            gradientClass = 'from-indigo-900/20 to-[var(--bg-elevated)] border-indigo-500/30';
+            gradientClass = 'from-indigo-50 to-[var(--bg-elevated)] border-indigo-300/40';
             iconColor = 'text-indigo-400';
         }
     } else {
@@ -50,13 +50,13 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
         <div className={`rounded-xl border bg-gradient-to-br ${gradientClass} transition-all duration-300 overflow-hidden`}>
             {/* Clickable Header Area */}
             <div
-                className="p-5 cursor-pointer hover:bg-white/5 transition-colors"
+                className="p-5 cursor-pointer hover:bg-black/5 transition-colors"
                 onClick={() => setIsExpanded(!isExpanded)}
             >
                 <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1.5">
-                            <span className="flex items-center gap-1 text-xs font-semibold tracking-wider uppercase bg-white/10 px-2.5 py-1 rounded-full text-[var(--text-secondary)]">
+                            <span className="flex items-center gap-1 text-xs font-semibold tracking-wider uppercase bg-black/5 px-2.5 py-1 rounded-full text-[var(--text-secondary)]">
                                 <BadgeIcon className={`w-3.5 h-3.5 ${iconColor}`} />
                                 {insight.strength === 'strong' ? 'Strong Signal' : 'Notable Trend'}
                             </span>
@@ -77,7 +77,7 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
                             {getMetricIcon(insight.metricXKey)}
                             {getMetricIcon(insight.metricYKey)}
                         </div>
-                        <button className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1 bg-black/20 rounded-full">
+                        <button className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1 bg-[#F2EDE8] rounded-full">
                             {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
                         </button>
                     </div>
@@ -86,7 +86,7 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
 
             {/* Expandable Chart Area */}
             {isExpanded && (
-                <div className="p-5 pt-0 border-t border-white/5 bg-black/20">
+                <div className="p-5 pt-0 border-t border-black/5 bg-[#F2EDE8]">
                     <div className="mt-5 mb-2 flex items-center justify-between">
                         <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
                             Data Evidence
@@ -105,13 +105,13 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
                             initialDimension={{ width: 480, height: 256 }}
                         >
                             <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 10 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.10)" />
                                 <XAxis
                                     type="number"
                                     dataKey="x"
                                     name={insight.metricXLabel}
-                                    tick={{ fill: '#666', fontSize: 11 }}
-                                    axisLine={{ stroke: '#444' }}
+                                    tick={{ fill: '#A8A29E', fontSize: 11 }}
+                                    axisLine={{ stroke: 'rgba(0,0,0,0.15)' }}
                                     tickLine={false}
                                     domain={['auto', 'auto']}
                                 />
@@ -119,25 +119,26 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
                                     type="number"
                                     dataKey="y"
                                     name={insight.metricYLabel}
-                                    tick={{ fill: '#666', fontSize: 11 }}
-                                    axisLine={{ stroke: '#444' }}
+                                    tick={{ fill: '#A8A29E', fontSize: 11 }}
+                                    axisLine={{ stroke: 'rgba(0,0,0,0.15)' }}
                                     tickLine={false}
                                     domain={['auto', 'auto']}
                                 />
                                 <RechartsTooltip
                                     cursor={{ strokeDasharray: '3 3' }}
                                     contentStyle={{
-                                        backgroundColor: '#1C1C1C',
-                                        border: '1px solid #333',
+                                        backgroundColor: '#FFFFFF',
+                                        border: '1px solid rgba(0,0,0,0.10)',
                                         borderRadius: '8px',
-                                        fontSize: '12px'
+                                        fontSize: '12px',
+                                        color: '#2D2A26'
                                     }}
                                     formatter={(value: number) => value.toFixed(1)}
                                     labelFormatter={() => ''}
                                 />
                                 <Scatter
                                     data={insight.correlationData.dataPoints}
-                                    fill={insight.direction === 'positive' ? '#10b981' : '#f43f5e'}
+                                    fill={insight.direction === 'positive' ? '#7BC4A0' : '#D4897B'}
                                     fillOpacity={0.6}
                                 />
                             </ScatterChart>

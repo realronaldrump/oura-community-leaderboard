@@ -80,7 +80,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
         try {
             const exportScale = Math.min(3, Math.max(2, window.devicePixelRatio || 1));
             const canvas = await html2canvas(cardRef.current, {
-                backgroundColor: '#05070d',
+                backgroundColor: '#F2EDE8',
                 scale: exportScale,
                 logging: false,
                 useCORS: true
@@ -335,7 +335,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                                         <h5 className="font-medium text-[var(--text-primary)] flex items-center gap-2">
                                             <div
                                                 className="w-3 h-3 rounded-full"
-                                                style={{ backgroundColor: idx === 0 ? '#00C896' : '#A855F7' }}
+                                                style={{ backgroundColor: idx === 0 ? '#6B9E8A' : '#A08BBE' }}
                                             />
                                             {user.userName}
                                         </h5>
@@ -398,7 +398,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                                         <span
                                             key={u.userId}
                                             className="text-lg font-bold font-mono"
-                                            style={{ color: idx === 0 ? '#00C896' : '#A855F7' }}
+                                            style={{ color: idx === 0 ? '#6B9E8A' : '#A08BBE' }}
                                         >
                                             {u.average}
                                         </span>

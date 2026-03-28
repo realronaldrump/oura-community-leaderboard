@@ -36,62 +36,45 @@ const HeroSection: React.FC<HeroSectionProps> = ({
             className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden px-4"
             style={{ opacity }}
         >
-            {/* Background gradient mesh */}
-            <div
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                    background: `
-            radial-gradient(ellipse 100% 80% at 50% 0%, rgba(0, 212, 255, 0.12), transparent 50%),
-            radial-gradient(ellipse 80% 60% at 80% 50%, rgba(168, 85, 247, 0.08), transparent 50%),
-            radial-gradient(ellipse 60% 50% at 20% 80%, rgba(16, 185, 129, 0.06), transparent 50%)
-          `,
-                    transform: `translateY(${orbOffset}px)`,
-                }}
-            />
-
-            {/* Floating orbs */}
+            {/* Soft background blobs */}
             <FloatingOrb
-                size={120}
-                color="rgba(0, 212, 255, 0.15)"
-                glowColor="rgba(0, 212, 255, 0.3)"
+                size={200}
+                color="rgba(107, 158, 138, 0.08)"
                 delay={0}
                 style={{
-                    top: '15%',
-                    left: '10%',
+                    top: '10%',
+                    left: '5%',
                     transform: `translateY(${-orbOffset * 1.5}px)`,
                 }}
             />
             <FloatingOrb
-                size={80}
-                color="rgba(168, 85, 247, 0.15)"
-                glowColor="rgba(168, 85, 247, 0.3)"
+                size={160}
+                color="rgba(123, 168, 212, 0.08)"
                 delay={2}
                 style={{
-                    top: '25%',
-                    right: '15%',
+                    top: '20%',
+                    right: '10%',
                     transform: `translateY(${-orbOffset * 1.2}px)`,
                 }}
             />
             <FloatingOrb
-                size={60}
-                color="rgba(16, 185, 129, 0.15)"
-                glowColor="rgba(16, 185, 129, 0.3)"
+                size={120}
+                color="rgba(212, 184, 123, 0.08)"
                 delay={4}
                 style={{
-                    bottom: '30%',
-                    left: '20%',
+                    bottom: '25%',
+                    left: '15%',
                     transform: `translateY(${-orbOffset}px)`,
                 }}
             />
             <FloatingOrb
-                size={100}
-                color="rgba(245, 158, 11, 0.12)"
-                glowColor="rgba(245, 158, 11, 0.25)"
+                size={180}
+                color="rgba(160, 139, 190, 0.06)"
                 delay={1}
                 duration={8}
                 style={{
-                    bottom: '20%',
-                    right: '10%',
+                    bottom: '15%',
+                    right: '8%',
                     transform: `translateY(${-orbOffset * 0.8}px)`,
                 }}
             />
@@ -104,25 +87,25 @@ const HeroSection: React.FC<HeroSectionProps> = ({
                 {/* Greeting */}
                 {userName && (
                     <p
-                        className="text-text-secondary text-lg mb-2 animate-fade-in"
+                        className="text-[#7A756E] text-lg mb-2 animate-fade-in"
                         style={{ animationDelay: '0.1s' }}
                     >
-                        Welcome back, <span className="text-accent-cyan">{userName}</span>
+                        Welcome back, <span className="text-[#6B9E8A] font-semibold">{userName}</span>
                     </p>
                 )}
 
                 {/* Title */}
                 <h1
-                    className="text-5xl md:text-7xl font-bold mb-4 tracking-tight animate-fade-in-up"
+                    className="text-5xl md:text-7xl font-extrabold mb-4 tracking-tight animate-fade-in-up text-[#2D2A26]"
                     style={{ animationDelay: '0.2s' }}
                 >
-                    <span className="gradient-text">{title}</span>
+                    {title}
                 </h1>
 
                 {/* Subtitle */}
                 {subtitle && (
                     <p
-                        className="text-text-secondary text-lg md:text-xl max-w-2xl mx-auto mb-12 animate-fade-in-up"
+                        className="text-[#7A756E] text-lg md:text-xl max-w-2xl mx-auto mb-12 animate-fade-in-up"
                         style={{
                             transform: `translateY(${subtitleOffset - titleOffset}px)`,
                             animationDelay: '0.3s',
@@ -142,7 +125,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({
                             <ScoreOrb
                                 score={scores.readiness}
                                 label="Readiness"
-                                color="#10B981"
+                                color="#7BC4A0"
                                 onClick={() => onScoreClick?.('readiness')}
                             />
                         )}
@@ -150,7 +133,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({
                             <ScoreOrb
                                 score={scores.sleep}
                                 label="Sleep"
-                                color="#3B82F6"
+                                color="#7BA8D4"
                                 onClick={() => onScoreClick?.('sleep')}
                             />
                         )}
@@ -158,7 +141,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({
                             <ScoreOrb
                                 score={scores.activity}
                                 label="Activity"
-                                color="#F59E0B"
+                                color="#D4B87B"
                                 onClick={() => onScoreClick?.('activity')}
                             />
                         )}
@@ -172,18 +155,18 @@ const HeroSection: React.FC<HeroSectionProps> = ({
                 onClick={onScrollDown}
                 style={{ opacity: Math.max(0, 1 - scrollY / 200) }}
             >
-                <span className="text-text-muted text-sm group-hover:text-text-secondary transition-colors">
+                <span className="text-[#A8A29E] text-sm group-hover:text-[#7A756E] transition-colors">
                     Scroll to explore
                 </span>
-                <div className="w-6 h-10 border-2 border-text-muted rounded-full p-1 group-hover:border-text-secondary transition-colors">
-                    <div className="w-1.5 h-1.5 bg-text-muted rounded-full mx-auto animate-bounce group-hover:bg-text-secondary" />
+                <div className="w-6 h-10 border-2 border-[#C8C2BB] rounded-full p-1 group-hover:border-[#7A756E] transition-colors">
+                    <div className="w-1.5 h-1.5 bg-[#A8A29E] rounded-full mx-auto animate-bounce group-hover:bg-[#7A756E]" />
                 </div>
             </div>
         </section>
     );
 };
 
-// Mini score orb component
+// Mini score orb component - clay style
 interface ScoreOrbProps {
     score: number;
     label: string;
@@ -195,11 +178,11 @@ const ScoreOrb: React.FC<ScoreOrbProps> = ({ score, label, color, onClick }) => 
     return (
         <div className="flex flex-col items-center group cursor-pointer" onClick={onClick}>
             <div
-                className="relative w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center transition-all duration-300 group-hover:scale-110"
+                className="relative w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center transition-all duration-300 group-hover:scale-105"
                 style={{
-                    background: `radial-gradient(circle at 30% 30%, ${color}20, ${color}05)`,
-                    boxShadow: `0 0 30px ${color}40, inset 0 0 20px ${color}10`,
-                    border: `2px solid ${color}40`,
+                    background: '#FFFFFF',
+                    boxShadow: '6px 6px 12px rgba(0,0,0,0.08), -6px -6px 12px rgba(255,255,255,0.9), inset 2px 2px 4px rgba(255,255,255,0.8), inset -1px -1px 3px rgba(0,0,0,0.04)',
+                    border: `2px solid ${color}30`,
                 }}
             >
                 {/* Animated ring */}
@@ -207,14 +190,22 @@ const ScoreOrb: React.FC<ScoreOrbProps> = ({ score, label, color, onClick }) => 
                     <circle
                         cx="50%"
                         cy="50%"
-                        r="45%"
+                        r="42%"
+                        fill="none"
+                        stroke={`${color}20`}
+                        strokeWidth="4"
+                    />
+                    <circle
+                        cx="50%"
+                        cy="50%"
+                        r="42%"
                         fill="none"
                         stroke={color}
-                        strokeWidth="3"
-                        strokeDasharray={`${score * 2.83} 283`}
+                        strokeWidth="4"
+                        strokeDasharray={`${score * 2.64} 264`}
                         strokeLinecap="round"
-                        className="transition-all duration-1000 ease-out-expo"
-                        style={{ filter: `drop-shadow(0 0 6px ${color})` }}
+                        className="transition-all duration-1000 ease-out"
+                        style={{ opacity: 0.8 }}
                     />
                 </svg>
 
@@ -225,7 +216,7 @@ const ScoreOrb: React.FC<ScoreOrbProps> = ({ score, label, color, onClick }) => 
                     {score}
                 </span>
             </div>
-            <span className="mt-2 text-xs uppercase tracking-wider text-text-muted group-hover:text-text-secondary transition-colors">
+            <span className="mt-2 text-xs uppercase tracking-wider text-[#A8A29E] font-semibold group-hover:text-[#7A756E] transition-colors">
                 {label}
             </span>
         </div>

@@ -282,7 +282,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                 <div
                     role="dialog"
                     aria-label={isRangeMode ? 'Date range picker' : 'Date picker'}
-                    className="date-picker-panel absolute right-0 z-50 mt-2 w-[min(92vw,22rem)] rounded-xl border border-[var(--border-default)] bg-[var(--bg-raised)] p-3 shadow-[0_18px_44px_rgba(0,0,0,0.45)]"
+                    className="date-picker-panel absolute right-0 z-50 mt-2 w-[min(92vw,22rem)] rounded-xl border border-[var(--border-default)] bg-[var(--bg-raised)] p-3 shadow-[0_18px_44px_rgba(0,0,0,0.12)]"
                 >
                     {isRangeMode ? (
                         <div className="space-y-3">

@@ -41,7 +41,7 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
     return (
         <IOSModal isOpen={isOpen} onClose={isSaving ? () => {} : onClose} title="Edit Profile">
             <div className="space-y-6">
-                <p className="text-[#A0A0A0] text-sm">
+                <p className="text-[#7A756E] text-sm">
                     Add your name so the app can greet you personally.
                 </p>
 

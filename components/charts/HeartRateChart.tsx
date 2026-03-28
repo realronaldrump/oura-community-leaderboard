@@ -38,8 +38,8 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                 cx={cx}
                 cy={cy}
                 r={selectedPoint?.timestamp === payload?.timestamp ? 6 : 3}
-                fill={selectedPoint?.timestamp === payload?.timestamp ? '#EF4444' : '#EF4444'}
-                stroke="#EF4444"
+                fill={selectedPoint?.timestamp === payload?.timestamp ? '#D4897B' : '#D4897B'}
+                stroke="#D4897B"
                 strokeWidth={selectedPoint?.timestamp === payload?.timestamp ? 3 : 1.5}
                 className="cursor-pointer transition-all duration-300 hover:r-5"
                 onClick={() => handleDataPointClick(props)}
@@ -106,8 +106,8 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                                     key={range}
                                     onClick={() => setTimeRange(range)}
                                     className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${timeRange === range
-                                        ? 'bg-[#EF4444] text-white'
-                                        : 'bg-[#1A1A1A] text-text-muted hover:text-text-primary'
+                                        ? 'bg-[#D4897B] text-white'
+                                        : 'bg-[#F2EDE8] text-text-muted hover:text-text-primary'
                                         }`}
                                 >
                                     {range}
@@ -140,7 +140,7 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                             type="number"
                             domain={['dataMin', 'dataMax']}
                             hide={!showLabels}
-                            tick={{ fill: '#737373', fontSize: 10 }}
+                            tick={{ fill: '#A8A29E', fontSize: 10 }}
                             axisLine={false}
                             tickLine={false}
                             tickFormatter={formatHour}
@@ -154,18 +154,20 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                         {avgBpm && (
                             <ReferenceLine
                                 y={avgBpm}
-                                stroke="#3a3a3a"
+                                stroke="rgba(0,0,0,0.1)"
                                 strokeDasharray="3 3"
                             />
                         )}
                         <Tooltip
                             contentStyle={{
-                                backgroundColor: '#1a1a1a',
-                                border: '1px solid #2a2a2a',
-                                borderRadius: '8px',
-                                fontSize: '12px'
+                                backgroundColor: '#FFFFFF',
+                                border: '1px solid rgba(0,0,0,0.1)',
+                                borderRadius: '12px',
+                                fontSize: '12px',
+                                color: '#2D2A26',
+                                boxShadow: '4px 4px 8px rgba(0,0,0,0.06), -4px -4px 8px rgba(255,255,255,0.8)',
                             }}
-                            labelStyle={{ color: '#737373' }}
+                            labelStyle={{ color: '#7A756E' }}
                             labelFormatter={(timestamp: number) => new Date(timestamp).toLocaleTimeString('en-US', {
                                 hour: 'numeric',
                                 minute: '2-digit',
@@ -176,9 +178,9 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                         <Line
                             type="monotone"
                             dataKey="bpm"
-                            stroke="#ef4444"
+                            stroke="#D4897B"
                             dot={<CustomDot />}
-                            activeDot={{ r: 6, stroke: '#EF4444', strokeWidth: 3 }}
+                            activeDot={{ r: 6, stroke: '#D4897B', strokeWidth: 3 }}
                             strokeWidth={1.5}
                         />
                     </LineChart>
@@ -196,7 +198,7 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                         <IOSListItem
                             title="Heart Rate"
                             subtitle={`${selectedPoint.bpm} bpm`}
-                            icon={<div className="text-[#EF4444]"><Clock className="w-4 h-4" /></div>}
+                            icon={<div className="text-[#D4897B]"><Clock className="w-4 h-4" /></div>}
                             rightElement={<div className="text-xs text-text-muted">
                                 {new Date(selectedPoint.timestamp).toLocaleTimeString('en-US', {
                                     hour: 'numeric',
@@ -221,7 +223,7 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                         <IOSListItem
                             title="Source"
                             subtitle={selectedPoint.source}
-                            icon={<div className="text-[#3B82F6]"><Clock className="w-4 h-4" /></div>}
+                            icon={<div className="text-[#7BA8D4]"><Clock className="w-4 h-4" /></div>}
                         />
                         <IOSButton onClick={() => setSelectedPoint(null)} className="w-full" variant="secondary">
                             Close

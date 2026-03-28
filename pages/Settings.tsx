@@ -449,17 +449,17 @@ const Settings: React.FC = () => {
 
     if (!activeProfile) {
         return (
-            <div className="min-h-screen bg-[#0C0C0C] text-[#FAFAFA] flex flex-col items-center justify-center p-4">
+            <div className="min-h-screen bg-[#F2EDE8] text-[#2D2A26] flex flex-col items-center justify-center p-4">
                 <div className="text-center max-w-md w-full space-y-6">
                     <div>
                         <h2 className="text-xl font-semibold mb-2">No Profile Selected</h2>
-                        <p className="text-[#666] text-sm">Please connect an Oura account or select an existing profile to view settings.</p>
+                        <p className="text-[#A8A29E] text-sm">Please connect an Oura account or select an existing profile to view settings.</p>
                     </div>
                     <div className="flex flex-col gap-3">
-                        <button onClick={login} className="w-full px-4 py-2.5 bg-[#00C896] text-[#0C0C0C] font-medium rounded-md text-sm hover:opacity-90 transition-opacity">
+                        <button onClick={login} className="w-full px-4 py-2.5 bg-[#6B9E8A] text-white font-medium rounded-[14px] text-sm hover:opacity-90 transition-opacity">
                             Connect Oura Account
                         </button>
-                        <button onClick={handleBackToDashboard} className="w-full px-4 py-2.5 border border-[#333] text-[#FAFAFA] font-medium rounded-md text-sm hover:bg-[#1C1C1C] transition-colors">
+                        <button onClick={handleBackToDashboard} className="w-full px-4 py-2.5 border border-[rgba(0,0,0,0.10)] text-[#2D2A26] font-medium rounded-[14px] text-sm hover:bg-[#FAF7F4] transition-colors">
                             Back to Dashboard
                         </button>
                     </div>
@@ -469,12 +469,12 @@ const Settings: React.FC = () => {
     }
 
     return (
-        <div className="min-h-screen bg-[#0C0C0C] text-[#FAFAFA]">
+        <div className="min-h-screen bg-[#F2EDE8] text-[#2D2A26]">
             <SyncModal isOpen={showSyncModal} progress={syncProgress} onClose={() => setShowSyncModal(false)} />
 
-            <nav className="sticky top-0 z-40 bg-[#0C0C0C]/80 backdrop-blur-xl border-b border-[#1C1C1C] px-4 py-3">
+            <nav className="sticky top-0 z-40 bg-white/85 backdrop-blur-xl border-b border-[rgba(0,0,0,0.06)] px-4 py-3">
                 <div className="max-w-2xl mx-auto flex justify-between items-center">
-                    <button onClick={handleBackToDashboard} className="text-[#666] hover:text-[#FAFAFA] transition-colors flex items-center gap-2 text-sm">
+                    <button onClick={handleBackToDashboard} className="text-[#A8A29E] hover:text-[#2D2A26] transition-colors flex items-center gap-2 text-sm">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
@@ -489,56 +489,56 @@ const Settings: React.FC = () => {
 
                 {/* Profile */}
                 <section className="mb-8">
-                    <h2 className="text-sm font-medium text-[#A0A0A0] uppercase tracking-wider mb-4">Profile</h2>
-                    <div className="bg-[#141414] border border-[#222] rounded-lg p-5 space-y-5">
+                    <h2 className="text-sm font-medium text-[#7A756E] uppercase tracking-wider mb-4">Profile</h2>
+                    <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-[18px] p-5 space-y-5">
                         <div>
-                            <p className="text-xs text-[#666] mb-1.5 uppercase tracking-wide">Email</p>
-                            <p className="text-sm text-[#FAFAFA] bg-[#0C0C0C] border border-[#222] rounded-md px-3 py-2.5 cursor-not-allowed opacity-70">{activeProfile.email}</p>
+                            <p className="text-xs text-[#A8A29E] mb-1.5 uppercase tracking-wide">Email</p>
+                            <p className="text-sm text-[#2D2A26] bg-[#F2EDE8] border border-[rgba(0,0,0,0.06)] rounded-[12px] px-3 py-2.5 cursor-not-allowed opacity-70">{activeProfile.email}</p>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-xs text-[#666] mb-1.5 uppercase tracking-wide">First Name</label>
+                                <label className="block text-xs text-[#A8A29E] mb-1.5 uppercase tracking-wide">First Name</label>
                                 <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)}
-                                    className="w-full bg-[#0C0C0C] border border-[#333] rounded-md px-3 py-2.5 text-[#FAFAFA] text-sm focus:border-[#00C896] outline-none transition-colors"
+                                    className="w-full bg-[#F2EDE8] border border-[rgba(0,0,0,0.10)] rounded-[12px] px-3 py-2.5 text-[#2D2A26] text-sm focus:border-[#6B9E8A] outline-none transition-colors"
                                     placeholder="First name" />
                             </div>
                             <div>
-                                <label className="block text-xs text-[#666] mb-1.5 uppercase tracking-wide">Last Name</label>
+                                <label className="block text-xs text-[#A8A29E] mb-1.5 uppercase tracking-wide">Last Name</label>
                                 <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)}
-                                    className="w-full bg-[#0C0C0C] border border-[#333] rounded-md px-3 py-2.5 text-[#FAFAFA] text-sm focus:border-[#00C896] outline-none transition-colors"
+                                    className="w-full bg-[#F2EDE8] border border-[rgba(0,0,0,0.10)] rounded-[12px] px-3 py-2.5 text-[#2D2A26] text-sm focus:border-[#6B9E8A] outline-none transition-colors"
                                     placeholder="Last name" />
                             </div>
                         </div>
 
                         <div className="flex items-center justify-end gap-3 pt-2">
                             {saveMessage && (
-                                <span className={`text-xs ${saveMessage.includes('Failed') ? 'text-[#F87171]' : 'text-[#00C896]'}`}>{saveMessage}</span>
+                                <span className={`text-xs ${saveMessage.includes('Failed') ? 'text-[#D4897B]' : 'text-[#6B9E8A]'}`}>{saveMessage}</span>
                             )}
                             <button onClick={handleSaveProfile} disabled={isSaving}
-                                className="px-5 py-2.5 bg-[#00C896] text-[#0C0C0C] font-medium rounded-md text-sm disabled:opacity-50 hover:opacity-90 transition-opacity">
+                                className="px-5 py-2.5 bg-[#6B9E8A] text-white font-medium rounded-[12px] text-sm disabled:opacity-50 hover:opacity-90 transition-opacity">
                                 {isSaving ? 'Saving...' : 'Save Changes'}
                             </button>
                         </div>
 
-                        <hr className="border-[#222]" />
+                        <hr className="border-[rgba(0,0,0,0.06)]" />
 
-                        <div className="flex justify-between items-center bg-[#0C0C0C] border border-[#222] rounded-md p-4">
+                        <div className="flex justify-between items-center bg-[#F2EDE8] border border-[rgba(0,0,0,0.06)] rounded-[14px] p-4">
                             <div>
-                                <p className="text-[#FAFAFA] font-medium text-sm">Switch Profile</p>
-                                <p className="text-[#666] text-xs mt-1">Currently viewing as {getProfileDisplayName(activeProfile)}</p>
+                                <p className="text-[#2D2A26] font-medium text-sm">Switch Profile</p>
+                                <p className="text-[#A8A29E] text-xs mt-1">Currently viewing as {getProfileDisplayName(activeProfile)}</p>
                             </div>
                             {profiles.length > 1 ? (
                                 <div className="flex items-center gap-2">
                                     <PrimaryProfileSwitcher selectClassName="min-w-[11rem]" />
                                     <button
                                         onClick={clearActiveProfileSelection}
-                                        className="px-4 py-2 border border-[#333] text-[#FAFAFA] font-medium rounded-md text-sm hover:bg-[#1C1C1C] transition-colors whitespace-nowrap"
+                                        className="px-4 py-2 border border-[rgba(0,0,0,0.10)] text-[#2D2A26] font-medium rounded-[12px] text-sm hover:bg-[#FAF7F4] transition-colors whitespace-nowrap"
                                     >
                                         Manage
                                     </button>
                                 </div>
                             ) : (
-                                <p className="text-[#666] text-xs">Add another profile to enable switching.</p>
+                                <p className="text-[#A8A29E] text-xs">Add another profile to enable switching.</p>
                             )}
                         </div>
                     </div>
@@ -546,33 +546,33 @@ const Settings: React.FC = () => {
 
                 {/* Data Sync */}
                 <section className="mb-8">
-                    <h2 className="text-sm font-medium text-[#A0A0A0] uppercase tracking-wider mb-4">Data Sync</h2>
-                    <div className="bg-[#141414] border border-[#222] rounded-lg p-5">
+                    <h2 className="text-sm font-medium text-[#7A756E] uppercase tracking-wider mb-4">Data Sync</h2>
+                    <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-[18px] p-5">
                         <div className="flex items-start justify-between gap-4">
                             <div className="flex-1">
-                                <p className="text-[#FAFAFA] font-medium text-sm">Full Data Sync</p>
-                                <p className="text-[#666] text-xs mt-1 leading-relaxed">
+                                <p className="text-[#2D2A26] font-medium text-sm">Full Data Sync</p>
+                                <p className="text-[#A8A29E] text-xs mt-1 leading-relaxed">
                                     Download your complete Oura history. This may take a few minutes.<br />
                                     The dashboard syncs recent data automatically every hour. Use Full Sync here to backfill your complete history.
                                 </p>
                             </div>
-                            <button onClick={handleFullSync} className="px-4 py-2 border border-[#333] text-[#FAFAFA] font-medium rounded-md text-sm hover:bg-[#1C1C1C] transition-colors whitespace-nowrap">
+                            <button onClick={handleFullSync} className="px-4 py-2 border border-[rgba(0,0,0,0.10)] text-[#2D2A26] font-medium rounded-[12px] text-sm hover:bg-[#FAF7F4] transition-colors whitespace-nowrap">
                                 Sync All Data
                             </button>
                         </div>
 
-                        <div className="mt-5 pt-5 border-t border-[#222]">
+                        <div className="mt-5 pt-5 border-t border-[rgba(0,0,0,0.06)]">
                             <div className="flex items-start justify-between gap-4">
                                 <div className="flex-1">
-                                    <p className="text-[#FAFAFA] font-medium text-sm">Quick API & Freshness Check</p>
-                                    <p className="text-[#666] text-xs mt-1 leading-relaxed">
+                                    <p className="text-[#2D2A26] font-medium text-sm">Quick API & Freshness Check</p>
+                                    <p className="text-[#A8A29E] text-xs mt-1 leading-relaxed">
                                         Fast verification against Oura `daily_sleep`, `daily_readiness`, and `daily_activity` endpoints over the last {QUICK_CHECK_LOOKBACK_DAYS + 1} days.
                                     </p>
                                 </div>
                                 <button
                                     onClick={handleQuickCheck}
                                     disabled={quickCheck.status === 'running'}
-                                    className="px-4 py-2 border border-[#333] text-[#FAFAFA] font-medium rounded-md text-sm hover:bg-[#1C1C1C] transition-colors whitespace-nowrap disabled:opacity-50"
+                                    className="px-4 py-2 border border-[rgba(0,0,0,0.10)] text-[#2D2A26] font-medium rounded-[12px] text-sm hover:bg-[#FAF7F4] transition-colors whitespace-nowrap disabled:opacity-50"
                                 >
                                     {quickCheck.status === 'running' ? 'Checking...' : 'Run Check'}
                                 </button>
@@ -580,14 +580,14 @@ const Settings: React.FC = () => {
 
                             {quickCheck.status !== 'idle' && (
                                 <div
-                                    className={`mt-3 rounded-md border px-3 py-2.5 text-xs ${
+                                    className={`mt-3 rounded-[12px] border px-3 py-2.5 text-xs ${
                                         quickCheck.status === 'ok'
-                                            ? 'border-[#00C896]/40 bg-[#00C896]/10 text-[#9AF0D3]'
+                                            ? 'border-[#6B9E8A]/40 bg-[#6B9E8A]/10 text-[#4A7A64]'
                                             : quickCheck.status === 'warning'
-                                                ? 'border-[#F59E0B]/40 bg-[#F59E0B]/10 text-[#FCD34D]'
+                                                ? 'border-[#D4A574]/40 bg-[#D4A574]/10 text-[#A07A4A]'
                                                 : quickCheck.status === 'error'
-                                                    ? 'border-[#F87171]/40 bg-[#F87171]/10 text-[#FCA5A5]'
-                                                    : 'border-[#333] bg-[#0C0C0C] text-[#A0A0A0]'
+                                                    ? 'border-[#D4897B]/40 bg-[#D4897B]/10 text-[#A0574A]'
+                                                    : 'border-[rgba(0,0,0,0.10)] bg-[#F2EDE8] text-[#7A756E]'
                                     }`}
                                 >
                                     <p className="font-medium">{quickCheck.message}</p>
@@ -603,18 +603,18 @@ const Settings: React.FC = () => {
                             )}
                         </div>
 
-                        <div className="mt-5 pt-5 border-t border-[#222]">
+                        <div className="mt-5 pt-5 border-t border-[rgba(0,0,0,0.06)]">
                             <div className="flex items-start justify-between gap-4">
                                 <div className="flex-1">
-                                    <p className="text-[#FAFAFA] font-medium text-sm">Live Webhook Updates</p>
-                                    <p className="text-[#666] text-xs mt-1 leading-relaxed">
+                                    <p className="text-[#2D2A26] font-medium text-sm">Live Webhook Updates</p>
+                                    <p className="text-[#A8A29E] text-xs mt-1 leading-relaxed">
                                         Configure Oura webhooks so the Today view refreshes as soon as Oura publishes new data.
                                     </p>
                                 </div>
                                 <button
                                     onClick={handleEnableLiveUpdates}
                                     disabled={webhookStatus.status === 'running'}
-                                    className="px-4 py-2 border border-[#333] text-[#FAFAFA] font-medium rounded-md text-sm hover:bg-[#1C1C1C] transition-colors whitespace-nowrap disabled:opacity-50"
+                                    className="px-4 py-2 border border-[rgba(0,0,0,0.10)] text-[#2D2A26] font-medium rounded-[12px] text-sm hover:bg-[#FAF7F4] transition-colors whitespace-nowrap disabled:opacity-50"
                                 >
                                     {webhookStatus.status === 'running' ? 'Configuring...' : 'Enable Live Updates'}
                                 </button>
@@ -622,14 +622,14 @@ const Settings: React.FC = () => {
 
                             {webhookStatus.status !== 'idle' && (
                                 <div
-                                    className={`mt-3 rounded-md border px-3 py-2.5 text-xs ${
+                                    className={`mt-3 rounded-[12px] border px-3 py-2.5 text-xs ${
                                         webhookStatus.status === 'ok'
-                                            ? 'border-[#00C896]/40 bg-[#00C896]/10 text-[#9AF0D3]'
+                                            ? 'border-[#6B9E8A]/40 bg-[#6B9E8A]/10 text-[#4A7A64]'
                                             : webhookStatus.status === 'warning'
-                                                ? 'border-[#F59E0B]/40 bg-[#F59E0B]/10 text-[#FCD34D]'
+                                                ? 'border-[#D4A574]/40 bg-[#D4A574]/10 text-[#A07A4A]'
                                                 : webhookStatus.status === 'error'
-                                                    ? 'border-[#F87171]/40 bg-[#F87171]/10 text-[#FCA5A5]'
-                                                    : 'border-[#333] bg-[#0C0C0C] text-[#A0A0A0]'
+                                                    ? 'border-[#D4897B]/40 bg-[#D4897B]/10 text-[#A0574A]'
+                                                    : 'border-[rgba(0,0,0,0.10)] bg-[#F2EDE8] text-[#7A756E]'
                                     }`}
                                 >
                                     <p className="font-medium">{webhookStatus.message}</p>
@@ -649,15 +649,15 @@ const Settings: React.FC = () => {
 
                 {/* Add Profiles */}
                 <section>
-                    <h2 className="text-sm font-medium text-[#A0A0A0] uppercase tracking-wider mb-4">Add Profiles</h2>
+                    <h2 className="text-sm font-medium text-[#7A756E] uppercase tracking-wider mb-4">Add Profiles</h2>
                     <div className="space-y-4">
-                        <div className="bg-[#141414] border border-[#222] rounded-lg p-5">
+                        <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-[18px] p-5">
                             <div className="flex items-center justify-between gap-4">
                                 <div className="flex-1">
-                                    <p className="text-[#FAFAFA] font-medium text-sm">Connect Another Account</p>
-                                    <p className="text-[#666] text-xs mt-1">Add another Oura profile to seamlessly switch between them.</p>
+                                    <p className="text-[#2D2A26] font-medium text-sm">Connect Another Account</p>
+                                    <p className="text-[#A8A29E] text-xs mt-1">Add another Oura profile to seamlessly switch between them.</p>
                                 </div>
-                                <button onClick={login} className="px-4 py-2 bg-[#00C896] text-[#0C0C0C] font-medium rounded-md text-sm hover:opacity-90 transition-opacity whitespace-nowrap">
+                                <button onClick={login} className="px-4 py-2 bg-[#6B9E8A] text-white font-medium rounded-[12px] text-sm hover:opacity-90 transition-opacity whitespace-nowrap">
                                     Connect Account
                                 </button>
                             </div>

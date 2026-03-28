@@ -72,33 +72,33 @@ const InviteLinkCard: React.FC<InviteLinkCardProps> = ({
     })();
 
     return (
-        <div className={`rounded-[1.25rem] border border-[#222] bg-[#111111] p-5 ${className}`}>
+        <div className={`rounded-[1.25rem] border border-[rgba(0,0,0,0.06)] bg-white p-5 ${className}`}>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-[#23322C] bg-[#0E1714] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#00C896]">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-[#C5D8CE] bg-[#EBF3EE] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#6B9E8A]">
                         <Users className="h-3.5 w-3.5" />
                         Invite Link
                     </div>
-                    <h3 className="mt-3 text-lg font-semibold tracking-tight text-[#FAFAFA]">{title}</h3>
-                    <p className="mt-2 max-w-xl text-sm leading-relaxed text-[#8A8A8A]">{description}</p>
+                    <h3 className="mt-3 text-lg font-semibold tracking-tight text-[#2D2A26]">{title}</h3>
+                    <p className="mt-2 max-w-xl text-sm leading-relaxed text-[#7A756E]">{description}</p>
                 </div>
-                <div className="rounded-full border border-[#1E4033] bg-[#0F1B17] px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-[#9BE4C9]">
+                <div className="rounded-full border border-[#C5D8CE] bg-[#EBF3EE] px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-[#6B9E8A]">
                     {statusMessage}
                 </div>
             </div>
 
-            <div className="mt-5 overflow-hidden rounded-2xl border border-[#1E1E1E] bg-[#0C0C0C]">
-                <div className="flex items-center justify-between gap-3 border-b border-[#1E1E1E] px-4 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#666]">Join URL</p>
+            <div className="mt-5 overflow-hidden rounded-2xl border border-[rgba(0,0,0,0.06)] bg-[#F2EDE8]">
+                <div className="flex items-center justify-between gap-3 border-b border-[rgba(0,0,0,0.06)] px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Join URL</p>
                     {status === 'copied' || status === 'shared' ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#9BE4C9]">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#6B9E8A]">
                             <Check className="h-3.5 w-3.5" />
                             Ready to send
                         </span>
                     ) : null}
                 </div>
                 <div className="px-4 py-3">
-                    <code className="block overflow-x-auto whitespace-nowrap font-mono text-sm text-[#C7F9E7]">
+                    <code className="block overflow-x-auto whitespace-nowrap font-mono text-sm text-[#6B9E8A]">
                         {inviteLink}
                     </code>
                 </div>
@@ -109,7 +109,7 @@ const InviteLinkCard: React.FC<InviteLinkCardProps> = ({
                     type="button"
                     onClick={handleShare}
                     disabled={isWorking}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#00C896] px-4 py-3 text-sm font-semibold text-[#06120D] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#6B9E8A] px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                     <Send className="h-4 w-4" />
                     {canNativeShare ? 'Share Invite' : 'Copy Invite Link'}
@@ -118,7 +118,7 @@ const InviteLinkCard: React.FC<InviteLinkCardProps> = ({
                     type="button"
                     onClick={handleCopy}
                     disabled={isWorking}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#333] px-4 py-3 text-sm font-medium text-[#FAFAFA] transition-colors hover:bg-[#171717] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[rgba(0,0,0,0.10)] px-4 py-3 text-sm font-medium text-[#2D2A26] transition-colors hover:bg-[#FAF7F4] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                     {status === 'copied' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                     Copy Link

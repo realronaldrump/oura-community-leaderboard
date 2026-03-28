@@ -63,7 +63,7 @@ const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, use
         setIsExporting(true);
         try {
             const canvas = await html2canvas(element, {
-                backgroundColor: '#0C0C0C',
+                backgroundColor: '#F2EDE8',
                 scale: 2
             });
 
@@ -118,7 +118,7 @@ const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, use
                 <div className="flex items-center gap-3">
                     {profiles.length > 1 && (
                         <PrimaryProfileSwitcher
-                            selectClassName="pl-3 pr-8 py-2 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] hover:bg-white/5 cursor-pointer max-w-[170px] truncate"
+                            selectClassName="pl-3 pr-8 py-2 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] hover:bg-black/5 cursor-pointer max-w-[170px] truncate"
                         />
                     )}
                 </div>
@@ -130,19 +130,19 @@ const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, use
                     <Filter className="w-4 h-4 text-[var(--text-muted)] mr-1" />
                     <button
                         onClick={() => setFilterType('all')}
-                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${filterType === 'all' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-white/10'}`}
+                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${filterType === 'all' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-black/5'}`}
                     >
                         All Insights
                     </button>
                     <button
                         onClick={() => setFilterType('positive_habit')}
-                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${filterType === 'positive_habit' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-white/10'}`}
+                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${filterType === 'positive_habit' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-black/5'}`}
                     >
                         Positive Habits
                     </button>
                     <button
                         onClick={() => setFilterType('negative_habit')}
-                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${filterType === 'negative_habit' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-white/10'}`}
+                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${filterType === 'negative_habit' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-subtle)] hover:bg-black/5'}`}
                     >
                         Negative Habits
                     </button>
@@ -159,7 +159,7 @@ const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, use
             ) : (
                 <div className="card p-12 text-center bg-[var(--bg-elevated)] border border-dashed border-[var(--border-subtle)]">
                     <div className="flex justify-center mb-4">
-                        <div className="p-3 bg-white/5 rounded-full">
+                        <div className="p-3 bg-black/5 rounded-full">
                             <Sparkles className="w-8 h-8 text-[var(--text-muted)] opacity-50" />
                         </div>
                     </div>

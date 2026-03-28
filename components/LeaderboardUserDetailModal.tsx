@@ -13,11 +13,11 @@ const LeaderboardUserDetailModal: React.FC<LeaderboardUserDetailModalProps> = ({
     if (!isOpen || !user) return null;
 
     const getScoreCategory = (score: number) => {
-        if (score >= 85) return { label: 'Excellent', color: '#10B981' };
-        if (score >= 70) return { label: 'Great', color: '#3B82F6' };
-        if (score >= 55) return { label: 'Good', color: '#F59E0B' };
+        if (score >= 85) return { label: 'Excellent', color: '#7BC4A0' };
+        if (score >= 70) return { label: 'Great', color: '#7BA8D4' };
+        if (score >= 55) return { label: 'Good', color: '#D4A574' };
         if (score >= 40) return { label: 'Fair', color: '#F97316' };
-        return { label: 'Needs Improvement', color: '#EF4444' };
+        return { label: 'Needs Improvement', color: '#D4897B' };
     };
 
     const readinessCategory = getScoreCategory(user.readiness);
@@ -29,7 +29,7 @@ const LeaderboardUserDetailModal: React.FC<LeaderboardUserDetailModalProps> = ({
         <IOSModal isOpen={isOpen} onClose={onClose} title={`${user.name.split('@')[0]}'s Stats`}>
             <div className="space-y-6 overflow-y-auto ios-scroll max-h-[70vh]">
                 {/* Average Score */}
-                <div className="flex items-center justify-between p-6 bg-[#0C0C0C] rounded-xl border border-[#222]">
+                <div className="flex items-center justify-between p-6 bg-[#F2EDE8] rounded-xl border border-[rgba(0,0,0,0.06)]">
                     <div className="flex items-center gap-4">
                         <div className="text-5xl font-bold" style={{ color: averageCategory.color }}>
                             {user.average}
@@ -49,7 +49,7 @@ const LeaderboardUserDetailModal: React.FC<LeaderboardUserDetailModalProps> = ({
                     <IOSListItem
                         title="Readiness"
                         subtitle={`${user.readiness} - ${readinessCategory.label}`}
-                        icon={<div className="text-[#10B981]"><Heart className="w-5 h-5" /></div>}
+                        icon={<div className="text-[#7BC4A0]"><Heart className="w-5 h-5" /></div>}
                         rightElement={
                             <div className={`w-2 h-2 rounded-full`} style={{ backgroundColor: readinessCategory.color }} />
                         }
@@ -57,7 +57,7 @@ const LeaderboardUserDetailModal: React.FC<LeaderboardUserDetailModalProps> = ({
                     <IOSListItem
                         title="Sleep"
                         subtitle={`${user.sleep} - ${sleepCategory.label}`}
-                        icon={<div className="text-[#3B82F6]"><Moon className="w-5 h-5" /></div>}
+                        icon={<div className="text-[#7BA8D4]"><Moon className="w-5 h-5" /></div>}
                         rightElement={
                             <div className={`w-2 h-2 rounded-full`} style={{ backgroundColor: sleepCategory.color }} />
                         }
@@ -65,7 +65,7 @@ const LeaderboardUserDetailModal: React.FC<LeaderboardUserDetailModalProps> = ({
                     <IOSListItem
                         title="Activity"
                         subtitle={`${user.activity} - ${activityCategory.label}`}
-                        icon={<div className="text-[#F59E0B]"><Zap className="w-5 h-5" /></div>}
+                        icon={<div className="text-[#D4A574]"><Zap className="w-5 h-5" /></div>}
                         rightElement={
                             <div className={`w-2 h-2 rounded-full`} style={{ backgroundColor: activityCategory.color }} />
                         }
@@ -90,14 +90,14 @@ const LeaderboardUserDetailModal: React.FC<LeaderboardUserDetailModalProps> = ({
                             <IOSListItem
                                 title="Active Calories"
                                 subtitle={`${user.activeCalories?.toLocaleString()} kcal`}
-                                icon={<div className="text-[#F59E0B]"><Flame className="w-4 h-4" /></div>}
+                                icon={<div className="text-[#D4A574]"><Flame className="w-4 h-4" /></div>}
                             />
                         )}
                         {user.sleepDuration !== undefined && (
                             <IOSListItem
                                 title="Sleep Duration"
                                 subtitle={formatDuration(user.sleepDuration)}
-                                icon={<div className="text-[#3B82F6]"><Moon className="w-4 h-4" /></div>}
+                                icon={<div className="text-[#7BA8D4]"><Moon className="w-4 h-4" /></div>}
                             />
                         )}
                         {user.averageHrv !== undefined && (
@@ -111,22 +111,22 @@ const LeaderboardUserDetailModal: React.FC<LeaderboardUserDetailModalProps> = ({
                             <IOSListItem
                                 title="Lowest HR (Sleep)"
                                 subtitle={`${user.restingHeartRate} bpm`}
-                                icon={<div className="text-[#EF4444]"><Heart className="w-4 h-4" /></div>}
+                                icon={<div className="text-[#D4897B]"><Heart className="w-4 h-4" /></div>}
                             />
                         )}
                     </div>
                 </div>
 
                 {/* Score Distribution */}
-                <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222]">
-                    <h4 className="text-sm font-medium text-[#FAFAFA] mb-4">Score Distribution</h4>
+                <div className="bg-[#F2EDE8] p-4 rounded-xl border border-[rgba(0,0,0,0.06)]">
+                    <h4 className="text-sm font-medium text-[#2D2A26] mb-4">Score Distribution</h4>
                     <div className="space-y-4">
                         <div>
                             <div className="flex justify-between text-sm mb-2">
                                 <span className="text-text-secondary">Readiness</span>
                                 <span className="font-mono" style={{ color: readinessCategory.color }}>{user.readiness}</span>
                             </div>
-                            <div className="h-2 bg-[#1A1A1A] rounded-full overflow-hidden">
+                            <div className="h-2 bg-[#F0EBE5] rounded-full overflow-hidden">
                                 <div
                                     className="h-full rounded-full transition-all"
                                     style={{ width: `${user.readiness}%`, backgroundColor: readinessCategory.color }}
@@ -138,7 +138,7 @@ const LeaderboardUserDetailModal: React.FC<LeaderboardUserDetailModalProps> = ({
                                 <span className="text-text-secondary">Sleep</span>
                                 <span className="font-mono" style={{ color: sleepCategory.color }}>{user.sleep}</span>
                             </div>
-                            <div className="h-2 bg-[#1A1A1A] rounded-full overflow-hidden">
+                            <div className="h-2 bg-[#F0EBE5] rounded-full overflow-hidden">
                                 <div
                                     className="h-full rounded-full transition-all"
                                     style={{ width: `${user.sleep}%`, backgroundColor: sleepCategory.color }}
@@ -150,7 +150,7 @@ const LeaderboardUserDetailModal: React.FC<LeaderboardUserDetailModalProps> = ({
                                 <span className="text-text-secondary">Activity</span>
                                 <span className="font-mono" style={{ color: activityCategory.color }}>{user.activity}</span>
                             </div>
-                            <div className="h-2 bg-[#1A1A1A] rounded-full overflow-hidden">
+                            <div className="h-2 bg-[#F0EBE5] rounded-full overflow-hidden">
                                 <div
                                     className="h-full rounded-full transition-all"
                                     style={{ width: `${user.activity}%`, backgroundColor: activityCategory.color }}

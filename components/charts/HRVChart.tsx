@@ -80,8 +80,8 @@ const HRVChart: React.FC<Props> = ({ session, showLabels = false }) => {
                 <AreaChart data={chartData}>
                     <defs>
                         <linearGradient id="hrvGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                            <stop offset="5%" stopColor="#A08BBE" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#A08BBE" stopOpacity={0} />
                         </linearGradient>
                     </defs>
                     <XAxis
@@ -125,7 +125,7 @@ const HRVChart: React.FC<Props> = ({ session, showLabels = false }) => {
                     <Area
                         type="monotone"
                         dataKey="hrv"
-                        stroke="#8b5cf6"
+                        stroke="#A08BBE"
                         fill="url(#hrvGradient)"
                         strokeWidth={2}
                     />

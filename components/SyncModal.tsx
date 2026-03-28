@@ -19,16 +19,16 @@ const SyncModal: React.FC<SyncModalProps> = ({ isOpen, progress, onClose }) => {
         <IOSModal isOpen={isOpen} onClose={canClose ? onClose : () => {}}>
             <div className="space-y-4">
                 {/* Current Step */}
-                <p className="text-[#A0A0A0]">
+                <p className="text-[#7A756E]">
                     {progress.currentStep}
                 </p>
 
                 {/* Progress Bar */}
-                <div className="h-3 bg-[#1C1C1C] rounded-full overflow-hidden">
+                <div className="h-3 bg-[#FAF7F4] rounded-full overflow-hidden">
                     <div
-                        className={`h-full transition-all duration-300 rounded-full ${progress.status === 'complete' ? 'bg-[#34D399]' :
-                            progress.status === 'error' ? 'bg-[#FF453A]' :
-                                'bg-[#00C896]'
+                        className={`h-full transition-all duration-300 rounded-full ${progress.status === 'complete' ? 'bg-[#7BC4A0]' :
+                            progress.status === 'error' ? 'bg-[#D4897B]' :
+                                'bg-[#6B9E8A]'
                             }`}
                         style={{ width: `${progressPercent}%` }}
                     />
@@ -36,15 +36,15 @@ const SyncModal: React.FC<SyncModalProps> = ({ isOpen, progress, onClose }) => {
 
                 {/* Details */}
                 <div className="flex items-center justify-between text-sm">
-                    <span className="text-[#666666]">{progress.details}</span>
-                    <span className="text-[#666666] font-mono">
+                    <span className="text-[#A8A29E]">{progress.details}</span>
+                    <span className="text-[#A8A29E] font-mono">
                         {progress.stepsCompleted}/{progress.totalSteps}
                     </span>
                 </div>
 
                 {/* Error message */}
                 {progress.error && (
-                    <p className="mt-3 text-sm text-[#FF453A]">
+                    <p className="mt-3 text-sm text-[#D4897B]">
                         {progress.error}
                     </p>
                 )}

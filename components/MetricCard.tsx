@@ -26,7 +26,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
   value,
   unit,
   subtext,
-  color = '#f5f5f5',
+  color = '#2D2A26',
   icon,
   glowColor,
   tiltEnabled = true,
@@ -38,8 +38,6 @@ const MetricCard: React.FC<MetricCardProps> = ({
   const { style: tiltStyle } = useTilt(cardRef as React.RefObject<HTMLElement>, 8);
   const { triggerHaptic } = useHapticFeedback();
   const [isPressed, setIsPressed] = useState(false);
-
-  const effectiveGlow = glowColor || color;
 
   const handleTouchStart = () => {
     setIsPressed(true);
@@ -55,27 +53,32 @@ const MetricCard: React.FC<MetricCardProps> = ({
   return (
     <div
       ref={cardRef}
-      className={`bg-[#141414] rounded-xl border border-[#1E1E1E] p-4 flex flex-col justify-between min-h-[96px] ${onClick ? 'cursor-pointer ios-card' : ''} relative group/card transition-all duration-200 hover:border-[#2A2A2A] hover:bg-[#161616]`}
-      style={tiltEnabled ? tiltStyle : undefined}
+      className={`bg-white rounded-2xl border border-[rgba(0,0,0,0.06)] p-4 flex flex-col justify-between min-h-[96px] ${onClick ? 'cursor-pointer ios-card' : ''} relative group/card transition-all duration-200`}
+      style={{
+        ...(tiltEnabled ? tiltStyle : {}),
+        boxShadow: isPressed
+          ? 'inset 3px 3px 6px rgba(0,0,0,0.08), inset -3px -3px 6px rgba(255,255,255,0.7)'
+          : '4px 4px 8px rgba(0,0,0,0.06), -4px -4px 8px rgba(255,255,255,0.8), inset 1px 1px 2px rgba(255,255,255,0.6), inset -1px -1px 1px rgba(0,0,0,0.02)',
+      }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onClick={onClick}
     >
       {/* Drill Down Indicator */}
       {showDrillDownIndicator && onClick && (
-        <div className="absolute top-3 right-3 opacity-0 group-hover/card:opacity-50 transition-opacity duration-200">
-          <Info className="w-3.5 h-3.5 text-[#666666]" />
+        <div className="absolute top-3 right-3 opacity-0 group-hover/card:opacity-40 transition-opacity duration-200">
+          <Info className="w-3.5 h-3.5 text-[#A8A29E]" />
         </div>
       )}
 
       {/* Header */}
       <div className="flex items-center justify-between mb-2 relative z-10 pr-5">
-        <h3 className="text-[#666666] text-xs font-medium tracking-wide">
+        <h3 className="text-[#A8A29E] text-xs font-semibold tracking-wide">
           {title}
         </h3>
         {icon && (
           <span
-            className="text-[#666666]"
+            className="text-[#A8A29E]"
             style={{ color: value != null ? color : undefined }}
           >
             {icon}
@@ -95,13 +98,13 @@ const MetricCard: React.FC<MetricCardProps> = ({
           {value ?? '--'}
         </span>
         {unit && value != null && (
-          <span className="text-[#555] text-xs font-medium">{unit}</span>
+          <span className="text-[#C8C2BB] text-xs font-medium">{unit}</span>
         )}
       </div>
 
       {/* Subtext */}
       {subtext && (
-        <p className="text-[11px] text-[#555] mt-2 relative z-10 leading-relaxed">
+        <p className="text-[11px] text-[#A8A29E] mt-2 relative z-10 leading-relaxed">
           {subtext}
         </p>
       )}

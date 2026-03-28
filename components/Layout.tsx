@@ -31,49 +31,51 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onNavigate, onLogo
   };
 
   return (
-    <div className="flex h-screen bg-[#0C0C0C] text-[#FAFAFA] overflow-hidden">
+    <div className="flex h-screen bg-[#F2EDE8] text-[#2D2A26] overflow-hidden">
       {/* Sidebar - Desktop */}
-      <div className="hidden md:flex flex-col w-64 bg-[#141414] border-r border-[#222]">
+      <div className="hidden md:flex flex-col w-64 bg-white border-r border-[rgba(0,0,0,0.06)]" style={{ boxShadow: '4px 0 12px rgba(0,0,0,0.04)' }}>
         <div className="p-6 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[#00C896] flex items-center justify-center">
-            <span className="font-bold text-black text-sm">O</span>
+          <div className="w-8 h-8 rounded-full bg-[#6B9E8A] flex items-center justify-center" style={{ boxShadow: '2px 2px 4px rgba(0,0,0,0.1), -2px -2px 4px rgba(255,255,255,0.9)' }}>
+            <span className="font-bold text-white text-sm">O</span>
           </div>
-          <h1 className="text-xl font-bold tracking-tight">Oura Circles+</h1>
+          <h1 className="text-xl font-bold tracking-tight text-[#2D2A26]">Oura Circles+</h1>
         </div>
 
         <nav className="flex-1 px-4 space-y-2 mt-4">
           <button
             onClick={() => handleNavigate('dashboard')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ios-button ${activeTab === 'dashboard'
-                ? 'bg-[#00C896]/20 text-[#00C896]'
-                : 'text-[#A0A0A0] hover:bg-[#1C1C1C] hover:text-[#FAFAFA]'
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ios-button ${activeTab === 'dashboard'
+                ? 'bg-[#6B9E8A]/12 text-[#6B9E8A] shadow-clay-inset'
+                : 'text-[#7A756E] hover:bg-[#F2EDE8] hover:text-[#2D2A26]'
               }`}
+            style={activeTab === 'dashboard' ? { boxShadow: 'inset 3px 3px 6px rgba(0,0,0,0.06), inset -3px -3px 6px rgba(255,255,255,0.7)' } : {}}
           >
             <HomeIcon className="w-5 h-5" />
-            <span className="font-medium">Dashboard</span>
+            <span className="font-semibold">Dashboard</span>
           </button>
 
           <button
             onClick={() => handleNavigate('leaderboard')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ios-button ${activeTab === 'leaderboard'
-                ? 'bg-[#00C896]/20 text-[#00C896]'
-                : 'text-[#A0A0A0] hover:bg-[#1C1C1C] hover:text-[#FAFAFA]'
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ios-button ${activeTab === 'leaderboard'
+                ? 'bg-[#6B9E8A]/12 text-[#6B9E8A]'
+                : 'text-[#7A756E] hover:bg-[#F2EDE8] hover:text-[#2D2A26]'
               }`}
+            style={activeTab === 'leaderboard' ? { boxShadow: 'inset 3px 3px 6px rgba(0,0,0,0.06), inset -3px -3px 6px rgba(255,255,255,0.7)' } : {}}
           >
             <TrophyIcon className="w-5 h-5" />
-            <span className="font-medium">Leaderboard</span>
+            <span className="font-semibold">Leaderboard</span>
           </button>
         </nav>
 
-        <div className="p-4 border-t border-[#222]">
+        <div className="p-4 border-t border-[rgba(0,0,0,0.06)]">
           {userEmail && (
-            <div className="mb-4 px-2 text-xs text-[#666666] truncate">
+            <div className="mb-4 px-2 text-xs text-[#A8A29E] truncate">
               Signed in as {userEmail}
             </div>
           )}
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-2 text-[#A0A0A0] hover:text-[#FF453A] transition-colors rounded-lg hover:bg-[#1C1C1C] ios-button"
+            className="w-full flex items-center gap-3 px-4 py-2 text-[#7A756E] hover:text-[#D4897B] transition-colors rounded-xl hover:bg-[#F2EDE8] ios-button"
           >
             <ArrowRightOnRectangleIcon className="w-5 h-5" />
             <span>Sign Out</span>
@@ -82,14 +84,14 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onNavigate, onLogo
       </div>
 
       {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-[#141414]/80 backdrop-blur-xl border-b border-[#222] z-40 flex items-center justify-between px-4 safe-top">
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white/85 backdrop-blur-xl border-b border-[rgba(0,0,0,0.06)] z-40 flex items-center justify-between px-4 safe-top" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-[#00C896] flex items-center justify-center">
-            <span className="font-bold text-black text-xs">O</span>
+          <div className="w-7 h-7 rounded-full bg-[#6B9E8A] flex items-center justify-center">
+            <span className="font-bold text-white text-xs">O</span>
           </div>
-          <span className="font-bold text-sm">Circles+</span>
+          <span className="font-bold text-sm text-[#2D2A26]">Circles+</span>
         </div>
-        <button onClick={handleLogout} className="ios-touch-target p-2 text-[#A0A0A0] active:text-[#FF453A] transition-colors">
+        <button onClick={handleLogout} className="ios-touch-target p-2 text-[#7A756E] active:text-[#D4897B] transition-colors">
           <ArrowRightOnRectangleIcon className="w-5 h-5" />
         </button>
       </div>
@@ -103,28 +105,28 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onNavigate, onLogo
           <Footer />
         </main>
 
-        {/* Mobile Bottom Nav - iOS Style */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#141414]/95 backdrop-blur-xl border-t border-[#222] safe-bottom z-50">
+        {/* Mobile Bottom Nav */}
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-[rgba(0,0,0,0.06)] safe-bottom z-50" style={{ boxShadow: '0 -4px 12px rgba(0,0,0,0.04)' }}>
           <div className="flex ios-list-item">
             <button
               onClick={() => handleNavigate('dashboard')}
-              className={`flex-1 flex flex-col items-center justify-center py-2 ios-touch ${activeTab === 'dashboard' ? 'text-[#00C896]' : 'text-[#666666]'
+              className={`flex-1 flex flex-col items-center justify-center py-2 ios-touch ${activeTab === 'dashboard' ? 'text-[#6B9E8A]' : 'text-[#A8A29E]'
                 }`}
             >
-              <div className={`p-1 rounded-xl transition-all duration-200 ${activeTab === 'dashboard' ? 'bg-[#00C896]/10' : ''}`}>
+              <div className={`p-1 rounded-xl transition-all duration-200 ${activeTab === 'dashboard' ? 'bg-[#6B9E8A]/10' : ''}`}>
                 <HomeIcon className="w-6 h-6" />
               </div>
-              <span className="text-xs mt-1 font-medium">Home</span>
+              <span className="text-xs mt-1 font-semibold">Home</span>
             </button>
             <button
               onClick={() => handleNavigate('leaderboard')}
-              className={`flex-1 flex flex-col items-center justify-center py-2 ios-touch ${activeTab === 'leaderboard' ? 'text-[#00C896]' : 'text-[#666666]'
+              className={`flex-1 flex flex-col items-center justify-center py-2 ios-touch ${activeTab === 'leaderboard' ? 'text-[#6B9E8A]' : 'text-[#A8A29E]'
                 }`}
             >
-              <div className={`p-1 rounded-xl transition-all duration-200 ${activeTab === 'leaderboard' ? 'bg-[#00C896]/10' : ''}`}>
+              <div className={`p-1 rounded-xl transition-all duration-200 ${activeTab === 'leaderboard' ? 'bg-[#6B9E8A]/10' : ''}`}>
                 <TrophyIcon className="w-6 h-6" />
               </div>
-              <span className="text-xs mt-1 font-medium">Rankings</span>
+              <span className="text-xs mt-1 font-semibold">Rankings</span>
             </button>
           </div>
         </div>

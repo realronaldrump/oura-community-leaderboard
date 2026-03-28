@@ -65,24 +65,24 @@ const ComparisonHeartRateChart: React.FC<ComparisonHeartRateChartProps> = ({ ser
                 initialDimension={{ width: 640, height: 220 }}
             >
                 <LineChart data={formattedData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
                     <XAxis
                         dataKey="time"
-                        stroke="#9CA3AF"
+                        stroke="#A8A29E"
                         fontSize={12}
-                        tick={{ fill: '#9CA3AF' }}
+                        tick={{ fill: '#A8A29E' }}
                         interval="preserveStartEnd"
                         minTickGap={30}
                     />
                     <YAxis
-                        stroke="#9CA3AF"
+                        stroke="#A8A29E"
                         fontSize={12}
-                        tick={{ fill: '#9CA3AF' }}
+                        tick={{ fill: '#A8A29E' }}
                         domain={['dataMin - 5', 'dataMax + 5']}
                     />
                     <Tooltip
-                        contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F3F4F6' }}
-                        itemStyle={{ color: '#F3F4F6' }}
+                        contentStyle={{ backgroundColor: 'white', borderColor: 'rgba(0,0,0,0.10)', color: '#2D2A26' }}
+                        itemStyle={{ color: '#2D2A26' }}
                     />
                     <Legend />
                     {activeSeries.map((entry) => (

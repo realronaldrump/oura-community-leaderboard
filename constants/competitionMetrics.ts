@@ -368,7 +368,7 @@ export const COMPETITION_TEMPLATES: CompetitionTemplate[] = [
         mode: 'friends',
         format: 'race',
         durationDays: 7,
-        accentColor: '#FBBF24',
+        accentColor: '#D4B87B',
         rules: [
             createRule('steps', 10000, { aggregation: 'daily' }),
         ],
@@ -380,7 +380,7 @@ export const COMPETITION_TEMPLATES: CompetitionTemplate[] = [
         mode: 'solo',
         format: 'goal',
         durationDays: 7,
-        accentColor: '#60A5FA',
+        accentColor: '#7BA8D4',
         rules: [
             createRule('sleep_score', 85),
         ],
@@ -392,7 +392,7 @@ export const COMPETITION_TEMPLATES: CompetitionTemplate[] = [
         mode: 'solo',
         format: 'goal',
         durationDays: 5,
-        accentColor: '#34D399',
+        accentColor: '#7BC4A0',
         rules: [
             createRule('sleep_score', 82),
             createRule('readiness_score', 80),
@@ -405,7 +405,7 @@ export const COMPETITION_TEMPLATES: CompetitionTemplate[] = [
         mode: 'friends',
         format: 'combo',
         durationDays: 7,
-        accentColor: '#00C896',
+        accentColor: '#6B9E8A',
         rules: [
             createRule('steps', 10000, { weight: 0.4 }),
             createRule('sleep_score', 85, { weight: 0.3 }),
@@ -432,7 +432,7 @@ export const COMPETITION_TEMPLATES: CompetitionTemplate[] = [
         mode: 'friends',
         format: 'combo',
         durationDays: 14,
-        accentColor: '#F87171',
+        accentColor: '#D4897B',
         rules: [
             createRule('average_hrv', 45, { weight: 0.55 }),
             createRule('lowest_heart_rate', 55, { weight: 0.45, operator: 'lte' }),

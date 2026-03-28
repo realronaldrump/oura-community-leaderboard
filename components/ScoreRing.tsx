@@ -51,39 +51,32 @@ const ScoreRing: React.FC<ScoreRingProps> = ({
     return () => clearInterval(timer);
   }, [score, animated, displayScore]);
 
-  // Glow intensity based on score
-  const glowIntensity = (displayScore / 100) * 20 + 10;
-  const pulseOpacity = displayScore > 70 ? 0.6 : 0.3;
-
   return (
     <div className="flex flex-col items-center justify-center group">
       <div
-        className="relative transition-transform duration-300 group-hover:scale-105"
-        style={{ width: size, height: size }}
+        className="relative transition-transform duration-300 group-hover:scale-105 rounded-full"
+        style={{
+          width: size,
+          height: size,
+          boxShadow: '6px 6px 12px rgba(0,0,0,0.08), -6px -6px 12px rgba(255,255,255,0.9), inset 2px 2px 4px rgba(255,255,255,0.7), inset -1px -1px 3px rgba(0,0,0,0.04)',
+          background: '#FFFFFF',
+        }}
       >
         <svg className="w-full h-full -rotate-90">
-          {/* Track (background circle) - transparent to remove visible background */}
+          {/* Track (background circle) */}
           <circle
             strokeWidth={strokeWidth}
-            stroke="transparent"
+            stroke={`${color}18`}
             fill="transparent"
             r={radius}
             cx={size / 2}
             cy={size / 2}
           />
 
-          {/* Gradient definition */}
-          <defs>
-            <linearGradient id={`ring-gradient-${label}`} x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor={color} stopOpacity="1" />
-              <stop offset="100%" stopColor={color} stopOpacity="0.6" />
-            </linearGradient>
-          </defs>
-
           {/* Progress arc */}
           <circle
             className="transition-all duration-1000 ease-out"
-            stroke={`url(#ring-gradient-${label})`}
+            stroke={color}
             strokeWidth={strokeWidth}
             strokeDasharray={circumference}
             strokeDashoffset={score != null ? offset : circumference}
@@ -92,9 +85,7 @@ const ScoreRing: React.FC<ScoreRingProps> = ({
             r={radius}
             cx={size / 2}
             cy={size / 2}
-            style={{
-              filter: showGlow ? `drop-shadow(0 0 ${glowIntensity}px ${color})` : undefined,
-            }}
+            style={{ opacity: 0.85 }}
           />
         </svg>
 
@@ -113,7 +104,7 @@ const ScoreRing: React.FC<ScoreRingProps> = ({
       </div>
 
       {/* Label */}
-      <span className="mt-3 text-xs font-semibold text-[#666666] uppercase tracking-widest group-hover:text-[#A0A0A0] transition-colors">
+      <span className="mt-3 text-xs font-bold text-[#A8A29E] uppercase tracking-widest group-hover:text-[#7A756E] transition-colors">
         {label}
       </span>
     </div>

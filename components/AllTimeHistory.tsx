@@ -191,8 +191,8 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
     };
 
     const SortIcon = ({ field }: { field: SortField }) => {
-        if (sortField !== field) return <span className="text-white/20 ml-1">↕</span>;
-        return <span className="text-accent-cyan ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>;
+        if (sortField !== field) return <span className="text-black/20 ml-1">{'\u2195'}</span>;
+        return <span className="text-accent-cyan ml-1">{sortDirection === 'asc' ? '\u2191' : '\u2193'}</span>;
     };
 
     // 4. Prepare Chart Data (Moving Averages)
@@ -226,7 +226,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                     for (let i = 0; i < windowSize; i++) {
                         if (idx - i >= 0) {
                             const prev = arr[idx - i];
-                            // Basic check to ensure continuity? 
+                            // Basic check to ensure continuity?
                             // If dates are skipped, MA might be misleading if we just look at array index.
                             // But for simplicity, we'll just take last N points available.
                             sum += prev[chartMetric === 'average' ? 'average' : chartMetric];
@@ -251,7 +251,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
     }, [filteredData, chartMetric, smoothing]);
 
     // User Colors
-    const userColors = ['#A855F7', '#3B82F6', '#10B981', '#F59E0B', '#EF4444'];
+    const userColors = ['#A08BBE', '#7BA8D4', '#7BC4A0', '#D4A574', '#D4897B'];
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -269,12 +269,12 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
 
                         <div className="flex flex-wrap items-center gap-4">
                             {/* Filters */}
-                            <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer hover:text-white transition-colors">
+                            <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer hover:text-[#2D2A26] transition-colors">
                                 <input
                                     type="checkbox"
                                     checked={showCommonDatesOnly}
                                     onChange={e => setShowCommonDatesOnly(e.target.checked)}
-                                    className="rounded border-white/20 bg-white/5 text-accent-cyan focus:ring-accent-cyan"
+                                    className="rounded border-black/20 bg-black/5 text-accent-cyan focus:ring-accent-cyan"
                                 />
                                 Overlap Only
                             </label>
@@ -282,15 +282,15 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                     </div>
 
                     {/* Secondary Controls (Metric & Smoothing) */}
-                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-t border-white/5 pt-4">
-                        <div className="flex gap-1 bg-white/5 p-1 rounded-lg">
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-t border-black/5 pt-4">
+                        <div className="flex gap-1 bg-black/5 p-1 rounded-lg">
                             {(['sleep', 'readiness', 'activity', 'average'] as const).map(m => (
                                 <button
                                     key={m}
                                     onClick={() => setChartMetric(m as any)}
                                     className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors uppercase ${chartMetric === m
                                         ? 'bg-accent-purple/20 text-accent-purple shadow-sm'
-                                        : 'hover:text-white text-text-muted'
+                                        : 'hover:text-[#2D2A26] text-text-muted'
                                         }`}
                                 >
                                     {m}
@@ -303,12 +303,12 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                             <select
                                 value={smoothing}
                                 onChange={(e) => setSmoothing(e.target.value as Smoothing)}
-                                className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs focus:outline-none focus:border-accent-cyan text-white"
+                                className="bg-black/5 border border-black/5 rounded px-2 py-1 text-xs focus:outline-none focus:border-accent-cyan text-[#2D2A26]"
                             >
-                                <option value="raw" className="bg-gray-900 text-white">None (Raw)</option>
-                                <option value="3d" className="bg-gray-900 text-white">3-Day Avg</option>
-                                <option value="7d" className="bg-gray-900 text-white">7-Day Avg</option>
-                                <option value="14d" className="bg-gray-900 text-white">14-Day Avg</option>
+                                <option value="raw" className="bg-white text-[#2D2A26]">None (Raw)</option>
+                                <option value="3d" className="bg-white text-[#2D2A26]">3-Day Avg</option>
+                                <option value="7d" className="bg-white text-[#2D2A26]">7-Day Avg</option>
+                                <option value="14d" className="bg-white text-[#2D2A26]">14-Day Avg</option>
                             </select>
                         </div>
                     </div>
@@ -323,15 +323,15 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                             initialDimension={{ width: 960, height: 300 }}
                         >
                             <ComposedChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
                                 <XAxis
                                     type="number"
                                     dataKey="x"
                                     name="Date"
                                     domain={['auto', 'auto']}
                                     tickFormatter={(unixTime) => new Date(unixTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                    stroke="#94a3b8"
-                                    tick={{ fill: '#94a3b8', fontSize: 12 }}
+                                    stroke="#A8A29E"
+                                    tick={{ fill: '#A8A29E', fontSize: 12 }}
                                     allowDuplicatedCategory={false}
                                 />
                                 <YAxis
@@ -340,11 +340,11 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                                     name="Score"
                                     unit=""
                                     domain={[50, 100]}
-                                    stroke="#94a3b8"
-                                    tick={{ fill: '#94a3b8', fontSize: 12 }}
+                                    stroke="#A8A29E"
+                                    tick={{ fill: '#A8A29E', fontSize: 12 }}
                                 />
                                 <Tooltip
-                                    cursor={{ stroke: 'white', strokeOpacity: 0.2 }}
+                                    cursor={{ stroke: '#2D2A26', strokeOpacity: 0.2 }}
                                     content={({ active, payload }) => {
                                         if (active && payload && payload.length) {
                                             // Sort by score
@@ -352,13 +352,13 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                                             const dateStr = new Date(sorted[0].payload.x).toLocaleDateString();
 
                                             return (
-                                                <div className="glass-card p-3 text-xs bg-void/95 border border-white/10 shadow-xl">
+                                                <div className="glass-card p-3 text-xs bg-white/95 border border-black/5 shadow-xl">
                                                     <p className="text-text-muted mb-2 font-mono">{dateStr}</p>
                                                     <div className="space-y-1">
                                                         {sorted.map((p, idx) => (
                                                             <div key={idx} className="flex items-center gap-2">
                                                                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
-                                                                <span className="text-white font-medium">{p.name}:</span>
+                                                                <span className="text-[#2D2A26] font-medium">{p.name}:</span>
                                                                 <span className="font-mono text-accent-cyan ml-auto">{p.value}</span>
                                                             </div>
                                                         ))}
@@ -401,17 +401,17 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
 
             {/* Table */}
             <div className="glass-card overflow-hidden">
-                <div className="p-4 border-b border-dashboard-border bg-white/5 flex items-center justify-between">
+                <div className="p-4 border-b border-dashboard-border bg-black/5 flex items-center justify-between">
                     <h3 className="text-sm font-bold text-text-muted uppercase tracking-wider">Detailed Data</h3>
 
                     <select
                         value={filterUser}
                         onChange={(e) => setFilterUser(e.target.value)}
-                        className="bg-base/50 text-text-primary text-xs border border-white/10 rounded px-2 py-1 focus:outline-none text-white"
+                        className="bg-base/50 text-text-primary text-xs border border-black/5 rounded px-2 py-1 focus:outline-none text-[#2D2A26]"
                     >
-                        <option value="all" className="bg-gray-900 text-white">All Users</option>
+                        <option value="all" className="bg-white text-[#2D2A26]">All Users</option>
                         {profiles.map(p => (
-                            <option key={p.id} value={p.id} className="bg-gray-900 text-white">{(p.email || 'User').split('@')[0]}</option>
+                            <option key={p.id} value={p.id} className="bg-white text-[#2D2A26]">{(p.email || 'User').split('@')[0]}</option>
                         ))}
                     </select>
                 </div>
@@ -441,7 +441,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                         </thead>
                         <tbody className="divide-y divide-dashboard-border">
                             {visibleTableData.map((entry) => (
-                                <tr key={entry.id} className="hover:bg-white/5 transition-colors text-sm">
+                                <tr key={entry.id} className="hover:bg-black/5 transition-colors text-sm">
                                     <td className="p-4 font-mono text-text-secondary">{entry.dateStr}</td>
                                     <td className="p-4 font-medium text-text-primary">{entry.userName}</td>
 
@@ -471,14 +471,14 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                         </tbody>
                     </table>
                 </div>
-                <div className="p-3 border-t border-dashboard-border bg-white/[0.03] flex items-center justify-between gap-3">
+                <div className="p-3 border-t border-dashboard-border bg-black/[0.03] flex items-center justify-between gap-3">
                     <p className="text-xs text-text-muted">
                         Showing {visibleTableData.length.toLocaleString()} of {tableData.length.toLocaleString()} rows
                     </p>
                     {hasMoreTableRows && (
                         <button
                             onClick={() => setVisibleRows((prev) => prev + TABLE_PAGE_SIZE)}
-                            className="px-3 py-1.5 text-xs font-medium rounded-md bg-white/5 hover:bg-white/10 text-text-primary transition-colors"
+                            className="px-3 py-1.5 text-xs font-medium rounded-md bg-black/5 hover:bg-black/5 text-text-primary transition-colors"
                         >
                             Load More
                         </button>

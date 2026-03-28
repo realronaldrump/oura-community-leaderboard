@@ -30,8 +30,8 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label })
     const totalWithAwake = payload.reduce((sum, entry) => sum + (entry.value || 0), 0);
 
     return (
-        <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg p-3 shadow-lg">
-            <p className="text-[#a3a3a3] text-xs mb-2">{label}</p>
+        <div className="bg-white border border-[rgba(0,0,0,0.10)] rounded-lg p-3 shadow-lg">
+            <p className="text-[#7A756E] text-xs mb-2">{label}</p>
             {payload.map((entry, index) => (
                 <div key={index} className="flex items-center justify-between gap-4 text-sm">
                     <div className="flex items-center gap-2">
@@ -39,15 +39,15 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label })
                             className="w-2 h-2 rounded-full"
                             style={{ backgroundColor: entry.color }}
                         />
-                        <span className="text-[#a3a3a3]">{entry.name}</span>
+                        <span className="text-[#7A756E]">{entry.name}</span>
                     </div>
-                    <span className="text-white font-mono">{formatDuration(entry.value)}</span>
+                    <span className="text-[#2D2A26] font-mono">{formatDuration(entry.value)}</span>
                 </div>
             ))}
-            <div className="border-t border-[#2a2a2a] mt-2 pt-2">
+            <div className="border-t border-[rgba(0,0,0,0.08)] mt-2 pt-2">
                 <div className="flex items-center justify-between gap-4 text-sm font-semibold">
-                    <span className="text-[#00C896]">Total Sleep</span>
-                    <span className="text-[#00C896] font-mono">{formatDuration(totalSleep)}</span>
+                    <span className="text-[#6B9E8A]">Total Sleep</span>
+                    <span className="text-[#6B9E8A] font-mono">{formatDuration(totalSleep)}</span>
                 </div>
             </div>
         </div>
@@ -72,7 +72,7 @@ type StageDetail = {
 const STAGE_DETAILS: Record<string, StageDetail> = {
     deep: {
         name: 'Deep Sleep',
-        color: '#1e40af',
+        color: '#7BA8D4',
         description: 'Deep sleep is the most restorative sleep stage where the body repairs tissues, builds muscle and bone, and strengthens the immune system.',
         optimalRange: '15-20% of total sleep (1-2 hours)',
         benefits: [
@@ -93,7 +93,7 @@ const STAGE_DETAILS: Record<string, StageDetail> = {
     },
     rem: {
         name: 'REM Sleep',
-        color: '#8b5cf6',
+        color: '#A08BBE',
         description: 'REM (Rapid Eye Movement) sleep is crucial for emotional regulation, creativity, and memory consolidation. This is when most vivid dreaming occurs.',
         optimalRange: '20-25% of total sleep (1.5-2 hours)',
         benefits: [
@@ -114,7 +114,7 @@ const STAGE_DETAILS: Record<string, StageDetail> = {
     },
     light: {
         name: 'Light Sleep',
-        color: '#3b82f6',
+        color: '#7BA8D4',
         description: 'Light sleep serves as a transition between wakefulness and deeper sleep stages. It\'s easier to be awakened from light sleep.',
         optimalRange: '50-60% of total sleep (3.5-5.5 hours)',
         benefits: [
@@ -250,23 +250,23 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
                     onMouseMove={handleMouseMove}
                     onMouseLeave={handleMouseLeave}
                 >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
                     <XAxis
                         dataKey="day"
-                        stroke="#737373"
+                        stroke="#A8A29E"
                         fontSize={11}
                         tickFormatter={(val) => val.slice(5)}
                         axisLine={false}
                         tickLine={false}
                     />
                     <YAxis
-                        stroke="#737373"
+                        stroke="#A8A29E"
                         fontSize={11}
                         unit="h"
                         axisLine={false}
                         tickLine={false}
                     />
-                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.05)' }} />
                     <Legend
                         verticalAlign="top"
                         height={32}
@@ -274,9 +274,9 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
                         iconSize={8}
                         wrapperStyle={{ fontSize: '11px', cursor: 'pointer' }}
                     />
-                    <Bar dataKey="Deep" stackId="a" fill="#1e40af" name="Deep" radius={[0, 0, 4, 4]} onClick={handleBarClick} className="cursor-pointer" />
-                    <Bar dataKey="Light" stackId="a" fill="#3b82f6" name="Light" onClick={handleBarClick} className="cursor-pointer" />
-                    <Bar dataKey="REM" stackId="a" fill="#8b5cf6" name="REM" onClick={handleBarClick} className="cursor-pointer" />
+                    <Bar dataKey="Deep" stackId="a" fill="#7BA8D4" name="Deep" radius={[0, 0, 4, 4]} onClick={handleBarClick} className="cursor-pointer" />
+                    <Bar dataKey="Light" stackId="a" fill="#7BA8D4" name="Light" onClick={handleBarClick} className="cursor-pointer" />
+                    <Bar dataKey="REM" stackId="a" fill="#A08BBE" name="REM" onClick={handleBarClick} className="cursor-pointer" />
                     <Bar
                         dataKey="Awake"
                         stackId="a"
@@ -297,7 +297,7 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
                                     x={x + width / 2}
                                     y={y - 6}
                                     textAnchor="middle"
-                                    fill="#00C896"
+                                    fill="#6B9E8A"
                                     fontSize={10}
                                     fontWeight={600}
                                     fontFamily="monospace"
@@ -357,15 +357,15 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
                         </div>
 
                         {/* Description */}
-                        <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222]">
-                            <p className="text-sm text-[#A0A0A0]">{STAGE_DETAILS[selectedStage.stage].description}</p>
+                        <div className="bg-[#F2EDE8] p-4 rounded-xl border border-[rgba(0,0,0,0.06)]">
+                            <p className="text-sm text-[#7A756E]">{STAGE_DETAILS[selectedStage.stage].description}</p>
                         </div>
 
                         {/* Optimal Range */}
                         <div>
                             <h4 className="text-xs text-text-muted uppercase tracking-wider mb-2">Optimal Range</h4>
-                            <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222]">
-                                <p className="text-sm text-[#FAFAFA]">{STAGE_DETAILS[selectedStage.stage].optimalRange}</p>
+                            <div className="bg-[#F2EDE8] p-4 rounded-xl border border-[rgba(0,0,0,0.06)]">
+                                <p className="text-sm text-[#2D2A26]">{STAGE_DETAILS[selectedStage.stage].optimalRange}</p>
                             </div>
                         </div>
 
@@ -382,7 +382,7 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
                                             >
                                                 <Activity className="w-3 h-3" />
                                             </div>
-                                            <p className="text-sm text-[#A0A0A0]">{benefit}</p>
+                                            <p className="text-sm text-[#7A756E]">{benefit}</p>
                                         </div>
                                     ))}
                                 </div>
@@ -396,10 +396,10 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
                                 <div className="space-y-2">
                                     {STAGE_DETAILS[selectedStage.stage].tips.map((tip, idx) => (
                                         <div key={idx} className="flex gap-3">
-                                            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-[#00C896]/20 text-[#00C896] flex items-center justify-center text-xs font-bold">
+                                            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-[#6B9E8A]/20 text-[#6B9E8A] flex items-center justify-center text-xs font-bold">
                                                 {idx + 1}
                                             </div>
-                                            <p className="text-sm text-[#A0A0A0]">{tip}</p>
+                                            <p className="text-sm text-[#7A756E]">{tip}</p>
                                         </div>
                                     ))}
                                 </div>

@@ -15,16 +15,9 @@ export const IOSButton: React.FC<IOSButtonProps> = ({
   ...props
 }) => {
   const [isPressed, setIsPressed] = useState(false);
-  const [rippleX, setRippleX] = useState(0);
-  const [rippleY, setRippleY] = useState(0);
 
   const handleTouchStart = (e: React.TouchEvent<HTMLButtonElement>) => {
-    const touch = e.touches[0];
-    const rect = e.currentTarget.getBoundingClientRect();
-    setRippleX(touch.clientX - rect.left);
-    setRippleY(touch.clientY - rect.top);
     setIsPressed(true);
-
     if (navigator.vibrate) {
       navigator.vibrate(10);
     }
@@ -34,7 +27,7 @@ export const IOSButton: React.FC<IOSButtonProps> = ({
     setIsPressed(false);
   };
 
-  const baseClasses = 'ios-button ios-touch-target font-medium rounded-xl relative overflow-hidden transition-all duration-200';
+  const baseClasses = 'ios-button ios-touch-target font-semibold rounded-2xl relative overflow-hidden transition-all duration-200';
 
   const sizeClasses = {
     small: 'px-3 py-2 text-sm',
@@ -43,9 +36,19 @@ export const IOSButton: React.FC<IOSButtonProps> = ({
   };
 
   const variantClasses = {
-    primary: 'bg-[#00C896] text-black font-semibold',
-    secondary: 'bg-[#1C1C1C] text-white border border-[#333]',
-    destructive: 'bg-[#FF453A] text-white'
+    primary: 'bg-[#6B9E8A] text-white',
+    secondary: 'bg-white text-[#2D2A26] border border-[rgba(0,0,0,0.06)]',
+    destructive: 'bg-[#D4897B] text-white'
+  };
+
+  const getBoxShadow = () => {
+    if (isPressed) {
+      return 'inset 3px 3px 6px rgba(0,0,0,0.12), inset -3px -3px 6px rgba(255,255,255,0.3)';
+    }
+    if (variant === 'secondary') {
+      return '3px 3px 6px rgba(0,0,0,0.06), -3px -3px 6px rgba(255,255,255,0.8), inset 1px 1px 1px rgba(255,255,255,0.5)';
+    }
+    return '4px 4px 8px rgba(0,0,0,0.1), -2px -2px 6px rgba(255,255,255,0.3), inset 1px 1px 2px rgba(255,255,255,0.2)';
   };
 
   return (
@@ -54,15 +57,10 @@ export const IOSButton: React.FC<IOSButtonProps> = ({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onClick={onClick}
+      style={{ boxShadow: getBoxShadow() }}
       {...props}
     >
       {children}
-      {isPressed && (
-        <div
-          className="absolute inset-0 bg-white/20 rounded-full animate-[iosRipple_0.6s_ease-out]"
-          style={{ left: rippleX, top: rippleY, width: '200px', height: '200px', marginLeft: '-100px', marginTop: '-100px' }}
-        />
-      )}
     </button>
   );
 };
@@ -89,13 +87,16 @@ export const IOSCard: React.FC<IOSCardProps> = ({ children, onClick, className =
 
   return (
     <div
-      className={`bg-[#141414] rounded-2xl border border-[#222] ${onClick ? 'ios-card cursor-pointer' : ''} ${className}`}
+      className={`bg-white rounded-2xl border border-[rgba(0,0,0,0.06)] ${onClick ? 'ios-card cursor-pointer' : ''} ${className}`}
       onTouchStart={onClick ? handleTouchStart : undefined}
       onTouchEnd={onClick ? handleTouchEnd : undefined}
       onClick={onClick}
       style={{
         transform: isPressed ? 'scale(0.98)' : 'scale(1)',
-        transition: 'transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+        transition: 'transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.15s ease',
+        boxShadow: isPressed
+          ? 'inset 3px 3px 6px rgba(0,0,0,0.06), inset -3px -3px 6px rgba(255,255,255,0.7)'
+          : '6px 6px 12px rgba(0,0,0,0.08), -6px -6px 12px rgba(255,255,255,0.9), inset 1px 1px 2px rgba(255,255,255,0.7), inset -1px -1px 2px rgba(0,0,0,0.04)',
       }}
     >
       {children}
@@ -125,7 +126,7 @@ export const IOSSwitch: React.FC<IOSSwitchProps> = ({ isActive, onToggle, label 
 
   return (
     <div className="flex items-center gap-3">
-      {label && <span className="text-[#A0A0A0]">{label}</span>}
+      {label && <span className="text-[#7A756E]">{label}</span>}
       <div
         className={`ios-switch ${isActive ? 'active' : ''} ${isPressed ? 'scale-95' : ''}`}
         onTouchStart={handleTouchStart}
@@ -175,7 +176,7 @@ export const IOSBottomSheet: React.FC<IOSBottomSheetProps> = ({ isOpen, onClose,
       {isOpen && (
         <>
           <div
-            className="fixed inset-0 bg-black/50 z-40 ios-fade-in"
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 ios-fade-in"
             onClick={onClose}
           />
           <div
@@ -219,8 +220,8 @@ export const IOSListItem: React.FC<IOSListItemProps> = ({
       <div className="flex items-center gap-3">
         {icon && <div className="ios-touch-target">{icon}</div>}
         <div className="flex-1 min-w-0">
-          <div className="text-[#FAFAFA] font-medium">{title}</div>
-          {subtitle && <div className="text-[#666666] text-sm">{subtitle}</div>}
+          <div className="text-[#2D2A26] font-medium">{title}</div>
+          {subtitle && <div className="text-[#A8A29E] text-sm">{subtitle}</div>}
         </div>
         {rightElement && <div className="ios-touch-target">{rightElement}</div>}
       </div>
@@ -263,7 +264,7 @@ export const IOSLoading: React.FC<IOSLoadingProps> = ({ size = 'small', text }) 
   return (
     <div className="flex flex-col items-center justify-center gap-4">
       <div className={`ios-spinner ${size === 'large' ? 'ios-spinner-lg' : ''}`} />
-      {text && <span className="text-[#A0A0A0] text-sm">{text}</span>}
+      {text && <span className="text-[#7A756E] text-sm">{text}</span>}
     </div>
   );
 };
@@ -335,7 +336,7 @@ export const IOSPullToRefresh: React.FC<IOSPullToRefreshProps> = ({
           <div className="ios-spinner" />
         ) : (
           <div
-            className="text-[#A0A0A0] text-sm transition-transform duration-300"
+            className="text-[#7A756E] text-sm transition-transform duration-300"
             style={{ transform: `rotate(${pullProgress * 360}deg)` }}
           >
             ↻
@@ -376,16 +377,16 @@ export const IOSModal: React.FC<IOSModalProps> = ({
       {isOpen && (
         <div className="fixed inset-0 z-50 ios-fade-in">
           <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/20 backdrop-blur-sm"
             onClick={onClose}
           />
           <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto">
             <IOSCard className="ios-spring p-4 pb-6">
               <div className="flex justify-between items-center mb-4">
-                {title && <h2 className="text-lg font-bold text-[#FAFAFA]">{title}</h2>}
+                {title && <h2 className="text-lg font-bold text-[#2D2A26]">{title}</h2>}
                 <button
                   onClick={onClose}
-                  className="text-[#A0A0A0] hover:text-[#FAFAFA] ios-touch-target rounded-full p-1"
+                  className="text-[#A8A29E] hover:text-[#2D2A26] ios-touch-target rounded-full p-1"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -414,13 +415,16 @@ export const IOSInput: React.FC<IOSInputProps> = ({
 }) => {
   return (
     <div className={`flex flex-col gap-1 ${className}`}>
-      {label && <label className="text-[#666666] text-sm">{label}</label>}
+      {label && <label className="text-[#A8A29E] text-sm font-medium">{label}</label>}
       <input
         {...props}
-        className={`bg-[#1C1C1C] border ${error ? 'border-[#FF453A]' : 'border-[#333]'} rounded-xl px-4 py-3 text-[#FAFAFA] placeholder-[#666666] focus:outline-none focus:border-[#00C896] transition-colors ios-touch-target`}
-        style={{ fontSize: '16px' }}
+        className={`bg-white border ${error ? 'border-[#D4897B]' : 'border-[rgba(0,0,0,0.08)]'} rounded-2xl px-4 py-3 text-[#2D2A26] placeholder-[#C8C2BB] focus:outline-none focus:border-[#6B9E8A] transition-colors ios-touch-target`}
+        style={{
+          fontSize: '16px',
+          boxShadow: 'inset 2px 2px 4px rgba(0,0,0,0.05), inset -2px -2px 4px rgba(255,255,255,0.5)',
+        }}
       />
-      {error && <span className="text-[#FF453A] text-sm">{error}</span>}
+      {error && <span className="text-[#D4897B] text-sm">{error}</span>}
     </div>
   );
 };
@@ -432,14 +436,16 @@ interface IOSBadgeProps {
 
 export const IOSBadge: React.FC<IOSBadgeProps> = ({ children, variant = 'default' }) => {
   const variantClasses = {
-    default: 'bg-[#333] text-[#FAFAFA]',
-    success: 'bg-[#34D399] text-black',
-    warning: 'bg-[#FBBF24] text-black',
-    danger: 'bg-[#FF453A] text-white'
+    default: 'bg-[#F2EDE8] text-[#2D2A26]',
+    success: 'bg-[#7BC4A0]/15 text-[#5A9E7D]',
+    warning: 'bg-[#D4B87B]/15 text-[#B5943F]',
+    danger: 'bg-[#D4897B]/15 text-[#B5665A]'
   };
 
   return (
-    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${variantClasses[variant]}`}>
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${variantClasses[variant]}`}
+      style={{ boxShadow: '2px 2px 4px rgba(0,0,0,0.04), -2px -2px 4px rgba(255,255,255,0.6)' }}
+    >
       {children}
     </span>
   );

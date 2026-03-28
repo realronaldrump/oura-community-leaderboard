@@ -27,14 +27,14 @@ const AppDialog: React.FC<AppDialogProps> = ({
     onCancel,
 }) => {
     const panelClasses = intent === 'destructive'
-        ? 'bg-[#2A1414] border border-[#7A2C2C]/50'
-        : 'bg-[#121B1A] border border-[#1E5E4D]/50';
+        ? 'bg-[#D4897B]/8 border border-[#D4897B]/20'
+        : 'bg-[#6B9E8A]/6 border border-[#6B9E8A]/15';
 
     return (
         <IOSModal isOpen={isOpen} onClose={onCancel || onConfirm} title={title}>
             <div className="space-y-5">
-                <div className={`rounded-xl p-3 ${panelClasses}`}>
-                    <p className="text-sm text-[#D4D4D4] leading-relaxed">{message}</p>
+                <div className={`rounded-2xl p-3 ${panelClasses}`}>
+                    <p className="text-sm text-[#7A756E] leading-relaxed">{message}</p>
                 </div>
 
                 <div className={`grid gap-2 ${onCancel ? 'grid-cols-2' : 'grid-cols-1'}`}>

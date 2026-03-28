@@ -27,7 +27,7 @@ const PrimaryProfileSwitcher: React.FC<PrimaryProfileSwitcherProps> = ({
             <select
                 value={selectedProfileId}
                 onChange={(event) => setActiveProfileId(event.target.value || null)}
-                className={`appearance-none pl-3 pr-9 py-2 rounded-md bg-[#141414] border border-[#222] text-sm text-[#FAFAFA] focus:outline-none focus:border-[#00C896] transition-colors ${selectClassName}`}
+                className={`appearance-none pl-3 pr-9 py-2 rounded-md bg-white border border-[rgba(0,0,0,0.06)] text-sm text-[#2D2A26] focus:outline-none focus:border-[#6B9E8A] transition-colors ${selectClassName}`}
                 aria-label="Primary profile"
                 title="Switch primary profile"
             >
@@ -37,7 +37,7 @@ const PrimaryProfileSwitcher: React.FC<PrimaryProfileSwitcherProps> = ({
                     </option>
                 ))}
             </select>
-            <ChevronDown className="w-4 h-4 text-[#666] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <ChevronDown className="w-4 h-4 text-[#A8A29E] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
     );
 };

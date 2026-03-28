@@ -11,7 +11,7 @@ interface TimelineViewProps {
     usersData: Array<{ data: DailyStats | undefined }>;
 }
 
-const userColors = ['#00C896', '#A855F7', '#F59E0B', '#3B82F6'];
+const userColors = ['#6B9E8A', '#A08BBE', '#D4A574', '#7BA8D4'];
 
 const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
     const [selectedDate, setSelectedDate] = useState<string>(() => getRelativeLocalISODate(-1));

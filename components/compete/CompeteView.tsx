@@ -39,9 +39,9 @@ type Notice = {
 type ShareStatus = 'idle' | 'copied' | 'shared' | 'error';
 
 const noticeClassNames: Record<Notice['tone'], string> = {
-    success: 'border-[#1E4033] bg-[#101715] text-[#9BE4C9]',
-    warning: 'border-[#4D3A12] bg-[#1B160C] text-[#F5D48E]',
-    error: 'border-[#4A2323] bg-[#1A1212] text-[#FCA5A5]',
+    success: 'border-[rgba(107,158,138,0.3)] bg-[#FAF7F4] text-[#6B9E8A]',
+    warning: 'border-[rgba(212,165,116,0.3)] bg-[#FAF7F4] text-[#D4A574]',
+    error: 'border-[rgba(212,137,123,0.3)] bg-[#FAF7F4] text-[#D4897B]',
 };
 
 const CompeteView: React.FC<CompeteViewProps> = ({
@@ -200,19 +200,19 @@ const CompeteView: React.FC<CompeteViewProps> = ({
 
     return (
         <div className="pt-6 space-y-6">
-            <section className="relative overflow-hidden rounded-[2rem] border border-[#1D1D1D] bg-[radial-gradient(circle_at_top_right,rgba(0,200,150,0.16),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(96,165,250,0.10),transparent_38%),#101010] p-5 sm:p-7">
-                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.02),transparent_45%)]" />
+            <section className="relative overflow-hidden rounded-[2rem] border border-[rgba(0,0,0,0.06)] bg-[radial-gradient(circle_at_top_right,rgba(107,158,138,0.16),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(123,168,212,0.10),transparent_38%),#FFFFFF] p-5 sm:p-7">
+                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.4),transparent_45%)]" />
                 <div className="relative">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-[#23322C] bg-[#0E1714] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#00C896]">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(107,158,138,0.2)] bg-[rgba(107,158,138,0.08)] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#6B9E8A]">
                         <Trophy className="h-3.5 w-3.5" />
                         Compete
                     </div>
                     <div className="mt-5 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                         <div className="max-w-3xl">
-                            <h2 className="text-3xl font-semibold tracking-tight text-[#FAFAFA] sm:text-[2.4rem]">
+                            <h2 className="text-3xl font-semibold tracking-tight text-[#2D2A26] sm:text-[2.4rem]">
                                 Goals for you. Competitions for the group.
                             </h2>
-                            <p className="mt-3 text-sm leading-relaxed text-[#A0A0A0] sm:text-base">
+                            <p className="mt-3 text-sm leading-relaxed text-[#7A756E] sm:text-base">
                                 Set tomorrow's targets, challenge specific friends, and run custom combinations across sleep, readiness, activity, steps, HRV, stress, and more.
                             </p>
                         </div>
@@ -221,7 +221,7 @@ const CompeteView: React.FC<CompeteViewProps> = ({
                             <button
                                 type="button"
                                 onClick={() => handleOpenBuilder(COMPETITION_TEMPLATES.find((template) => template.mode === 'solo') || null, 'solo')}
-                                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#00C896] px-5 py-3 text-sm font-semibold text-[#06120D] transition-opacity hover:opacity-90"
+                                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#6B9E8A] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
                             >
                                 <Flag className="h-4 w-4" />
                                 Create Solo Goal
@@ -229,7 +229,7 @@ const CompeteView: React.FC<CompeteViewProps> = ({
                             <button
                                 type="button"
                                 onClick={() => handleOpenBuilder(COMPETITION_TEMPLATES.find((template) => template.mode === 'friends') || null, 'friends')}
-                                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-[#2B4037] bg-[#121A17] px-5 py-3 text-sm font-semibold text-[#9BE4C9] transition-colors hover:bg-[#15201B]"
+                                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-[rgba(107,158,138,0.2)] bg-[rgba(107,158,138,0.06)] px-5 py-3 text-sm font-semibold text-[#6B9E8A] transition-colors hover:bg-[rgba(107,158,138,0.12)]"
                             >
                                 <Users className="h-4 w-4" />
                                 Challenge Friends
@@ -238,17 +238,17 @@ const CompeteView: React.FC<CompeteViewProps> = ({
                     </div>
 
                     <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                        <div className="rounded-[1.25rem] border border-[#1E1E1E] bg-[#0E0E0E] p-4">
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#666]">Active</p>
-                            <p className="mt-2 text-3xl font-semibold text-[#FAFAFA]">{activeEvaluations.length}</p>
+                        <div className="rounded-[1.25rem] border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] p-4">
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Active</p>
+                            <p className="mt-2 text-3xl font-semibold text-[#2D2A26]">{activeEvaluations.length}</p>
                         </div>
-                        <div className="rounded-[1.25rem] border border-[#1E1E1E] bg-[#0E0E0E] p-4">
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#666]">Starting Tomorrow</p>
-                            <p className="mt-2 text-3xl font-semibold text-[#FAFAFA]">{scheduledEvaluations.length}</p>
+                        <div className="rounded-[1.25rem] border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] p-4">
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Starting Tomorrow</p>
+                            <p className="mt-2 text-3xl font-semibold text-[#2D2A26]">{scheduledEvaluations.length}</p>
                         </div>
-                        <div className="rounded-[1.25rem] border border-[#1E1E1E] bg-[#0E0E0E] p-4">
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#666]">Pending Invites</p>
-                            <p className="mt-2 text-3xl font-semibold text-[#FAFAFA]">{pendingInvites.length}</p>
+                        <div className="rounded-[1.25rem] border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] p-4">
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Pending Invites</p>
+                            <p className="mt-2 text-3xl font-semibold text-[#2D2A26]">{pendingInvites.length}</p>
                         </div>
                     </div>
                 </div>
@@ -261,23 +261,23 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             ) : null}
 
             {competitionInviteToken ? (
-                <section className="rounded-[1.5rem] border border-[#222] bg-[#111111] p-5">
+                <section className="rounded-[1.5rem] border border-[rgba(0,0,0,0.06)] bg-white p-5">
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div className="max-w-3xl">
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#00C896]">Invite Link</p>
-                            <h3 className="mt-2 text-xl font-semibold text-[#FAFAFA]">
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#6B9E8A]">Invite Link</p>
+                            <h3 className="mt-2 text-xl font-semibold text-[#2D2A26]">
                                 {invitePreviewLoading ? 'Loading competition...' : invitePreview?.competition.title || 'Competition invite'}
                             </h3>
-                            <p className="mt-2 text-sm leading-relaxed text-[#A0A0A0]">
+                            <p className="mt-2 text-sm leading-relaxed text-[#7A756E]">
                                 {invitePreview?.competition.description || 'Open this invite to join the next scheduled competition.'}
                             </p>
                             {invitePreview ? (
-                                <p className="mt-3 text-xs text-[#777]">
+                                <p className="mt-3 text-xs text-[#A8A29E]">
                                     Starts {formatISODateForDisplay(invitePreview.competition.startDate, 'en-US', { month: 'short', day: 'numeric' })} and runs through {formatISODateForDisplay(invitePreview.competition.endDate, 'en-US', { month: 'short', day: 'numeric' })}.
                                 </p>
                             ) : null}
                             {invitePreviewError ? (
-                                <p className="mt-3 text-xs text-[#FCA5A5]">{invitePreviewError}</p>
+                                <p className="mt-3 text-xs text-[#D4897B]">{invitePreviewError}</p>
                             ) : null}
                         </div>
 
@@ -287,20 +287,20 @@ const CompeteView: React.FC<CompeteViewProps> = ({
                                     type="button"
                                     onClick={handleAcceptLinkInvite}
                                     disabled={isAcceptingTokenInvite}
-                                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#00C896] px-5 py-3 text-sm font-semibold text-[#06120D] transition-opacity hover:opacity-90 disabled:opacity-60"
+                                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#6B9E8A] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
                                 >
                                     <Check className="h-4 w-4" />
                                     {isAcceptingTokenInvite ? 'Joining...' : 'Join Competition'}
                                 </button>
                             ) : (
-                                <div className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[#1E4033] bg-[#101715] px-5 py-3 text-sm font-semibold text-[#9BE4C9]">
+                                <div className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[rgba(107,158,138,0.2)] bg-[rgba(107,158,138,0.08)] px-5 py-3 text-sm font-semibold text-[#6B9E8A]">
                                     Already joined
                                 </div>
                             )}
                             <button
                                 type="button"
                                 onClick={onClearCompetitionInviteToken}
-                                className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[#2A2A2A] px-5 py-3 text-sm font-medium text-[#FAFAFA] transition-colors hover:bg-[#141414]"
+                                className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[rgba(0,0,0,0.08)] px-5 py-3 text-sm font-medium text-[#2D2A26] transition-colors hover:bg-[#FAF7F4]"
                             >
                                 Dismiss
                             </button>
@@ -312,8 +312,8 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             <section>
                 <div className="flex items-center justify-between gap-3">
                     <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-[#666]">Templates</p>
-                        <h3 className="mt-2 text-xl font-semibold text-[#FAFAFA]">Launch a proven format fast</h3>
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Templates</p>
+                        <h3 className="mt-2 text-xl font-semibold text-[#2D2A26]">Launch a proven format fast</h3>
                     </div>
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -322,7 +322,7 @@ const CompeteView: React.FC<CompeteViewProps> = ({
                             key={template.id}
                             type="button"
                             onClick={() => handleOpenBuilder(template)}
-                            className="rounded-[1.35rem] border border-[#222] bg-[#111111] p-4 text-left transition-colors hover:border-[#2E4A40]"
+                            className="rounded-[1.35rem] border border-[rgba(0,0,0,0.06)] bg-white p-4 text-left transition-colors hover:border-[rgba(107,158,138,0.25)]"
                         >
                             <div className="flex items-center justify-between gap-3">
                                 <span
@@ -331,11 +331,11 @@ const CompeteView: React.FC<CompeteViewProps> = ({
                                 >
                                     <Sparkles className="h-4 w-4" />
                                 </span>
-                                <span className="text-[11px] uppercase tracking-[0.14em] text-[#666]">{template.format}</span>
+                                <span className="text-[11px] uppercase tracking-[0.14em] text-[#A8A29E]">{template.format}</span>
                             </div>
-                            <h4 className="mt-4 text-lg font-semibold text-[#FAFAFA]">{template.title}</h4>
-                            <p className="mt-2 text-sm leading-relaxed text-[#8A8A8A]">{template.description}</p>
-                            <div className="mt-4 inline-flex items-center gap-2 text-xs font-medium text-[#9BE4C9]">
+                            <h4 className="mt-4 text-lg font-semibold text-[#2D2A26]">{template.title}</h4>
+                            <p className="mt-2 text-sm leading-relaxed text-[#7A756E]">{template.description}</p>
+                            <div className="mt-4 inline-flex items-center gap-2 text-xs font-medium text-[#6B9E8A]">
                                 <CalendarPlus className="h-3.5 w-3.5" />
                                 Starts tomorrow
                             </div>
@@ -347,17 +347,17 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             {pendingInvites.length > 0 ? (
                 <section className="space-y-3">
                     <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-[#666]">Pending For You</p>
-                        <h3 className="mt-2 text-xl font-semibold text-[#FAFAFA]">Accept or pass on incoming invites</h3>
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Pending For You</p>
+                        <h3 className="mt-2 text-xl font-semibold text-[#2D2A26]">Accept or pass on incoming invites</h3>
                     </div>
                     {pendingInvites.map((competition) => (
-                        <div key={competition.id} className="rounded-[1.35rem] border border-[#2A2A2A] bg-[#111111] p-4 sm:p-5">
+                        <div key={competition.id} className="rounded-[1.35rem] border border-[rgba(0,0,0,0.08)] bg-white p-4 sm:p-5">
                             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                                 <div className="max-w-3xl">
-                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#00C896]">Invited</p>
-                                    <h4 className="mt-2 text-lg font-semibold text-[#FAFAFA]">{competition.title}</h4>
-                                    <p className="mt-2 text-sm leading-relaxed text-[#8A8A8A]">{competition.description}</p>
-                                    <p className="mt-3 text-xs text-[#777]">
+                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#6B9E8A]">Invited</p>
+                                    <h4 className="mt-2 text-lg font-semibold text-[#2D2A26]">{competition.title}</h4>
+                                    <p className="mt-2 text-sm leading-relaxed text-[#7A756E]">{competition.description}</p>
+                                    <p className="mt-3 text-xs text-[#A8A29E]">
                                         Starts {formatISODateForDisplay(competition.startDate, 'en-US', { month: 'short', day: 'numeric' })} and runs for{' '}
                                         {formatISODateForDisplay(competition.endDate, 'en-US', { month: 'short', day: 'numeric' })}.
                                     </p>
@@ -367,7 +367,7 @@ const CompeteView: React.FC<CompeteViewProps> = ({
                                         type="button"
                                         onClick={() => handleRespondToInvite(competition.id, 'accepted')}
                                         disabled={isRespondingCompetitionId === competition.id}
-                                        className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#00C896] px-5 py-3 text-sm font-semibold text-[#06120D] transition-opacity hover:opacity-90 disabled:opacity-60"
+                                        className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#6B9E8A] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
                                     >
                                         <Check className="h-4 w-4" />
                                         Join
@@ -376,7 +376,7 @@ const CompeteView: React.FC<CompeteViewProps> = ({
                                         type="button"
                                         onClick={() => handleRespondToInvite(competition.id, 'declined')}
                                         disabled={isRespondingCompetitionId === competition.id}
-                                        className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[#2A2A2A] px-5 py-3 text-sm font-medium text-[#FAFAFA] transition-colors hover:bg-[#141414] disabled:opacity-60"
+                                        className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[rgba(0,0,0,0.08)] px-5 py-3 text-sm font-medium text-[#2D2A26] transition-colors hover:bg-[#FAF7F4] disabled:opacity-60"
                                     >
                                         Decline
                                     </button>
@@ -388,13 +388,13 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             ) : null}
 
             {isLoading ? (
-                <div className="rounded-[1.25rem] border border-[#222] bg-[#111111] px-4 py-5 text-sm text-[#888]">
+                <div className="rounded-[1.25rem] border border-[rgba(0,0,0,0.06)] bg-white px-4 py-5 text-sm text-[#7A756E]">
                     Loading competitions...
                 </div>
             ) : null}
 
             {error ? (
-                <div className="rounded-[1.25rem] border border-[#4A2323] bg-[#1A1212] px-4 py-3 text-sm text-[#FCA5A5]">
+                <div className="rounded-[1.25rem] border border-[rgba(212,137,123,0.3)] bg-[#FAF7F4] px-4 py-3 text-sm text-[#D4897B]">
                     {error}
                 </div>
             ) : null}
@@ -402,8 +402,8 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             {activeEvaluations.length > 0 ? (
                 <section className="space-y-4">
                     <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-[#666]">Active</p>
-                        <h3 className="mt-2 text-xl font-semibold text-[#FAFAFA]">Happening right now</h3>
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Active</p>
+                        <h3 className="mt-2 text-xl font-semibold text-[#2D2A26]">Happening right now</h3>
                     </div>
                     {activeEvaluations.map((evaluation) => (
                         <CompetitionCard
@@ -423,8 +423,8 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             {scheduledEvaluations.length > 0 ? (
                 <section className="space-y-4">
                     <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-[#666]">Scheduled</p>
-                        <h3 className="mt-2 text-xl font-semibold text-[#FAFAFA]">Starts next</h3>
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Scheduled</p>
+                        <h3 className="mt-2 text-xl font-semibold text-[#2D2A26]">Starts next</h3>
                     </div>
                     {scheduledEvaluations.map((evaluation) => (
                         <CompetitionCard
@@ -444,8 +444,8 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             {completedEvaluations.length > 0 ? (
                 <section className="space-y-4">
                     <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-[#666]">History</p>
-                        <h3 className="mt-2 text-xl font-semibold text-[#FAFAFA]">Recently completed</h3>
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">History</p>
+                        <h3 className="mt-2 text-xl font-semibold text-[#2D2A26]">Recently completed</h3>
                     </div>
                     {completedEvaluations.map((evaluation) => (
                         <CompetitionCard
@@ -463,16 +463,16 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             ) : null}
 
             {!isLoading && !error && activeEvaluations.length === 0 && scheduledEvaluations.length === 0 && completedEvaluations.length === 0 ? (
-                <div className="rounded-[1.5rem] border border-dashed border-[#2B2B2B] bg-[#111111] px-5 py-8 text-center">
-                    <h3 className="text-xl font-semibold text-[#FAFAFA]">No competitions yet</h3>
-                    <p className="mt-3 text-sm leading-relaxed text-[#8A8A8A]">
+                <div className="rounded-[1.5rem] border border-dashed border-[rgba(0,0,0,0.10)] bg-white px-5 py-8 text-center">
+                    <h3 className="text-xl font-semibold text-[#2D2A26]">No competitions yet</h3>
+                    <p className="mt-3 text-sm leading-relaxed text-[#7A756E]">
                         Start with a solo goal or create a friend competition that starts tomorrow.
                     </p>
                     <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
                         <button
                             type="button"
                             onClick={() => handleOpenBuilder(COMPETITION_TEMPLATES.find((template) => template.mode === 'solo') || null, 'solo')}
-                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#00C896] px-5 py-3 text-sm font-semibold text-[#06120D]"
+                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#6B9E8A] px-5 py-3 text-sm font-semibold text-white"
                         >
                             <Flag className="h-4 w-4" />
                             Create Solo Goal
@@ -480,7 +480,7 @@ const CompeteView: React.FC<CompeteViewProps> = ({
                         <button
                             type="button"
                             onClick={() => handleOpenBuilder(COMPETITION_TEMPLATES.find((template) => template.mode === 'friends') || null, 'friends')}
-                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-[#2A2A2A] px-5 py-3 text-sm font-medium text-[#FAFAFA]"
+                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-[rgba(0,0,0,0.08)] px-5 py-3 text-sm font-medium text-[#2D2A26]"
                         >
                             <Users className="h-4 w-4" />
                             Challenge Friends

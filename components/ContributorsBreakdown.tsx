@@ -324,7 +324,7 @@ const ContributorsBreakdown: React.FC<Props> = ({ title, contributors, onContrib
                         <div
                             key={idx}
                             onClick={() => handleContributorClick(item)}
-                            className="space-y-2 cursor-pointer hover:bg-white/5 p-2 rounded-lg transition-all group"
+                            className="space-y-2 cursor-pointer hover:bg-black/5 p-2 rounded-lg transition-all group"
                         >
                             <div className="flex justify-between items-center text-sm">
                                 <div className="flex items-center gap-2">
@@ -337,7 +337,7 @@ const ContributorsBreakdown: React.FC<Props> = ({ title, contributors, onContrib
                                     {item.value ?? '--'}
                                 </span>
                             </div>
-                            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-1.5 bg-black/5 rounded-full overflow-hidden">
                                 <div
                                     className="h-full rounded-full transition-all duration-700 ease-out relative"
                                     style={{
@@ -370,15 +370,15 @@ const ContributorsBreakdown: React.FC<Props> = ({ title, contributors, onContrib
                 >
                     <div className="space-y-6 overflow-y-auto ios-scroll max-h-[70vh]">
                         {/* Description */}
-                        <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222]">
-                            <p className="text-sm text-[#A0A0A0]">{selectedContributor.description}</p>
+                        <div className="bg-[#F2EDE8] p-4 rounded-xl border border-[rgba(0,0,0,0.06)]">
+                            <p className="text-sm text-[#7A756E]">{selectedContributor.description}</p>
                         </div>
 
                         {/* Importance */}
                         <div>
                             <h4 className="text-xs text-text-muted uppercase tracking-wider mb-2">Importance</h4>
-                            <div className="bg-[#0C0C0C] p-4 rounded-xl border border-[#222]">
-                                <p className="text-sm text-[#FAFAFA]">{selectedContributor.importance}</p>
+                            <div className="bg-[#F2EDE8] p-4 rounded-xl border border-[rgba(0,0,0,0.06)]">
+                                <p className="text-sm text-[#2D2A26]">{selectedContributor.importance}</p>
                             </div>
                         </div>
 
@@ -388,11 +388,11 @@ const ContributorsBreakdown: React.FC<Props> = ({ title, contributors, onContrib
                                 <h4 className="text-xs text-text-muted uppercase tracking-wider mb-3">Tips to Improve</h4>
                                 <div className="space-y-2">
                                     {selectedContributor.tips.map((tip, idx) => (
-                                        <div key={idx} className="flex gap-3 bg-[#0C0C0C] p-3 rounded-lg border border-[#222]">
-                                            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-[#00C896]/20 text-[#00C896] flex items-center justify-center text-xs font-bold">
+                                        <div key={idx} className="flex gap-3 bg-[#F2EDE8] p-3 rounded-lg border border-[rgba(0,0,0,0.06)]">
+                                            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-[#6B9E8A]/20 text-[#6B9E8A] flex items-center justify-center text-xs font-bold">
                                                 {idx + 1}
                                             </div>
-                                            <p className="text-sm text-[#A0A0A0]">{tip}</p>
+                                            <p className="text-sm text-[#7A756E]">{tip}</p>
                                         </div>
                                     ))}
                                 </div>
@@ -407,7 +407,7 @@ const ContributorsBreakdown: React.FC<Props> = ({ title, contributors, onContrib
                                     {selectedContributor.relatedMetrics.map((metric, idx) => (
                                         <span
                                             key={idx}
-                                            className="px-3 py-1.5 bg-[#0C0C0C] border border-[#222] rounded-lg text-sm text-[#A0A0A0]"
+                                            className="px-3 py-1.5 bg-[#F2EDE8] border border-[rgba(0,0,0,0.06)] rounded-lg text-sm text-[#7A756E]"
                                         >
                                             {metric}
                                         </span>

@@ -40,44 +40,44 @@ const CompetitionCard: React.FC<CompetitionCardProps> = ({
         : Math.min(100, (evaluation.days.length / totalDays) * 100);
 
     return (
-        <article className="rounded-[1.6rem] border border-[#222] bg-[linear-gradient(180deg,#131313_0%,#101010_100%)] p-5 sm:p-6">
+        <article className="rounded-[1.6rem] border border-[rgba(0,0,0,0.06)] bg-[linear-gradient(180deg,#FFFFFF_0%,#FAF7F4_100%)] p-5 sm:p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#27352F] bg-[#0F1815] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#9BE4C9]">
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(107,158,138,0.2)] bg-[rgba(107,158,138,0.06)] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#6B9E8A]">
                             <Trophy className="h-3.5 w-3.5" />
                             {evaluation.status}
                         </span>
-                        <span className="rounded-full border border-[#242424] bg-[#151515] px-3 py-1 text-[11px] uppercase tracking-[0.14em] text-[#8A8A8A]">
+                        <span className="rounded-full border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] px-3 py-1 text-[11px] uppercase tracking-[0.14em] text-[#7A756E]">
                             {evaluation.competition.mode}
                         </span>
-                        <span className="rounded-full border border-[#242424] bg-[#151515] px-3 py-1 text-[11px] uppercase tracking-[0.14em] text-[#8A8A8A]">
+                        <span className="rounded-full border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] px-3 py-1 text-[11px] uppercase tracking-[0.14em] text-[#7A756E]">
                             {evaluation.competition.format}
                         </span>
                     </div>
-                    <h3 className="mt-4 text-2xl font-semibold tracking-tight text-[#FAFAFA]">{evaluation.competition.title}</h3>
-                    <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#949494]">{evaluation.summary}</p>
+                    <h3 className="mt-4 text-2xl font-semibold tracking-tight text-[#2D2A26]">{evaluation.competition.title}</h3>
+                    <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#7A756E]">{evaluation.summary}</p>
                 </div>
 
-                <div className="grid min-w-[15rem] gap-3 rounded-[1.35rem] border border-[#1F1F1F] bg-[#0D0D0D] p-4 sm:grid-cols-3 lg:grid-cols-1">
+                <div className="grid min-w-[15rem] gap-3 rounded-[1.35rem] border border-[rgba(0,0,0,0.06)] bg-[#F2EDE8] p-4 sm:grid-cols-3 lg:grid-cols-1">
                     <div>
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-[#666]">Window</p>
-                        <p className="mt-1 text-sm text-[#FAFAFA]">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-[#A8A29E]">Window</p>
+                        <p className="mt-1 text-sm text-[#2D2A26]">
                             {formatISODateForDisplay(evaluation.competition.startDate, 'en-US', { month: 'short', day: 'numeric' })}
                             {' '}to{' '}
                             {formatISODateForDisplay(evaluation.competition.endDate, 'en-US', { month: 'short', day: 'numeric' })}
                         </p>
                     </div>
                     <div>
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-[#666]">Participants</p>
-                        <p className="mt-1 text-sm text-[#FAFAFA]">{evaluation.acceptedCount} active</p>
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-[#A8A29E]">Participants</p>
+                        <p className="mt-1 text-sm text-[#2D2A26]">{evaluation.acceptedCount} active</p>
                         {evaluation.invitedCount > 0 ? (
-                            <p className="text-xs text-[#7D7D7D]">{evaluation.invitedCount} pending</p>
+                            <p className="text-xs text-[#A8A29E]">{evaluation.invitedCount} pending</p>
                         ) : null}
                     </div>
                     <div>
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-[#666]">Scored Through</p>
-                        <p className="mt-1 text-sm text-[#FAFAFA]">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-[#A8A29E]">Scored Through</p>
+                        <p className="mt-1 text-sm text-[#2D2A26]">
                             {evaluation.finalizedThrough
                                 ? formatISODateForDisplay(evaluation.finalizedThrough, 'en-US', { month: 'short', day: 'numeric' })
                                 : 'Starts soon'}
@@ -87,13 +87,13 @@ const CompetitionCard: React.FC<CompetitionCardProps> = ({
             </div>
 
             <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)]">
-                <div className="rounded-[1.35rem] border border-[#1E1E1E] bg-[#0C0C0C] p-4">
+                <div className="rounded-[1.35rem] border border-[rgba(0,0,0,0.06)] bg-[#F2EDE8] p-4">
                     <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-[#666]">
+                        <div className="flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-[#A8A29E]">
                             <Target className="h-3.5 w-3.5" />
                             Metrics
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-[#777]">
+                        <div className="flex items-center gap-2 text-xs text-[#A8A29E]">
                             <Timer className="h-3.5 w-3.5" />
                             {evaluation.days.length} scored day{evaluation.days.length === 1 ? '' : 's'}
                         </div>
@@ -109,9 +109,9 @@ const CompetitionCard: React.FC<CompetitionCardProps> = ({
                             return (
                                 <span
                                     key={rule.id}
-                                    className="inline-flex items-center gap-2 rounded-full border border-[#232323] bg-[#111111] px-3 py-2 text-xs text-[#D4D4D4]"
+                                    className="inline-flex items-center gap-2 rounded-full border border-[rgba(0,0,0,0.06)] bg-white px-3 py-2 text-xs text-[#4A4540]"
                                 >
-                                    <Sparkles className="h-3.5 w-3.5 text-[#00C896]" />
+                                    <Sparkles className="h-3.5 w-3.5 text-[#6B9E8A]" />
                                     {label}
                                 </span>
                             );
@@ -119,13 +119,13 @@ const CompetitionCard: React.FC<CompetitionCardProps> = ({
                     </div>
 
                     <div className="mt-5">
-                        <div className="flex items-center justify-between text-xs text-[#666]">
+                        <div className="flex items-center justify-between text-xs text-[#A8A29E]">
                             <span>Competition progress</span>
                             <span>{Math.round(progressPercent)}%</span>
                         </div>
-                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#181818]">
+                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-[rgba(0,0,0,0.06)]">
                             <div
-                                className="h-full rounded-full bg-[linear-gradient(90deg,#00C896_0%,#72E3C0_100%)]"
+                                className="h-full rounded-full bg-[linear-gradient(90deg,#6B9E8A_0%,#A3D4BE_100%)]"
                                 style={{ width: `${progressPercent}%` }}
                             />
                         </div>
@@ -137,10 +137,10 @@ const CompetitionCard: React.FC<CompetitionCardProps> = ({
                                 key={participant.profileId}
                                 className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs ${
                                     participant.status === 'accepted'
-                                        ? 'bg-[#102019] text-[#A8F1D8]'
+                                        ? 'bg-[rgba(107,158,138,0.12)] text-[#6B9E8A]'
                                         : participant.status === 'invited'
-                                            ? 'bg-[#1A1710] text-[#F5D48E]'
-                                            : 'bg-[#171717] text-[#888]'
+                                            ? 'bg-[rgba(212,165,116,0.12)] text-[#D4A574]'
+                                            : 'bg-[#FAF7F4] text-[#7A756E]'
                                 }`}
                             >
                                 <Users className="h-3.5 w-3.5" />
@@ -150,18 +150,18 @@ const CompetitionCard: React.FC<CompetitionCardProps> = ({
                     </div>
                 </div>
 
-                <div className="rounded-[1.35rem] border border-[#1E1E1E] bg-[#0C0C0C] p-4">
+                <div className="rounded-[1.35rem] border border-[rgba(0,0,0,0.06)] bg-[#F2EDE8] p-4">
                     <div className="flex items-center justify-between gap-3">
                         <div>
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#666]">Leaderboard</p>
-                            <h4 className="mt-2 text-lg font-semibold text-[#FAFAFA]">Current standings</h4>
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Leaderboard</p>
+                            <h4 className="mt-2 text-lg font-semibold text-[#2D2A26]">Current standings</h4>
                         </div>
                         {hasInviteActions ? (
                             <div className="flex gap-2">
                                 <button
                                     type="button"
                                     onClick={onShareInvite}
-                                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#1E4033] bg-[#101715] px-3.5 text-sm font-medium text-[#9BE4C9] transition-colors hover:bg-[#13211D]"
+                                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[rgba(107,158,138,0.2)] bg-[rgba(107,158,138,0.08)] px-3.5 text-sm font-medium text-[#6B9E8A] transition-colors hover:bg-[rgba(107,158,138,0.14)]"
                                 >
                                     <Send className="h-4 w-4" />
                                     {shareStatus === 'shared' ? 'Shared' : 'Share'}
@@ -169,7 +169,7 @@ const CompetitionCard: React.FC<CompetitionCardProps> = ({
                                 <button
                                     type="button"
                                     onClick={onCopyInvite}
-                                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#2C2C2C] bg-[#151515] px-3.5 text-sm font-medium text-[#FAFAFA] transition-colors hover:bg-[#1A1A1A]"
+                                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[rgba(0,0,0,0.08)] bg-[#FAF7F4] px-3.5 text-sm font-medium text-[#2D2A26] transition-colors hover:bg-[#F0EBE5]"
                                 >
                                     <Copy className="h-4 w-4" />
                                     {shareStatus === 'copied' ? 'Copied' : 'Copy'}
@@ -180,7 +180,7 @@ const CompetitionCard: React.FC<CompetitionCardProps> = ({
 
                     <div className="mt-4 space-y-3">
                         {evaluation.leaderboard.length === 0 ? (
-                            <div className="rounded-xl border border-dashed border-[#2B2B2B] bg-[#101010] px-4 py-5 text-sm text-[#777]">
+                            <div className="rounded-xl border border-dashed border-[rgba(0,0,0,0.10)] bg-[#FAF7F4] px-4 py-5 text-sm text-[#A8A29E]">
                                 Standings will appear once accepted participants start syncing data.
                             </div>
                         ) : evaluation.leaderboard.map((entry) => (
@@ -188,20 +188,20 @@ const CompetitionCard: React.FC<CompetitionCardProps> = ({
                                 key={entry.profileId}
                                 className={`rounded-[1.1rem] border px-4 py-3 ${
                                     entry.rank === 1
-                                        ? 'border-[#1E4033] bg-[#101815]'
-                                        : 'border-[#222] bg-[#111111]'
+                                        ? 'border-[rgba(107,158,138,0.2)] bg-[rgba(107,158,138,0.06)]'
+                                        : 'border-[rgba(0,0,0,0.06)] bg-white'
                                 }`}
                             >
                                 <div className="flex items-center justify-between gap-3">
                                     <div className="flex min-w-0 items-center gap-3">
                                         <div className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                                            entry.rank === 1 ? 'bg-[#00C896]/18 text-[#9BE4C9]' : 'bg-[#181818] text-[#8A8A8A]'
+                                            entry.rank === 1 ? 'bg-[rgba(107,158,138,0.12)] text-[#6B9E8A]' : 'bg-[rgba(0,0,0,0.04)] text-[#7A756E]'
                                         }`}>
                                             {entry.rank === 1 ? <Medal className="h-4.5 w-4.5" /> : `#${entry.rank}`}
                                         </div>
                                         <div className="min-w-0">
-                                            <p className="truncate text-sm font-semibold text-[#FAFAFA]">{entry.displayName}</p>
-                                            <p className="text-xs text-[#777]">
+                                            <p className="truncate text-sm font-semibold text-[#2D2A26]">{entry.displayName}</p>
+                                            <p className="text-xs text-[#A8A29E]">
                                                 {evaluation.competition.format === 'goal'
                                                     ? `${entry.progressDays} successful day${entry.progressDays === 1 ? '' : 's'}`
                                                     : `${entry.progressDays} scoring day${entry.progressDays === 1 ? '' : 's'}`}
@@ -209,9 +209,9 @@ const CompetitionCard: React.FC<CompetitionCardProps> = ({
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="font-mono text-lg font-semibold text-[#FAFAFA]">{formatScore(evaluation, entry.totalScore)}</p>
+                                        <p className="font-mono text-lg font-semibold text-[#2D2A26]">{formatScore(evaluation, entry.totalScore)}</p>
                                         {evaluation.competition.format !== 'goal' ? (
-                                            <p className="text-xs text-[#777]">{entry.averageDailyScore.toFixed(2)} avg/day</p>
+                                            <p className="text-xs text-[#A8A29E]">{entry.averageDailyScore.toFixed(2)} avg/day</p>
                                         ) : null}
                                     </div>
                                 </div>
@@ -221,7 +221,7 @@ const CompetitionCard: React.FC<CompetitionCardProps> = ({
                 </div>
             </div>
 
-            <div className="mt-5 flex flex-wrap items-center gap-4 text-xs text-[#777]">
+            <div className="mt-5 flex flex-wrap items-center gap-4 text-xs text-[#A8A29E]">
                 <span className="inline-flex items-center gap-2">
                     <CalendarDays className="h-3.5 w-3.5" />
                     Starts {formatISODateForDisplay(evaluation.competition.startDate, 'en-US', { month: 'short', day: 'numeric' })}
