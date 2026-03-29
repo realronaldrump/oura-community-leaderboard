@@ -51,6 +51,7 @@ export const useWebhookRefresh = (profile: UserProfile | null, enabled: boolean 
 
             invalidateTimerRef.current = setTimeout(() => {
                 queryClient.invalidateQueries({ queryKey: ['dailyStats', profile.id], exact: true });
+                queryClient.invalidateQueries({ queryKey: ['allTimeStats', profile.id], exact: true });
                 try {
                     localStorage.setItem(LAST_SYNC_KEY, Date.now().toString());
                 } catch {

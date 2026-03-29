@@ -1023,8 +1023,8 @@ const Dashboard: React.FC = () => {
                 return 0;
             },
             placeholderData: (previousData) => previousData,
-            staleTime: 1000 * 60 * 60 * 24,
-            refetchOnWindowFocus: false,
+            staleTime: DEFAULT_DAILY_STATS_STALE_MS,
+            refetchOnWindowFocus: true,
             enabled: true,
         }))
     });
@@ -1891,6 +1891,7 @@ const Dashboard: React.FC = () => {
         if (!activeProfile?.id || viewMode !== 'today') return;
         if (referenceDay !== todayIsoDay) return;
         queryClient.invalidateQueries({ queryKey: ['dailyStats', activeProfile.id], exact: true });
+        queryClient.invalidateQueries({ queryKey: ['allTimeStats', activeProfile.id], exact: true });
     }, [activeProfile?.id, queryClient, referenceDay, todayIsoDay, viewMode]);
 
     useEffect(() => {
@@ -1905,6 +1906,7 @@ const Dashboard: React.FC = () => {
 
             timer = window.setTimeout(() => {
                 queryClient.invalidateQueries({ queryKey: ['dailyStats'] });
+                queryClient.invalidateQueries({ queryKey: ['allTimeStats'] });
                 scheduleMidnightInvalidation();
             }, delayMs);
         };
