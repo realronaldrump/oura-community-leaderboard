@@ -1259,9 +1259,12 @@ select {
   box-shadow: var(--shadow-clay);
 }
 
-.trend-insight-card .insight-emoji {
-  font-size: 1.5rem;
-  line-height: 1;
+.trend-insight-card .insight-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
 }
 
 .trend-insight-card .insight-title {
@@ -1353,6 +1356,99 @@ select {
   font-weight: 600;
   color: var(--text-primary);
   line-height: 1.2;
+}
+
+.record-chip .record-date {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  line-height: 1.2;
+  margin-top: 1px;
+  white-space: nowrap;
+}
+
+/* Top-10 expandable drawer */
+.records-top10-drawer {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  box-shadow: var(--shadow-clay-sm);
+  overflow: hidden;
+}
+
+.records-top10-header {
+  display: flex;
+  align-items: center;
+  padding: 0.625rem 1rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+}
+
+.records-top10-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0;
+}
+
+.records-top10-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.records-top10-row:hover {
+  background: var(--bg-elevated);
+}
+
+.records-top10-row:active {
+  background: var(--bg-hover);
+}
+
+.records-top10-rank {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  width: 1.25rem;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.records-top10-value {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.875rem;
+  font-weight: 600;
+  flex-shrink: 0;
+  min-width: 5rem;
+}
+
+.records-top10-date {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.records-top10-arrow {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.records-top10-row:hover .records-top10-arrow {
+  opacity: 1;
+  transform: translateX(2px);
 }
 
 /* ========================================

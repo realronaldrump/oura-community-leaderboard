@@ -341,98 +341,168 @@ const formatContributionCaption = (label: string, value?: number | null): string
 
 
 // ============================================
-// PERSONAL RECORDS STRIP – Quick-access best/worst scores
+// PERSONAL RECORDS STRIP – Best scores with dates and top-10 expansion
 // ============================================
+
+type RecordEntry = { day: string; value: number; displayValue: string };
+type RecordCategory = { id: string; label: string; color: string; bg: string; entries: RecordEntry[] };
+
+const formatRecordDate = (isoDay: string): string =>
+    formatISODateForDisplay(isoDay, undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
+const buildCategoryEntries = (
+    items: { day: string; raw: number; display: string }[],
+    order: 'desc' | 'asc',
+    limit = 10
+): RecordEntry[] => {
+    const bestByDay = new Map<string, { raw: number; display: string }>();
+    for (const item of items) {
+        if (!item.day) continue;
+        const current = bestByDay.get(item.day);
+        const isBetter = order === 'desc'
+            ? !current || item.raw > current.raw
+            : !current || item.raw < current.raw;
+        if (isBetter) bestByDay.set(item.day, { raw: item.raw, display: item.display });
+    }
+    return Array.from(bestByDay.entries())
+        .map(([day, { raw, display }]) => ({ day, value: raw, displayValue: display }))
+        .sort((a, b) => order === 'desc' ? b.value - a.value : a.value - b.value)
+        .slice(0, limit);
+};
+
 const PersonalRecordsStrip: React.FC<{
     sessionHistory: SleepSession[];
     activityHistory: DailyActivity[];
-    onMetricClick: (type: MetricDetailType, value: number | null, unit?: string, color?: string) => void;
-}> = ({ sessionHistory, activityHistory, onMetricClick }) => {
-    const records = useMemo(() => {
-        const result: { label: string; value: string; rawValue: number; color: string; bg: string; icon: React.ReactNode; metricType: MetricDetailType; unit?: string }[] = [];
+    readinessHistory: DailyReadiness[];
+    sleepHistory: DailySleep[];
+    onNavigateToDay: (day: string) => void;
+}> = ({ sessionHistory, activityHistory, readinessHistory, sleepHistory, onNavigateToDay }) => {
+    const [expandedId, setExpandedId] = useState<string | null>(null);
+
+    const categories = useMemo((): RecordCategory[] => {
+        const result: RecordCategory[] = [];
+
+        // Best Readiness Score
+        const readinessItems = readinessHistory
+            .filter(r => r.score != null && r.score > 0)
+            .map(r => ({ day: r.day, raw: r.score!, display: String(Math.round(r.score!)) }));
+        const readinessEntries = buildCategoryEntries(readinessItems, 'desc');
+        if (readinessEntries.length > 0) result.push({ id: 'readiness', label: 'Best Readiness', color: '#7BC4A0', bg: 'rgba(123,196,160,0.12)', entries: readinessEntries });
+
+        // Best Sleep Score
+        const sleepScoreItems = sleepHistory
+            .filter(s => s.score != null && s.score > 0)
+            .map(s => ({ day: s.day, raw: s.score!, display: String(Math.round(s.score!)) }));
+        const sleepScoreEntries = buildCategoryEntries(sleepScoreItems, 'desc');
+        if (sleepScoreEntries.length > 0) result.push({ id: 'sleep_score', label: 'Best Sleep', color: '#7BA8D4', bg: 'rgba(123,168,212,0.12)', entries: sleepScoreEntries });
+
+        // Best Activity Score
+        const activityScoreItems = activityHistory
+            .filter(a => a.score != null && a.score > 0)
+            .map(a => ({ day: a.day, raw: a.score!, display: String(Math.round(a.score!)) }));
+        const activityScoreEntries = buildCategoryEntries(activityScoreItems, 'desc');
+        if (activityScoreEntries.length > 0) result.push({ id: 'activity_score', label: 'Best Activity', color: '#D4B87B', bg: 'rgba(212,184,123,0.12)', entries: activityScoreEntries });
 
         // Best HRV
-        const validHrvSessions = sessionHistory.filter(s => s.average_hrv != null && s.average_hrv > 0);
-        if (validHrvSessions.length > 0) {
-            const best = validHrvSessions.reduce((a, b) => (a.average_hrv! > b.average_hrv! ? a : b));
-            result.push({
-                label: 'Best HRV', value: `${Math.round(best.average_hrv!)} ms`, rawValue: best.average_hrv!,
-                color: '#A08BBE', bg: 'rgba(160,139,190,0.12)', icon: <Heart className="w-3.5 h-3.5 text-[#A08BBE]" />, metricType: 'hrv', unit: 'ms',
-            });
-        }
+        const hrvItems = sessionHistory
+            .filter(s => s.average_hrv != null && s.average_hrv > 0)
+            .map(s => ({ day: s.day, raw: s.average_hrv!, display: `${Math.round(s.average_hrv!)} ms` }));
+        const hrvEntries = buildCategoryEntries(hrvItems, 'desc');
+        if (hrvEntries.length > 0) result.push({ id: 'hrv', label: 'Best HRV', color: '#A08BBE', bg: 'rgba(160,139,190,0.12)', entries: hrvEntries });
 
-        // Most steps
-        const validSteps = activityHistory.filter(a => a.steps != null && a.steps > 0);
-        if (validSteps.length > 0) {
-            const best = validSteps.reduce((a, b) => (a.steps! > b.steps! ? a : b));
-            result.push({
-                label: 'Most Steps', value: best.steps!.toLocaleString(), rawValue: best.steps!,
-                color: '#D4B87B', bg: 'rgba(212,184,123,0.12)', icon: <Flame className="w-3.5 h-3.5 text-[#D4B87B]" />, metricType: 'steps', unit: 'steps',
-            });
-        }
+        // Most Steps
+        const stepsItems = activityHistory
+            .filter(a => a.steps != null && a.steps > 0)
+            .map(a => ({ day: a.day, raw: a.steps!, display: a.steps!.toLocaleString() }));
+        const stepsEntries = buildCategoryEntries(stepsItems, 'desc');
+        if (stepsEntries.length > 0) result.push({ id: 'steps', label: 'Most Steps', color: '#D4B87B', bg: 'rgba(212,184,123,0.12)', entries: stepsEntries });
 
-        // Best deep sleep
-        const validDeep = sessionHistory.filter(s => s.deep_sleep_duration != null && s.deep_sleep_duration > 0);
-        if (validDeep.length > 0) {
-            const best = validDeep.reduce((a, b) => (a.deep_sleep_duration! > b.deep_sleep_duration! ? a : b));
-            const hours = Math.floor(best.deep_sleep_duration! / 3600);
-            const mins = Math.floor((best.deep_sleep_duration! % 3600) / 60);
-            result.push({
-                label: 'Best Deep Sleep', value: hours > 0 ? `${hours}h ${mins}m` : `${mins}m`, rawValue: best.deep_sleep_duration!,
-                color: '#7BA8D4', bg: 'rgba(123,168,212,0.12)', icon: <Moon className="w-3.5 h-3.5 text-[#7BA8D4]" />, metricType: 'deep_sleep', unit: 'hours',
+        // Best Deep Sleep
+        const deepSleepItems = sessionHistory
+            .filter(s => s.deep_sleep_duration != null && s.deep_sleep_duration > 0)
+            .map(s => {
+                const h = Math.floor(s.deep_sleep_duration! / 3600);
+                const m = Math.floor((s.deep_sleep_duration! % 3600) / 60);
+                return { day: s.day, raw: s.deep_sleep_duration!, display: h > 0 ? `${h}h ${m}m` : `${m}m` };
             });
-        }
+        const deepSleepEntries = buildCategoryEntries(deepSleepItems, 'desc');
+        if (deepSleepEntries.length > 0) result.push({ id: 'deep_sleep', label: 'Best Deep Sleep', color: '#7BA8D4', bg: 'rgba(123,168,212,0.12)', entries: deepSleepEntries });
 
-        // Lowest resting HR
-        const validLowHr = sessionHistory.filter(s => s.lowest_heart_rate != null && s.lowest_heart_rate > 0);
-        if (validLowHr.length > 0) {
-            const best = validLowHr.reduce((a, b) => (a.lowest_heart_rate! < b.lowest_heart_rate! ? a : b));
-            result.push({
-                label: 'Lowest HR', value: `${Math.round(best.lowest_heart_rate!)} bpm`, rawValue: best.lowest_heart_rate!,
-                color: '#D4897B', bg: 'rgba(212,137,123,0.12)', icon: <Heart className="w-3.5 h-3.5 text-[#D4897B]" />, metricType: 'lowest_hr', unit: 'bpm',
-            });
-        }
+        // Lowest Resting HR
+        const lowestHrItems = sessionHistory
+            .filter(s => s.lowest_heart_rate != null && s.lowest_heart_rate > 0)
+            .map(s => ({ day: s.day, raw: s.lowest_heart_rate!, display: `${Math.round(s.lowest_heart_rate!)} bpm` }));
+        const lowestHrEntries = buildCategoryEntries(lowestHrItems, 'asc');
+        if (lowestHrEntries.length > 0) result.push({ id: 'lowest_hr', label: 'Lowest HR', color: '#D4897B', bg: 'rgba(212,137,123,0.12)', entries: lowestHrEntries });
 
-        // Best calories
-        const validCals = activityHistory.filter(a => a.active_calories != null && a.active_calories > 0);
-        if (validCals.length > 0) {
-            const best = validCals.reduce((a, b) => (a.active_calories! > b.active_calories! ? a : b));
-            result.push({
-                label: 'Most Calories', value: `${best.active_calories!.toLocaleString()} kcal`, rawValue: best.active_calories!,
-                color: '#D4A574', bg: 'rgba(212,165,116,0.12)', icon: <Flame className="w-3.5 h-3.5 text-[#D4A574]" />, metricType: 'calories', unit: 'kcal',
-            });
-        }
+        // Most Calories
+        const caloriesItems = activityHistory
+            .filter(a => a.active_calories != null && a.active_calories > 0)
+            .map(a => ({ day: a.day, raw: a.active_calories!, display: `${a.active_calories!.toLocaleString()} kcal` }));
+        const caloriesEntries = buildCategoryEntries(caloriesItems, 'desc');
+        if (caloriesEntries.length > 0) result.push({ id: 'calories', label: 'Most Calories', color: '#D4A574', bg: 'rgba(212,165,116,0.12)', entries: caloriesEntries });
 
         return result;
-    }, [sessionHistory, activityHistory]);
+    }, [sessionHistory, activityHistory, readinessHistory, sleepHistory]);
 
-    if (records.length === 0) return null;
+    const expandedCategory = categories.find(c => c.id === expandedId) ?? null;
+    if (categories.length === 0) return null;
 
     return (
         <section className="mb-10 animate-fade-in-up">
             <div className="flex items-center gap-2 mb-3">
-                <Trophy className="w-4 h-4 text-[#D4B87B]" />
+                <span className="inline-block w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: '#D4B87B' }} />
                 <h3 className="text-sm font-bold text-[#2D2A26]">Personal Records</h3>
-                <span className="text-[10px] text-[#A8A29E] bg-[#FAF7F4] px-2 py-0.5 rounded-full">All time</span>
+                <span className="text-[10px] text-[#A8A29E] bg-[#FAF7F4] px-2 py-0.5 rounded-full border border-[rgba(0,0,0,0.06)]">All time</span>
             </div>
-            <div className="records-strip">
-                {records.map((record, idx) => (
-                    <button
-                        key={record.label}
-                        className={`record-chip stagger-${idx + 1} animate-fade-in-up`}
-                        style={{ animationFillMode: 'both' }}
-                        onClick={() => onMetricClick(record.metricType, record.rawValue, record.unit, record.color)}
-                    >
-                        <div className="record-icon" style={{ backgroundColor: record.bg }}>
-                            {record.icon}
-                        </div>
-                        <div className="record-info">
-                            <div className="record-label">{record.label}</div>
-                            <div className="record-value" style={{ color: record.color }}>{record.value}</div>
-                        </div>
-                    </button>
-                ))}
+            <div className="records-strip mb-3">
+                {categories.map((cat, idx) => {
+                    const record = cat.entries[0];
+                    const isExpanded = expandedId === cat.id;
+                    return (
+                        <button
+                            key={cat.id}
+                            className={`record-chip stagger-${Math.min(idx + 1, 6)} animate-fade-in-up`}
+                            style={{ animationFillMode: 'both', outline: isExpanded ? `2px solid ${cat.color}` : undefined, outlineOffset: isExpanded ? '1px' : undefined }}
+                            onClick={() => setExpandedId(isExpanded ? null : cat.id)}
+                        >
+                            <div className="record-icon" style={{ backgroundColor: cat.bg }}>
+                                <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+                            </div>
+                            <div className="record-info">
+                                <div className="record-label">{cat.label}</div>
+                                <div className="record-value" style={{ color: cat.color }}>{record.displayValue}</div>
+                                <div className="record-date">{formatRecordDate(record.day)}</div>
+                            </div>
+                            <svg className="flex-shrink-0 ml-1 transition-transform duration-200" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', color: cat.color, opacity: 0.6 }} width="12" height="12" viewBox="0 0 12 12" fill="none">
+                                <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </button>
+                    );
+                })}
             </div>
+            {expandedCategory && (
+                <div className="records-top10-drawer animate-fade-in-up" style={{ animationFillMode: 'both' }}>
+                    <div className="records-top10-header">
+                        <span className="inline-block w-2 h-2 rounded-full mr-1.5 flex-shrink-0" style={{ backgroundColor: expandedCategory.color }} />
+                        <span style={{ color: expandedCategory.color }}>Top {expandedCategory.entries.length} — {expandedCategory.label}</span>
+                    </div>
+                    <ol className="records-top10-list">
+                        {expandedCategory.entries.map((entry, rank) => (
+                            <li key={entry.day}>
+                                <button className="records-top10-row" onClick={() => onNavigateToDay(entry.day)}>
+                                    <span className="records-top10-rank" style={{ color: rank === 0 ? expandedCategory.color : undefined }}>{rank + 1}</span>
+                                    <span className="records-top10-value font-mono" style={{ color: expandedCategory.color }}>{entry.displayValue}</span>
+                                    <span className="records-top10-date">{formatRecordDate(entry.day)}</span>
+                                    <svg className="records-top10-arrow" width="10" height="10" viewBox="0 0 10 10" fill="none">
+                                        <path d="M2 5h6M5.5 2.5L8 5l-2.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                </button>
+                            </li>
+                        ))}
+                    </ol>
+                </div>
+            )}
         </section>
     );
 };
@@ -450,11 +520,12 @@ const FriendTrendsStrip: React.FC<{
     const friendTrends = useMemo(() => {
         return leaderboardData.map((entry, idx) => {
             const data = userQueries[idx]?.data as DailyStats | undefined;
-            if (!data) return { ...entry, trend: null, trendDirection: 'stable' as const, recentAvg: entry.average };
+            if (!data) return { ...entry, trend: null, trendDirection: 'stable' as const, recentAvg: entry.average, strongestCategory: '' as string, summary: '' as string };
 
             // Calculate 7-day trend vs previous 7 days
             const recentScores: number[] = [];
             const olderScores: number[] = [];
+            let sleepSum = 0, readinessSum = 0, activitySum = 0, sleepCount = 0, readinessCount = 0, activityCount = 0;
 
             const sortedSleep = [...(data.sleep || [])].sort((a, b) => (b.day || '').localeCompare(a.day || ''));
             const sortedReadiness = [...(data.readiness || [])].sort((a, b) => (b.day || '').localeCompare(a.day || ''));
@@ -464,6 +535,9 @@ const FriendTrendsStrip: React.FC<{
                 const s = Number(sortedSleep[i]?.score) || 0;
                 const r = Number(sortedReadiness[i]?.score) || 0;
                 const a = Number(sortedActivity[i]?.score) || 0;
+                if (s > 0) { sleepSum += s; sleepCount++; }
+                if (r > 0) { readinessSum += r; readinessCount++; }
+                if (a > 0) { activitySum += a; activityCount++; }
                 if (s > 0 || r > 0 || a > 0) {
                     const count = (s > 0 ? 1 : 0) + (r > 0 ? 1 : 0) + (a > 0 ? 1 : 0);
                     recentScores.push((s + r + a) / count);
@@ -484,7 +558,19 @@ const FriendTrendsStrip: React.FC<{
             const trend = olderAvg !== null ? recentAvg - olderAvg : null;
             const trendDirection = trend === null ? 'stable' as const : trend > 2 ? 'up' as const : trend < -2 ? 'down' as const : 'stable' as const;
 
-            return { ...entry, trend, trendDirection, recentAvg };
+            // Determine strongest category
+            const sleepAvg = sleepCount > 0 ? Math.round(sleepSum / sleepCount) : 0;
+            const readinessAvg = readinessCount > 0 ? Math.round(readinessSum / readinessCount) : 0;
+            const activityAvg = activityCount > 0 ? Math.round(activitySum / activityCount) : 0;
+            const strongest = sleepAvg >= readinessAvg && sleepAvg >= activityAvg ? 'Sleep' : activityAvg >= readinessAvg ? 'Activity' : 'Readiness';
+
+            // Build a brief summary
+            let summary = '';
+            if (trendDirection === 'up') summary = `Improving, strongest in ${strongest.toLowerCase()}`;
+            else if (trendDirection === 'down') summary = `Dipping, but ${strongest.toLowerCase()} holds strong`;
+            else summary = `Steady this week, ${strongest.toLowerCase()} leads`;
+
+            return { ...entry, trend, trendDirection, recentAvg, strongestCategory: strongest, summary };
         });
     }, [leaderboardData, userQueries]);
 
@@ -494,16 +580,18 @@ const FriendTrendsStrip: React.FC<{
         <section className="mb-10 animate-fade-in-up" style={{ animationDelay: '100ms', animationFillMode: 'both' }}>
             <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-[#6B9E8A]" />
+                    <span className="inline-block w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: '#6B9E8A' }} />
                     <h3 className="text-sm font-bold text-[#2D2A26]">Group Trends</h3>
-                    <span className="text-[10px] text-[#A8A29E] bg-[#FAF7F4] px-2 py-0.5 rounded-full">7-day avg</span>
+                    <span className="text-[10px] text-[#A8A29E] bg-[#FAF7F4] px-2 py-0.5 rounded-full border border-[rgba(0,0,0,0.06)]">7-day avg</span>
                 </div>
                 <button onClick={onViewCompare} className="flex items-center gap-1 text-xs text-[#6B9E8A] font-medium hover:text-[#5A8D79] transition-colors">
                     Full compare <ArrowRight className="w-3 h-3" />
                 </button>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                {friendTrends.slice(0, 6).map((friend, idx) => (
+                {friendTrends.slice(0, 6).map((friend, idx) => {
+                    const color = FRIEND_COLORS[idx % FRIEND_COLORS.length];
+                    return (
                     <div
                         key={friend.id || friend.name}
                         className={`friend-trend-card stagger-${idx + 1} animate-fade-in-up`}
@@ -512,7 +600,7 @@ const FriendTrendsStrip: React.FC<{
                     >
                         <div
                             className="friend-avatar"
-                            style={{ backgroundColor: `${FRIEND_COLORS[idx % FRIEND_COLORS.length]}18`, color: FRIEND_COLORS[idx % FRIEND_COLORS.length] }}
+                            style={{ backgroundColor: `${color}18`, color }}
                         >
                             {friend.name.charAt(0).toUpperCase()}
                         </div>
@@ -532,9 +620,11 @@ const FriendTrendsStrip: React.FC<{
                                     </span>
                                 )}
                             </div>
+                            {friend.summary && <p className="text-[10px] text-[#A8A29E] mt-0.5 truncate">{friend.summary}</p>}
                         </div>
                     </div>
-                ))}
+                    );
+                })}
             </div>
         </section>
     );
@@ -543,7 +633,7 @@ const FriendTrendsStrip: React.FC<{
 // ============================================
 // TREND INSIGHTS PANEL – Plain-English analysis for the Trends page
 // ============================================
-type TrendInsight = { emoji: string; title: string; body: string; detail?: string };
+type TrendInsight = { color: string; title: string; body: string; detail?: string };
 
 const TrendInsightsPanel: React.FC<{
     profiles: { id: string; email?: string | null }[];
@@ -585,7 +675,7 @@ const TrendInsightsPanel: React.FC<{
             userMap.get(e.userId)!.push(e);
         });
 
-        // Overall trend: recent 14 days vs previous 14 days
+        // Overall trend: recent 7 days vs previous 7 days
         const first = profiles[0];
         const firstEntries = first ? userMap.get(first.id) : undefined;
         if (firstEntries && firstEntries.length >= 7) {
@@ -594,24 +684,55 @@ const TrendInsightsPanel: React.FC<{
             const recentAvg = Math.round(recent7.reduce((s, e) => s + e.avg, 0) / recent7.length);
             const olderAvg = older7.length > 0 ? Math.round(older7.reduce((s, e) => s + e.avg, 0) / older7.length) : null;
 
+            // Determine which category improved/declined the most
+            const recentSleep = Math.round(recent7.filter(e => e.sleep > 0).reduce((s, e) => s + e.sleep, 0) / Math.max(1, recent7.filter(e => e.sleep > 0).length));
+            const recentReadiness = Math.round(recent7.filter(e => e.readiness > 0).reduce((s, e) => s + e.readiness, 0) / Math.max(1, recent7.filter(e => e.readiness > 0).length));
+            const recentActivity = Math.round(recent7.filter(e => e.activity > 0).reduce((s, e) => s + e.activity, 0) / Math.max(1, recent7.filter(e => e.activity > 0).length));
+            const olderSleep = older7.length > 0 ? Math.round(older7.filter(e => e.sleep > 0).reduce((s, e) => s + e.sleep, 0) / Math.max(1, older7.filter(e => e.sleep > 0).length)) : null;
+            const olderReadiness = older7.length > 0 ? Math.round(older7.filter(e => e.readiness > 0).reduce((s, e) => s + e.readiness, 0) / Math.max(1, older7.filter(e => e.readiness > 0).length)) : null;
+            const olderActivity = older7.length > 0 ? Math.round(older7.filter(e => e.activity > 0).reduce((s, e) => s + e.activity, 0) / Math.max(1, older7.filter(e => e.activity > 0).length)) : null;
+
             if (olderAvg !== null) {
                 const diff = recentAvg - olderAvg;
+                // Build category-specific detail
+                const catChanges: string[] = [];
+                if (olderSleep !== null) {
+                    const sd = recentSleep - olderSleep;
+                    if (Math.abs(sd) > 1) catChanges.push(`Sleep ${sd > 0 ? '+' : ''}${sd}`);
+                }
+                if (olderReadiness !== null) {
+                    const rd = recentReadiness - olderReadiness;
+                    if (Math.abs(rd) > 1) catChanges.push(`Readiness ${rd > 0 ? '+' : ''}${rd}`);
+                }
+                if (olderActivity !== null) {
+                    const ad = recentActivity - olderActivity;
+                    if (Math.abs(ad) > 1) catChanges.push(`Activity ${ad > 0 ? '+' : ''}${ad}`);
+                }
+                const catDetail = catChanges.length > 0 ? catChanges.join(' / ') : undefined;
+
                 if (diff > 3) {
                     result.push({
-                        emoji: '🚀', title: 'You\'re on a roll',
-                        body: `Your average scores jumped from ${olderAvg} to ${recentAvg} over the past week. Whatever you're doing, keep it up.`,
-                        detail: `+${diff} points vs prior week`,
+                        color: '#7BC4A0', title: 'You\'re improving',
+                        body: `Your overall average went from ${olderAvg} to ${recentAvg} this week. ${recentSleep > recentActivity && recentSleep > recentReadiness ? 'Sleep is leading the charge.' : recentActivity > recentSleep ? 'Your activity has been driving the improvement.' : 'Readiness is particularly strong.'}`,
+                        detail: catDetail || `+${diff} points vs prior week`,
                     });
                 } else if (diff < -3) {
+                    // Find the biggest category decline
+                    const sleepDiff = olderSleep !== null ? recentSleep - olderSleep : 0;
+                    const readinessDiff = olderReadiness !== null ? recentReadiness - olderReadiness : 0;
+                    const activityDiff = olderActivity !== null ? recentActivity - olderActivity : 0;
+                    const biggestDrop = Math.min(sleepDiff, readinessDiff, activityDiff);
+                    const tipText = biggestDrop === sleepDiff ? 'Try going to bed 30 minutes earlier tonight.' : biggestDrop === activityDiff ? 'Even a short walk could help turn things around.' : 'Give yourself some recovery time if you can.';
                     result.push({
-                        emoji: '📉', title: 'Slight dip this week',
-                        body: `Your average dropped from ${olderAvg} to ${recentAvg} compared to before. This is normal — consider checking sleep consistency or activity balance.`,
-                        detail: `${diff} points vs prior week`,
+                        color: '#D4897B', title: 'Slight dip this week',
+                        body: `Your average dropped from ${olderAvg} to ${recentAvg}. ${tipText}`,
+                        detail: catDetail || `${diff} points vs prior week`,
                     });
                 } else {
                     result.push({
-                        emoji: '⚖️', title: 'Holding steady',
-                        body: `Your average is right around ${recentAvg}, roughly the same as last week. Consistency is great for long-term health.`,
+                        color: '#A8A29E', title: 'Holding steady',
+                        body: `Your average is around ${recentAvg}, about the same as last week. Consistency like this is great for long-term health.`,
+                        detail: catDetail,
                     });
                 }
             }
@@ -622,27 +743,28 @@ const TrendInsightsPanel: React.FC<{
             if (bestRecent.avg !== worstRecent.avg) {
                 const bestDate = new Date(`${bestRecent.day}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
                 const worstDate = new Date(`${worstRecent.day}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                const bestCategory = bestRecent.sleep >= bestRecent.readiness && bestRecent.sleep >= bestRecent.activity ? 'sleep' : bestRecent.activity >= bestRecent.readiness ? 'activity' : 'readiness';
                 result.push({
-                    emoji: '📊', title: 'This week\'s range',
-                    body: `Your best day was ${bestDate} (avg ${bestRecent.avg}) and the toughest was ${worstDate} (avg ${worstRecent.avg}).`,
-                    detail: `${bestRecent.avg - worstRecent.avg} point spread`,
+                    color: '#7BA8D4', title: 'This week\'s best and toughest',
+                    body: `Your peak was ${bestDate} (avg ${bestRecent.avg}), driven mostly by strong ${bestCategory}. The toughest day was ${worstDate} (avg ${worstRecent.avg}).`,
+                    detail: `${bestRecent.avg - worstRecent.avg} point spread across the week`,
                 });
             }
 
             // Sleep vs activity balance
-            const recentSleepAvg = Math.round(recent7.filter(e => e.sleep > 0).reduce((s, e) => s + e.sleep, 0) / Math.max(1, recent7.filter(e => e.sleep > 0).length));
-            const recentActivityAvg = Math.round(recent7.filter(e => e.activity > 0).reduce((s, e) => s + e.activity, 0) / Math.max(1, recent7.filter(e => e.activity > 0).length));
-            if (recentSleepAvg > 0 && recentActivityAvg > 0) {
-                const gap = recentSleepAvg - recentActivityAvg;
+            if (recentSleep > 0 && recentActivity > 0) {
+                const gap = recentSleep - recentActivity;
                 if (gap > 10) {
                     result.push({
-                        emoji: '🛌', title: 'Sleep is outpacing activity',
-                        body: `Your sleep score (${recentSleepAvg}) is notably higher than activity (${recentActivityAvg}). Great rest — adding a bit more movement could round things out.`,
+                        color: '#7BA8D4', title: 'Sleep is outpacing activity',
+                        body: `Your sleep score (${recentSleep}) is well above your activity (${recentActivity}). You're resting great — even a short daily walk could help balance things out.`,
+                        detail: `Sleep ${recentSleep} vs Activity ${recentActivity}`,
                     });
                 } else if (gap < -10) {
                     result.push({
-                        emoji: '🏃', title: 'Active but need more rest',
-                        body: `Activity score (${recentActivityAvg}) is ahead of sleep (${recentSleepAvg}). Your body is working hard — make sure you're recovering with enough quality sleep.`,
+                        color: '#D4B87B', title: 'Active but under-recovered',
+                        body: `Your activity (${recentActivity}) is outpacing sleep (${recentSleep}). Your body is putting in the work — prioritize an earlier bedtime to keep things sustainable.`,
+                        detail: `Activity ${recentActivity} vs Sleep ${recentSleep}`,
                     });
                 }
             }
@@ -662,11 +784,15 @@ const TrendInsightsPanel: React.FC<{
 
             if (userAvgs.length >= 2) {
                 const leader = userAvgs[0];
+                const runner = userAvgs[1];
                 const gap = leader.avg - userAvgs[userAvgs.length - 1].avg;
+                const closeBattle = userAvgs.length >= 2 && leader.avg - runner.avg <= 3;
                 result.push({
-                    emoji: '👑', title: `${leader.name} leads the group`,
-                    body: `With a 14-day average of ${leader.avg}, ${leader.name} is ${gap > 5 ? 'comfortably' : 'slightly'} ahead. The spread across the group is ${gap} points.`,
-                    detail: `${userAvgs.length} people tracked`,
+                    color: '#6B9E8A', title: closeBattle ? `${leader.name} and ${runner.name} are neck and neck` : `${leader.name} leads the group`,
+                    body: closeBattle
+                        ? `${leader.name} (${leader.avg}) and ${runner.name} (${runner.avg}) are within a few points of each other over the past 2 weeks. A couple of good nights could change the lead.`
+                        : `With a 14-day average of ${leader.avg}, ${leader.name} is ${gap > 5 ? 'solidly' : 'slightly'} ahead. The group spread is ${gap} points — ${gap > 10 ? 'there\'s room for everyone to close the gap' : 'everyone is pretty close'}.`,
+                    detail: `${userAvgs.map(u => `${u.name}: ${u.avg}`).join(' / ')}`,
                 });
             }
         }
@@ -681,7 +807,7 @@ const TrendInsightsPanel: React.FC<{
             {insights.map((insight, idx) => (
                 <div key={idx} className="trend-insight-card">
                     <div className="flex items-start gap-3">
-                        <span className="insight-emoji">{insight.emoji}</span>
+                        <span className="insight-dot" style={{ backgroundColor: insight.color }} />
                         <div className="min-w-0">
                             <p className="insight-title">{insight.title}</p>
                             <p className="insight-body">{insight.body}</p>
@@ -899,12 +1025,14 @@ const Dashboard: React.FC = () => {
             placeholderData: (previousData) => previousData,
             staleTime: 1000 * 60 * 60 * 24,
             refetchOnWindowFocus: false,
-            enabled: viewMode === 'trends' || viewMode === 'insights',
+            enabled: true,
         }))
     });
 
     const activeUserQuery = userQueries.find((_, idx) => profiles[idx].id === activeProfile?.id);
     const activeData = activeUserQuery?.data as DailyStats | undefined;
+    const activeAllTimeQuery = allTimeQueries.find((_, idx) => profiles[idx]?.id === activeProfile?.id);
+    const activeAllTimeData = activeAllTimeQuery?.data as DailyStats | undefined;
     const competitionProfileData = useMemo(() => (
         profiles.map((profile, index) => ({
             profile,
@@ -963,6 +1091,12 @@ const Dashboard: React.FC = () => {
     const readinessHistory = activeData?.readiness || [];
     const activityHistory = activeData?.activity || [];
     const sessionHistory = activeData?.session || [];
+
+    // All-time histories for personal records (falls back to recent data)
+    const allTimeSleepHistory = activeAllTimeData?.sleep || sleepHistory;
+    const allTimeReadinessHistory = activeAllTimeData?.readiness || readinessHistory;
+    const allTimeActivityHistory = activeAllTimeData?.activity || activityHistory;
+    const allTimeSessionHistory = activeAllTimeData?.session || sessionHistory;
     const spo2History = activeData?.spo2 || [];
     const stressHistory = activeData?.stress || [];
     const resilienceHistory = activeData?.resilience || [];
@@ -2316,9 +2450,11 @@ const Dashboard: React.FC = () => {
 
                         {/* ── Personal Records (Quick Access) ── */}
                         <PersonalRecordsStrip
-                            sessionHistory={sessionHistory}
-                            activityHistory={activityHistory}
-                            onMetricClick={handleMetricCardClick}
+                            sessionHistory={allTimeSessionHistory}
+                            activityHistory={allTimeActivityHistory}
+                            readinessHistory={allTimeReadinessHistory}
+                            sleepHistory={allTimeSleepHistory}
+                            onNavigateToDay={handleSelectReferenceDay}
                         />
 
                         {/* ── Friend Trends (Quick Access) ── */}
@@ -2527,57 +2663,66 @@ const Dashboard: React.FC = () => {
 
                         {compareDay ? (
                             <>
-                                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                                    {compareSnapshots.map((snapshot, index) => (
+                                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+                                    {compareSnapshots.map((snapshot, index) => {
+                                        const scores = [
+                                            { label: 'Readiness', value: snapshot.readiness?.score, color: '#7BC4A0' },
+                                            { label: 'Sleep', value: snapshot.sleep?.score, color: '#7BA8D4' },
+                                            { label: 'Activity', value: snapshot.activity?.score, color: '#D4B87B' },
+                                        ];
+                                        return (
                                         <article
                                             key={snapshot.id}
-                                            className="rounded-[1.25rem] border bg-white p-4"
-                                            style={{ borderColor: `${snapshot.color}40` }}
+                                            className="rounded-[1.25rem] border bg-white p-5 shadow-clay-sm transition-shadow hover:shadow-clay"
+                                            style={{ borderColor: `${snapshot.color}30` }}
                                         >
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div className="min-w-0">
-                                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Rank #{index + 1}</p>
-                                                    <h3 className="mt-2 truncate text-lg font-semibold text-[#2D2A26]">{snapshot.name}</h3>
-                                                </div>
-                                                <span
-                                                    className="rounded-full px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.12em]"
-                                                    style={{ backgroundColor: `${snapshot.color}18`, color: snapshot.color }}
+                                            {/* Rank & name */}
+                                            <div className="flex items-center gap-3 mb-4">
+                                                <div
+                                                    className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold"
+                                                    style={{ backgroundColor: `${snapshot.color}15`, color: snapshot.color }}
                                                 >
-                                                    {snapshot.availableScoreCount}/3 scores
-                                                </span>
-                                            </div>
-
-                                            <div className="mt-5 flex items-end justify-between">
-                                                <div>
-                                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Daily average</p>
-                                                    <p className="mt-1 font-mono text-3xl font-semibold text-[#2D2A26]">
-                                                        {snapshot.compareAverage ?? '--'}
-                                                    </p>
+                                                    {index === 0 ? (
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z" /><rect x="4" y="18" width="16" height="2" rx="1" /></svg>
+                                                    ) : (
+                                                        `#${index + 1}`
+                                                    )}
                                                 </div>
-                                                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: snapshot.color }} />
-                                            </div>
-
-                                            <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
-                                                <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] px-3 py-2">
-                                                    <p className="text-[#A8A29E]">Readiness</p>
-                                                    <p className="mt-1 font-mono text-sm text-[#2D2A26]">{snapshot.readiness?.score ?? '--'}</p>
-                                                </div>
-                                                <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] px-3 py-2">
-                                                    <p className="text-[#A8A29E]">Sleep</p>
-                                                    <p className="mt-1 font-mono text-sm text-[#2D2A26]">{snapshot.sleep?.score ?? '--'}</p>
-                                                </div>
-                                                <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] px-3 py-2">
-                                                    <p className="text-[#A8A29E]">Activity</p>
-                                                    <p className="mt-1 font-mono text-sm text-[#2D2A26]">{snapshot.activity?.score ?? '--'}</p>
+                                                <div className="min-w-0 flex-1">
+                                                    <h3 className="text-base font-semibold text-[#2D2A26] leading-tight" style={{ wordBreak: 'break-word' }}>{snapshot.name}</h3>
+                                                    <p className="text-[10px] uppercase tracking-[0.14em] text-[#C8C2BB] mt-0.5">{snapshot.availableScoreCount}/3 scores</p>
                                                 </div>
                                             </div>
 
-                                            <div className="mt-4 flex items-center justify-between text-[11px] text-[#7A756E]">
-                                                <span>{formatDuration(snapshot.session?.total_sleep_duration)}</span>
+                                            {/* Daily average - large */}
+                                            <div className="flex items-baseline gap-1.5 mb-4">
+                                                <span className="font-mono text-3xl font-bold text-[#2D2A26]">{snapshot.compareAverage ?? '--'}</span>
+                                                <span className="text-xs text-[#C8C2BB] font-medium">avg</span>
+                                                <span className="ml-auto w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: snapshot.color }} />
+                                            </div>
+
+                                            {/* Score pills - colored with score-dependent opacity */}
+                                            <div className="grid grid-cols-3 gap-1.5">
+                                                {scores.map(s => {
+                                                    const val = s.value ?? 0;
+                                                    const opacity = val >= 85 ? 0.18 : val >= 70 ? 0.12 : 0.07;
+                                                    return (
+                                                        <div key={s.label} className="rounded-xl px-2 py-2 text-center" style={{ backgroundColor: `${s.color}${Math.round(opacity * 255).toString(16).padStart(2, '0')}` }}>
+                                                            <p className="text-[10px] font-medium" style={{ color: s.color }}>{s.label}</p>
+                                                            <p className="font-mono text-sm font-semibold text-[#2D2A26] mt-0.5">{s.value ?? '--'}</p>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {/* Bottom stats */}
+                                            <div className="mt-3 flex items-center justify-between text-[11px] text-[#A8A29E]">
+                                                <span>{formatDuration(snapshot.session?.total_sleep_duration)} sleep</span>
                                                 <span>{snapshot.activity?.steps?.toLocaleString() || '--'} steps</span>
                                             </div>
                                         </article>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
 
                                 <div className="space-y-4">

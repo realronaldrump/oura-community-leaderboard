@@ -44,8 +44,8 @@ const MultiProfileComparisonTable: React.FC<MultiProfileComparisonTableProps> = 
     rows,
 }) => {
     const gridStyle: CSSProperties = {
-        gridTemplateColumns: `minmax(11rem, 1.1fr) repeat(${columns.length}, minmax(8.5rem, 1fr))`,
-        minWidth: `${Math.max(40, 14 + (columns.length * 9))}rem`,
+        gridTemplateColumns: `minmax(9rem, 1fr) repeat(${columns.length}, minmax(7rem, 1fr))`,
+        minWidth: `${Math.max(30, 10 + (columns.length * 7.5))}rem`,
     };
 
     return (
@@ -77,7 +77,7 @@ const MultiProfileComparisonTable: React.FC<MultiProfileComparisonTableProps> = 
                                     className="h-2.5 w-2.5 rounded-full"
                                     style={{ backgroundColor: column.color }}
                                 />
-                                <p className="truncate text-sm font-semibold text-[#2D2A26]">{column.name}</p>
+                                <p className="text-sm font-semibold text-[#2D2A26] leading-tight" style={{ wordBreak: 'break-word' }}>{column.name}</p>
                             </div>
                             <p className="mt-1 font-mono text-xs text-[#7A756E]">
                                 {column.score != null ? `Score ${column.score}` : 'No score'}

@@ -296,13 +296,21 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
 
         if (values.length >= 14) {
             const diff = recentAvg - allTimeAvg;
-            if (diff > 3) parts.push(`and your recent week (${recentAvg}) is trending above that`);
-            else if (diff < -3) parts.push(`but your recent week (${recentAvg}) is a bit below`);
-            else parts.push(`and you've been right around that lately (${recentAvg})`);
+            if (diff > 5) parts.push(`and your recent week (${recentAvg}) is well above your baseline — you're in a great stretch right now`);
+            else if (diff > 3) parts.push(`and your recent week (${recentAvg}) is trending above that — nice improvement`);
+            else if (diff < -5) parts.push(`but your recent week (${recentAvg}) is noticeably below your baseline. Consider whether sleep, stress, or activity patterns have shifted`);
+            else if (diff < -3) parts.push(`but your recent week (${recentAvg}) is a bit below. Small adjustments to your routine could help`);
+            else parts.push(`and you've been right around that lately (${recentAvg}) — steady consistency`);
+        }
+
+        // Add range context for everyday users
+        const range = allTimeBest - allTimeWorst;
+        if (range > 0) {
+            parts.push(`Your scores have ranged from ${allTimeWorst} to ${allTimeBest} across ${values.length} days`);
         }
 
         return {
-            text: parts.join(', ') + '.',
+            text: parts.join('. ') + '.',
             stats: { allTimeAvg, recentAvg, best: allTimeBest, worst: allTimeWorst, totalDays: values.length },
         };
     }, [filteredData, chartMetric]);
