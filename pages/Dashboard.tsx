@@ -592,37 +592,36 @@ const FriendTrendsStrip: React.FC<{
                 {friendTrends.slice(0, 6).map((friend, idx) => {
                     const color = FRIEND_COLORS[idx % FRIEND_COLORS.length];
                     return (
-                    <div
-                        key={friend.id || friend.name}
-                        className={`friend-trend-card stagger-${idx + 1} animate-fade-in-up`}
-                        style={{ animationFillMode: 'both' }}
-                        onClick={onViewTrends}
-                    >
                         <div
-                            className="friend-avatar"
-                            style={{ backgroundColor: `${color}18`, color }}
+                            key={friend.id || friend.name}
+                            className={`friend-trend-card stagger-${idx + 1} animate-fade-in-up`}
+                            style={{ animationFillMode: 'both' }}
+                            onClick={onViewTrends}
                         >
-                            {friend.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-[#2D2A26] truncate">{friend.name}</p>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="text-sm font-mono font-bold text-[#2D2A26]">{friend.recentAvg}</span>
-                                {friend.trend !== null && (
-                                    <span className={`flex items-center gap-0.5 text-[10px] font-medium ${
-                                        friend.trendDirection === 'up' ? 'text-[#7BC4A0]' :
-                                        friend.trendDirection === 'down' ? 'text-[#D4897B]' : 'text-[#A8A29E]'
-                                    }`}>
-                                        {friend.trendDirection === 'up' ? <TrendingUp className="w-3 h-3" /> :
-                                         friend.trendDirection === 'down' ? <TrendingDown className="w-3 h-3" /> :
-                                         <Minus className="w-3 h-3" />}
-                                        {friend.trend > 0 ? '+' : ''}{friend.trend}
-                                    </span>
-                                )}
+                            <div
+                                className="friend-avatar"
+                                style={{ backgroundColor: `${color}18`, color }}
+                            >
+                                {friend.name.charAt(0).toUpperCase()}
                             </div>
-                            {friend.summary && <p className="text-[10px] text-[#A8A29E] mt-0.5 truncate">{friend.summary}</p>}
+                            <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-[#2D2A26] truncate">{friend.name}</p>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className="text-sm font-mono font-bold text-[#2D2A26]">{friend.recentAvg}</span>
+                                    {friend.trend !== null && (
+                                        <span className={`flex items-center gap-0.5 text-[10px] font-medium ${friend.trendDirection === 'up' ? 'text-[#7BC4A0]' :
+                                                friend.trendDirection === 'down' ? 'text-[#D4897B]' : 'text-[#A8A29E]'
+                                            }`}>
+                                            {friend.trendDirection === 'up' ? <TrendingUp className="w-3 h-3" /> :
+                                                friend.trendDirection === 'down' ? <TrendingDown className="w-3 h-3" /> :
+                                                    <Minus className="w-3 h-3" />}
+                                            {friend.trend > 0 ? '+' : ''}{friend.trend}
+                                        </span>
+                                    )}
+                                </div>
+                                {friend.summary && <p className="text-[10px] text-[#A8A29E] mt-0.5 truncate">{friend.summary}</p>}
+                            </div>
                         </div>
-                    </div>
                     );
                 })}
             </div>
@@ -969,33 +968,33 @@ const Dashboard: React.FC = () => {
         queries: profiles.map(p => {
             const isLiveProfile = viewMode === 'today' && p.id === activeProfile?.id;
             return ({
-            queryKey: ['dailyStats', p.id],
-            queryFn: async () => {
-                try {
-                    const cached = queryClient.getQueryData(['dailyStats', p.id]) as DailyStats | undefined;
-                    const synced = await runWithAutoTokenRefresh(p.id, (token) =>
-                        syncDailyStats(token, cached, {
-                            mode: 'incremental',
-                            grantedScopes: p.grantedScopes,
-                            availabilityKey: p.id,
-                        })
-                    );
-                    await markProfileSyncSuccess(p.id);
-                    return synced;
-                } catch (error) {
-                    await markProfileSyncError(p.id, error);
-                    throw error;
-                }
-            },
-            staleTime: viewMode === 'today' && p.id === activeProfile?.id
-                ? LIVE_DAILY_STATS_STALE_MS
-                : DEFAULT_DAILY_STATS_STALE_MS,
-            refetchInterval: isLiveProfile
-                ? LIVE_DAILY_STATS_REFETCH_MS
-                : (false as const),
-            refetchIntervalInBackground: false,
-            refetchOnWindowFocus: isLiveProfile ? ('always' as const) : true,
-        });
+                queryKey: ['dailyStats', p.id],
+                queryFn: async () => {
+                    try {
+                        const cached = queryClient.getQueryData(['dailyStats', p.id]) as DailyStats | undefined;
+                        const synced = await runWithAutoTokenRefresh(p.id, (token) =>
+                            syncDailyStats(token, cached, {
+                                mode: 'incremental',
+                                grantedScopes: p.grantedScopes,
+                                availabilityKey: p.id,
+                            })
+                        );
+                        await markProfileSyncSuccess(p.id);
+                        return synced;
+                    } catch (error) {
+                        await markProfileSyncError(p.id, error);
+                        throw error;
+                    }
+                },
+                staleTime: viewMode === 'today' && p.id === activeProfile?.id
+                    ? LIVE_DAILY_STATS_STALE_MS
+                    : DEFAULT_DAILY_STATS_STALE_MS,
+                refetchInterval: isLiveProfile
+                    ? LIVE_DAILY_STATS_REFETCH_MS
+                    : (false as const),
+                refetchIntervalInBackground: false,
+                refetchOnWindowFocus: isLiveProfile ? ('always' as const) : true,
+            });
         })
     });
 
@@ -2034,7 +2033,7 @@ const Dashboard: React.FC = () => {
                         <div className="relative">
                             <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(107,158,138,0.25)] bg-[rgba(107,158,138,0.08)] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#6B9E8A]">
                                 <Heart className="h-3.5 w-3.5" />
-                                {competitionInviteToken ? 'Competition invite' : inviteLanding ? 'Invite link' : 'Private leaderboard'}
+                                {competitionInviteToken ? 'Competition invite' : inviteLanding ? 'Invite link' : 'Davis Watches You Sleep'}
                             </div>
 
                             <h1 className="mt-5 max-w-2xl text-3xl font-semibold tracking-tight text-[#2D2A26] sm:text-4xl">
@@ -2151,13 +2150,12 @@ const Dashboard: React.FC = () => {
                                                         {getProfileDisplayName(profile)}
                                                     </p>
                                                     <p
-                                                        className={`mt-1 text-[11px] ${
-                                                            profileHealthById.get(profile.id)?.level === 'error'
+                                                        className={`mt-1 text-[11px] ${profileHealthById.get(profile.id)?.level === 'error'
                                                                 ? 'text-[#D4897B]'
                                                                 : profileHealthById.get(profile.id)?.level === 'warning'
                                                                     ? 'text-[#D4B87B]'
                                                                     : 'text-[#6B9E8A]'
-                                                        }`}
+                                                            }`}
                                                     >
                                                         {profileHealthById.get(profile.id)?.label || 'Up to date'}
                                                     </p>
@@ -2635,11 +2633,10 @@ const Dashboard: React.FC = () => {
                                             type="button"
                                             onClick={() => toggleCompareParticipant(participant.id)}
                                             disabled={isLocked}
-                                            className={`rounded-full border px-3 py-2 text-sm transition-colors ${
-                                                isSelected
+                                            className={`rounded-full border px-3 py-2 text-sm transition-colors ${isSelected
                                                     ? 'border-[rgba(107,158,138,0.25)] bg-[rgba(107,158,138,0.08)] text-[#6B9E8A]'
                                                     : 'border-[rgba(0,0,0,0.08)] bg-[#FAF7F4] text-[#7A756E] hover:border-[rgba(0,0,0,0.12)] hover:text-[#2D2A26]'
-                                            } ${isLocked ? 'cursor-not-allowed opacity-80' : ''}`}
+                                                } ${isLocked ? 'cursor-not-allowed opacity-80' : ''}`}
                                         >
                                             {getProfileDisplayName(participant.profile)}
                                         </button>
@@ -2673,56 +2670,56 @@ const Dashboard: React.FC = () => {
                                             { label: 'Activity', value: snapshot.activity?.score, color: '#D4B87B' },
                                         ];
                                         return (
-                                        <article
-                                            key={snapshot.id}
-                                            className="rounded-[1.25rem] border bg-white p-5 shadow-clay-sm transition-shadow hover:shadow-clay"
-                                            style={{ borderColor: `${snapshot.color}30` }}
-                                        >
-                                            {/* Rank & name */}
-                                            <div className="flex items-center gap-3 mb-4">
-                                                <div
-                                                    className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold"
-                                                    style={{ backgroundColor: `${snapshot.color}15`, color: snapshot.color }}
-                                                >
-                                                    {index === 0 ? (
-                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z" /><rect x="4" y="18" width="16" height="2" rx="1" /></svg>
-                                                    ) : (
-                                                        `#${index + 1}`
-                                                    )}
+                                            <article
+                                                key={snapshot.id}
+                                                className="rounded-[1.25rem] border bg-white p-5 shadow-clay-sm transition-shadow hover:shadow-clay"
+                                                style={{ borderColor: `${snapshot.color}30` }}
+                                            >
+                                                {/* Rank & name */}
+                                                <div className="flex items-center gap-3 mb-4">
+                                                    <div
+                                                        className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold"
+                                                        style={{ backgroundColor: `${snapshot.color}15`, color: snapshot.color }}
+                                                    >
+                                                        {index === 0 ? (
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z" /><rect x="4" y="18" width="16" height="2" rx="1" /></svg>
+                                                        ) : (
+                                                            `#${index + 1}`
+                                                        )}
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <h3 className="text-base font-semibold text-[#2D2A26] leading-tight" style={{ wordBreak: 'break-word' }}>{snapshot.name}</h3>
+                                                        <p className="text-[10px] uppercase tracking-[0.14em] text-[#C8C2BB] mt-0.5">{snapshot.availableScoreCount}/3 scores</p>
+                                                    </div>
                                                 </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <h3 className="text-base font-semibold text-[#2D2A26] leading-tight" style={{ wordBreak: 'break-word' }}>{snapshot.name}</h3>
-                                                    <p className="text-[10px] uppercase tracking-[0.14em] text-[#C8C2BB] mt-0.5">{snapshot.availableScoreCount}/3 scores</p>
+
+                                                {/* Daily average - large */}
+                                                <div className="flex items-baseline gap-1.5 mb-4">
+                                                    <span className="font-mono text-3xl font-bold text-[#2D2A26]">{snapshot.compareAverage ?? '--'}</span>
+                                                    <span className="text-xs text-[#C8C2BB] font-medium">avg</span>
+                                                    <span className="ml-auto w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: snapshot.color }} />
                                                 </div>
-                                            </div>
 
-                                            {/* Daily average - large */}
-                                            <div className="flex items-baseline gap-1.5 mb-4">
-                                                <span className="font-mono text-3xl font-bold text-[#2D2A26]">{snapshot.compareAverage ?? '--'}</span>
-                                                <span className="text-xs text-[#C8C2BB] font-medium">avg</span>
-                                                <span className="ml-auto w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: snapshot.color }} />
-                                            </div>
+                                                {/* Score pills - colored with score-dependent opacity */}
+                                                <div className="grid grid-cols-3 gap-1.5">
+                                                    {scores.map(s => {
+                                                        const val = s.value ?? 0;
+                                                        const opacity = val >= 85 ? 0.18 : val >= 70 ? 0.12 : 0.07;
+                                                        return (
+                                                            <div key={s.label} className="rounded-xl px-2 py-2 text-center" style={{ backgroundColor: `${s.color}${Math.round(opacity * 255).toString(16).padStart(2, '0')}` }}>
+                                                                <p className="text-[10px] font-medium" style={{ color: s.color }}>{s.label}</p>
+                                                                <p className="font-mono text-sm font-semibold text-[#2D2A26] mt-0.5">{s.value ?? '--'}</p>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
 
-                                            {/* Score pills - colored with score-dependent opacity */}
-                                            <div className="grid grid-cols-3 gap-1.5">
-                                                {scores.map(s => {
-                                                    const val = s.value ?? 0;
-                                                    const opacity = val >= 85 ? 0.18 : val >= 70 ? 0.12 : 0.07;
-                                                    return (
-                                                        <div key={s.label} className="rounded-xl px-2 py-2 text-center" style={{ backgroundColor: `${s.color}${Math.round(opacity * 255).toString(16).padStart(2, '0')}` }}>
-                                                            <p className="text-[10px] font-medium" style={{ color: s.color }}>{s.label}</p>
-                                                            <p className="font-mono text-sm font-semibold text-[#2D2A26] mt-0.5">{s.value ?? '--'}</p>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-
-                                            {/* Bottom stats */}
-                                            <div className="mt-3 flex items-center justify-between text-[11px] text-[#A8A29E]">
-                                                <span>{formatDuration(snapshot.session?.total_sleep_duration)} sleep</span>
-                                                <span>{snapshot.activity?.steps?.toLocaleString() || '--'} steps</span>
-                                            </div>
-                                        </article>
+                                                {/* Bottom stats */}
+                                                <div className="mt-3 flex items-center justify-between text-[11px] text-[#A8A29E]">
+                                                    <span>{formatDuration(snapshot.session?.total_sleep_duration)} sleep</span>
+                                                    <span>{snapshot.activity?.steps?.toLocaleString() || '--'} steps</span>
+                                                </div>
+                                            </article>
                                         );
                                     })}
                                 </div>
