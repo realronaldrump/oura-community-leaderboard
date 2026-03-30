@@ -455,6 +455,7 @@ const PersonalRecordsStrip: React.FC<{
                 <h3 className="text-sm font-bold text-[#2D2A26]">Personal Records</h3>
                 <span className="text-[10px] text-[#A8A29E] bg-[#FAF7F4] px-2 py-0.5 rounded-full border border-[rgba(0,0,0,0.06)]">All time</span>
             </div>
+            <div className="relative">
             <div className="records-strip mb-3">
                 {categories.map((cat, idx) => {
                     const record = cat.entries[0];
@@ -480,6 +481,8 @@ const PersonalRecordsStrip: React.FC<{
                         </button>
                     );
                 })}
+            </div>
+                <div className="pointer-events-none absolute right-0 top-0 bottom-3 w-10 bg-gradient-to-l from-[var(--bg-base)] to-transparent rounded-r" />
             </div>
             {expandedCategory && (
                 <div className="records-top10-drawer animate-fade-in-up" style={{ animationFillMode: 'both' }}>
@@ -2339,7 +2342,8 @@ const Dashboard: React.FC = () => {
                 <div className="max-w-5xl mx-auto px-4 pb-2 sm:hidden">
                     <PrimaryProfileSwitcher selectClassName="w-full h-9 text-xs" />
                 </div>
-                <div className="max-w-5xl mx-auto px-4 flex gap-1 -mb-px overflow-x-auto pb-1">
+                {/* Desktop/tablet tab bar — hidden on mobile */}
+                <div className="max-w-5xl mx-auto px-4 gap-1 -mb-px overflow-x-auto pb-1 hidden sm:flex">
                     {[
                         { key: 'today', label: 'Today', icon: <CalendarDays className="w-4 h-4" /> },
                         ...(profiles.length > 1 ? [{ key: 'compare', label: 'Compare', icon: <GitCompareArrows className="w-4 h-4" /> }] : []),
@@ -2360,7 +2364,27 @@ const Dashboard: React.FC = () => {
                 </div>
             </nav>
 
-            <main className="max-w-5xl mx-auto px-4 pb-16">
+            {/* Mobile bottom tab bar */}
+            <nav className="mobile-bottom-nav sm:hidden">
+                {[
+                    { key: 'today', label: 'Today', icon: <CalendarDays className="w-5 h-5" /> },
+                    { key: 'compete', label: 'Compete', icon: <Swords className="w-5 h-5" /> },
+                    { key: 'trends', label: 'Trends', icon: <BarChart3 className="w-5 h-5" /> },
+                    { key: 'insights', label: 'Insights', icon: <Sparkles className="w-5 h-5" /> },
+                    { key: 'export', label: 'Export', icon: <Download className="w-5 h-5" /> },
+                ].map(tab => (
+                    <button
+                        key={tab.key}
+                        onClick={() => setViewMode(tab.key as any)}
+                        className={`mobile-bottom-tab ${viewMode === tab.key ? 'active' : ''}`}
+                    >
+                        {tab.icon}
+                        <span>{tab.label}</span>
+                    </button>
+                ))}
+            </nav>
+
+            <main className="max-w-5xl mx-auto px-4 pb-24 sm:pb-8">
                 {profilesNeedingAttention.length > 0 && (
                     <div className="mt-6 p-4 bg-[#FAF7F4] border border-[rgba(0,0,0,0.08)] rounded-2xl shadow-clay-sm">
                         <p className="text-[#2D2A26] text-sm font-medium mb-2">Sync attention needed</p>
@@ -2419,7 +2443,7 @@ const Dashboard: React.FC = () => {
                         </div>
 
                         {/* ── Scores ── */}
-                        <div className="grid grid-cols-3 gap-3 sm:gap-5 mb-10">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5 mb-10">
                             {([
                                 { type: 'readiness' as const, label: 'Readiness', score: currentReadiness?.score, color: '#7BC4A0' },
                                 { type: 'sleep' as const, label: 'Sleep', score: currentSleep?.score, color: '#7BA8D4' },
@@ -2499,7 +2523,13 @@ const Dashboard: React.FC = () => {
                             {sessionHistory.length > 0 && (
                                 <div className="chart-container" style={{ height: 260 }}>
                                     <h4 className="chart-label">Sleep Architecture · 14 Days</h4>
-                                    <SleepStagesChart data={sessionHistory.slice(0, 14).reverse()} />
+                                    <SleepStagesChart data={(() => {
+                                        const seen = new Set<string>();
+                                        return sessionHistory
+                                            .filter(s => { if (seen.has(s.day)) return false; seen.add(s.day); return true; })
+                                            .slice(0, 14)
+                                            .reverse();
+                                    })()} />
                                 </div>
                             )}
                         </section>
@@ -2839,15 +2869,18 @@ const InsightsView: React.FC<{ profiles: any[]; userQueries: any[]; allTimeQueri
 
     return (
         <div className="pt-6 space-y-6">
-            <div className="flex flex-wrap gap-1.5">
-                {([
-                    { key: 'timeline', label: '24h Timeline' }, { key: 'correlation', label: 'Correlations' },
-                    { key: 'whatif', label: 'What-If' },
-                    { key: 'streaks', label: 'Streaks' }, { key: 'patterns', label: 'Patterns' },
-                    { key: 'milestones', label: 'Milestones' }, { key: 'snapshot', label: 'Snapshot' },
-                ] as const).map(t => (
-                    <button key={t.key} onClick={() => setTab(t.key)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${tab === t.key ? 'bg-[#6B9E8A]/15 text-[#6B9E8A]' : 'text-[#A8A29E] hover:text-[#7A756E] hover:bg-[#FAF7F4]'}`}>{t.label}</button>
-                ))}
+            <div className="relative">
+                <div className="flex gap-1.5 overflow-x-auto pb-1 hide-scrollbar">
+                    {([
+                        { key: 'timeline', label: '24h Timeline' }, { key: 'correlation', label: 'Correlations' },
+                        { key: 'whatif', label: 'What-If' },
+                        { key: 'streaks', label: 'Streaks' }, { key: 'patterns', label: 'Patterns' },
+                        { key: 'milestones', label: 'Milestones' }, { key: 'snapshot', label: 'Snapshot' },
+                    ] as const).map(t => (
+                        <button key={t.key} onClick={() => setTab(t.key)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${tab === t.key ? 'bg-[#6B9E8A]/15 text-[#6B9E8A]' : 'text-[#A8A29E] hover:text-[#7A756E] hover:bg-[#FAF7F4]'}`}>{t.label}</button>
+                    ))}
+                </div>
+                <div className="pointer-events-none absolute right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-[var(--bg-base)] to-transparent rounded-r" />
             </div>
             {tab === 'timeline' && <TimelineView profiles={profiles} usersData={recentUsersData} />}
             {tab === 'correlation' && <CorrelationExplorer profiles={profiles} usersData={recentUsersData} />}

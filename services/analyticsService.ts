@@ -746,10 +746,19 @@ export function calculateCorrelation(
     // Generate insight
     let insight = '';
     if (strength === 'strong' || strength === 'moderate') {
-        const percentEffect = (coefficient * ss.standardDeviation(yArr) / ss.mean(yArr) * 100).toFixed(1);
-        insight = direction === 'positive'
-            ? `When ${metricX.userName}'s ${metricX.label} is high, ${metricY.userName}'s ${metricY.label} tends to be ${Math.abs(parseFloat(percentEffect))}% higher`
-            : `When ${metricX.userName}'s ${metricX.label} is high, ${metricY.userName}'s ${metricY.label} tends to be ${Math.abs(parseFloat(percentEffect))}% lower`;
+        const meanYArr = ss.mean(yArr);
+        const rawPctArr = Math.abs(meanYArr) > 0.5
+            ? Math.abs(coefficient * ss.standardDeviation(yArr) / meanYArr * 100)
+            : Infinity;
+        const reliablePctArr = isFinite(rawPctArr) && rawPctArr <= 150;
+
+        insight = reliablePctArr
+            ? direction === 'positive'
+                ? `When ${metricX.userName}'s ${metricX.label} is high, ${metricY.userName}'s ${metricY.label} tends to be ${rawPctArr.toFixed(1)}% higher`
+                : `When ${metricX.userName}'s ${metricX.label} is high, ${metricY.userName}'s ${metricY.label} tends to be ${rawPctArr.toFixed(1)}% lower`
+            : direction === 'positive'
+                ? `When ${metricX.userName}'s ${metricX.label} is high, ${metricY.userName}'s ${metricY.label} also tends to be higher`
+                : `When ${metricX.userName}'s ${metricX.label} is high, ${metricY.userName}'s ${metricY.label} tends to be lower`;
     } else {
         insight = `No significant correlation found between ${metricX.label} and ${metricY.label}`;
     }
@@ -923,17 +932,25 @@ export function generateAutomatedInsights(data: DailyStats, userId: string, user
                 }
 
                 const yValues = correlation.dataPoints.map(p => p.y);
-                const percentEffect = (correlation.coefficient * ss.standardDeviation(yValues) / ss.mean(yValues) * 100).toFixed(1);
+                const meanY = ss.mean(yValues);
+                const rawPercent = Math.abs(meanY) > 0.5
+                    ? Math.abs(correlation.coefficient * ss.standardDeviation(yValues) / meanY * 100)
+                    : Infinity;
+                const reliablePercent = isFinite(rawPercent) && rawPercent <= 150;
 
                 let title = '';
                 let description = '';
 
                 if (correlation.direction === 'positive') {
                     title = `Higher ${metricX.label} = Higher ${metricY.label}`;
-                    description = `When you push your ${metricX.label} higher, your ${metricY.label} sees a typical boost of ${Math.abs(parseFloat(percentEffect))}%.`;
+                    description = reliablePercent
+                        ? `When you push your ${metricX.label} higher, your ${metricY.label} sees a typical boost of ${rawPercent.toFixed(1)}%.`
+                        : `When your ${metricX.label} is higher, your ${metricY.label} also tends to be higher.`;
                 } else {
                     title = `Higher ${metricX.label} = Lower ${metricY.label}`;
-                    description = `When your ${metricX.label} goes up, your ${metricY.label} tends to drop by about ${Math.abs(parseFloat(percentEffect))}%.`;
+                    description = reliablePercent
+                        ? `When your ${metricX.label} goes up, your ${metricY.label} tends to drop by about ${rawPercent.toFixed(1)}%.`
+                        : `When your ${metricX.label} is higher, your ${metricY.label} tends to be lower.`;
                 }
 
                 insights.push({

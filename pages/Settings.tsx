@@ -616,7 +616,11 @@ const Settings: React.FC = () => {
                                     disabled={webhookStatus.status === 'running'}
                                     className="px-4 py-2 border border-[rgba(0,0,0,0.10)] text-[#2D2A26] font-medium rounded-[12px] text-sm hover:bg-[#FAF7F4] transition-colors whitespace-nowrap disabled:opacity-50"
                                 >
-                                    {webhookStatus.status === 'running' ? 'Configuring...' : 'Enable Live Updates'}
+                                    {webhookStatus.status === 'running'
+                                        ? 'Configuring...'
+                                        : webhookStatus.status === 'ok'
+                                            ? 'Manage Live Updates'
+                                            : 'Enable Live Updates'}
                                 </button>
                             </div>
 

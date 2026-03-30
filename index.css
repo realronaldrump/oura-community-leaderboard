@@ -1126,6 +1126,16 @@ select {
   box-shadow: var(--shadow-clay-inset);
 }
 
+@media (max-width: 639px) {
+  .score-card-v2 {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    min-height: auto;
+  }
+}
+
 /* Chart containers */
 .chart-container {
   background: var(--bg-raised);
@@ -1239,6 +1249,51 @@ select {
     left: 15%;
     right: 15%;
   }
+}
+
+/* ========================================
+   MOBILE BOTTOM TAB BAR
+   ======================================== */
+
+.mobile-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: stretch;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.mobile-bottom-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.625rem 0.25rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: all 0.15s ease;
+  min-height: 56px;
+}
+
+.mobile-bottom-tab:active {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.mobile-bottom-tab.active {
+  color: var(--accent);
+}
+
+.mobile-bottom-tab.active svg {
+  filter: drop-shadow(0 0 4px var(--accent-dim));
 }
 
 /* ========================================

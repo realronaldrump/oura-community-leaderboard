@@ -368,10 +368,20 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                     </div>
                     <div className="card p-4">
                         <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Usable Models</p>
-                        <p className="text-2xl font-mono font-bold text-[var(--text-primary)] mt-1">
-                            {summary.reliableCount}/{summary.total}
-                        </p>
-                        <p className="text-xs text-[var(--text-muted)] mt-1">medium/high confidence</p>
+                        {summary.reliableCount > 0 ? (
+                            <>
+                                <p className="text-2xl font-mono font-bold text-[var(--text-primary)] mt-1">
+                                    {summary.reliableCount}/{summary.total}
+                                </p>
+                                <p className="text-xs text-[var(--text-muted)] mt-1">medium/high confidence</p>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-sm text-[var(--text-muted)] mt-1 leading-relaxed">
+                                    Insufficient data to build prediction models — sync more days of data to improve estimates.
+                                </p>
+                            </>
+                        )}
                     </div>
                 </div>
             )}

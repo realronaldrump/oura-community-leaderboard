@@ -270,6 +270,14 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
                     </p>
                 </div>
             )}
+
+            {filteredPatterns.length > 0 && filteredPatterns.length < 4 && (
+                <div className="card p-6 text-center border border-dashed border-[var(--border-subtle)] bg-[var(--bg-elevated)]">
+                    <Search className="w-8 h-8 text-[var(--text-muted)] opacity-40 mx-auto mb-3" />
+                    <p className="text-sm text-[var(--text-secondary)] font-medium mb-1">More patterns emerge as you collect data</p>
+                    <p className="text-xs text-[var(--text-muted)]">Check back in a few weeks as your history grows — richer data unlocks deeper insights.</p>
+                </div>
+            )}
         </div>
     );
 };
