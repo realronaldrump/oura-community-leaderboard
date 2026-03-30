@@ -99,6 +99,7 @@ const Router = () => {
         if (!code) return;
 
         const state = params.get('state');
+        const redirectScopes = params.get('scope');
         const storedState = localStorage.getItem(OAUTH_STATE_KEY);
         const storedDestination = localStorage.getItem(POST_AUTH_DESTINATION_KEY) || '/';
         localStorage.removeItem(OAUTH_STATE_KEY);
@@ -116,10 +117,17 @@ const Router = () => {
 
         oauthService.exchangeCodeForTokens(code, REDIRECT_URI)
             .then((tokens) => {
+                // Prefer scopes from token response; fall back to redirect URL scopes
+                // (Oura's token response omits the scope field)
+                const scopes = tokens.grantedScopes?.length > 0
+                    ? tokens.grantedScopes
+                    : redirectScopes
+                        ? redirectScopes.split(/[ ,]+/).map(s => s.trim()).filter(Boolean)
+                        : [];
                 return addProfile({
                     accessToken: tokens.accessToken,
                     refreshToken: tokens.refreshToken,
-                    grantedScopes: tokens.grantedScopes,
+                    grantedScopes: scopes,
                     expiresInSeconds: tokens.expiresInSeconds,
                 });
             })
