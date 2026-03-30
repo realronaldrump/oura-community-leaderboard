@@ -636,7 +636,7 @@ const FriendTrendsStrip: React.FC<{
 type TrendInsight = { color: string; title: string; body: string; detail?: string };
 
 const TrendInsightsPanel: React.FC<{
-    profiles: { id: string; email?: string | null }[];
+    profiles: { id: string; firstName?: string | null; lastName?: string | null; email?: string | null }[];
     userQueries: { data: DailyStats | undefined }[];
 }> = ({ profiles, userQueries }) => {
     const insights = useMemo<TrendInsight[]>(() => {
@@ -647,7 +647,7 @@ const TrendInsightsPanel: React.FC<{
         profiles.forEach((profile, idx) => {
             const data = userQueries[idx]?.data;
             if (!data) return;
-            const name = (profile.email || 'User').split('@')[0];
+            const name = getProfileDisplayName(profile);
             const readinessByDay = new Map<string, number>();
             const activityByDay = new Map<string, number>();
             data.readiness?.forEach(r => readinessByDay.set(r.day, Number(r.score) || 0));
@@ -1588,7 +1588,7 @@ const Dashboard: React.FC = () => {
             const aScore = Number(lastActivity?.score) || 0;
             return {
                 id: p.id,
-                name: p.firstName || (p.email || 'User').split('@')[0],
+                name: getProfileDisplayName(p),
                 readiness: rScore, sleep: sScore, activity: aScore,
                 steps: lastActivity?.steps,
                 activeCalories: lastActivity?.active_calories,
@@ -1917,7 +1917,7 @@ const Dashboard: React.FC = () => {
         };
     }, [profiles.length, queryClient]);
 
-    const userName = activeProfile?.firstName || activeProfile?.email?.split('@')[0] || 'there';
+    const userName = activeProfile ? getProfileDisplayName(activeProfile) : 'there';
 
     const getTimeGreeting = () => {
         const hour = new Date().getHours();
@@ -2365,7 +2365,7 @@ const Dashboard: React.FC = () => {
                         <div className="space-y-1">
                             {profilesNeedingAttention.map((profile) => {
                                 const status = profileHealthById.get(profile.id);
-                                const name = profile.firstName || (profile.email || 'User').split('@')[0];
+                                const name = getProfileDisplayName(profile);
                                 const isReconnect = status?.level === 'error';
                                 return (
                                     <p key={profile.id} className={`text-xs ${isReconnect ? 'text-[#D4897B]' : 'text-[#D4B87B]'}`}>

@@ -19,9 +19,10 @@ import {
 import InfoTooltip from './InfoTooltip';
 import DetailsModal from './DetailsModal';
 import { formatISODateForDisplay } from '../../utils/date';
+import { getProfileDisplayName } from '../../utils/profileName';
 
 interface StreakTrackerProps {
-    profiles: Array<{ id: string; email?: string | null }>;
+    profiles: Array<{ id: string; firstName?: string | null; lastName?: string | null; email?: string | null }>;
     usersData: Array<{ data: DailyStats | undefined }>;
 }
 
@@ -150,7 +151,7 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
             const data = usersData[idx]?.data;
             if (!data) return;
 
-            const userName = (profile.email || 'User').split('@')[0];
+            const userName = getProfileDisplayName(profile);
             const streaks = calculateStreaks(data, profile.id, userName);
             const badges = generateBadges(streaks);
 
@@ -484,7 +485,7 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                                                 {badge.name.split('(')[0].trim()}
                                             </p>
                                             <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                                                {(profiles.find(p => p.id === badge.userId)?.email || 'User').split('@')[0]}
+                                                {getProfileDisplayName(profiles.find(p => p.id === badge.userId) || { email: 'User' })}
                                             </p>
                                         </div>
                                     </button>

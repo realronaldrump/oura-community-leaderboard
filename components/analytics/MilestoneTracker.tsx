@@ -7,9 +7,10 @@ import InfoTooltip from './InfoTooltip';
 import DetailsModal from './DetailsModal';
 import { useUser } from '../../contexts/UserContext';
 import PrimaryProfileSwitcher from '../PrimaryProfileSwitcher';
+import { getProfileDisplayName } from '../../utils/profileName';
 
 interface MilestoneTrackerProps {
-    profiles: Array<{ id: string; email?: string | null }>;
+    profiles: Array<{ id: string; firstName?: string | null; lastName?: string | null; email?: string | null }>;
     usersData: Array<{ data: DailyStats | undefined }>;
 }
 
@@ -110,7 +111,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
     const milestones = useMemo(() => {
         const usersDataFormatted = profiles.map((profile, idx) => ({
             userId: profile.id,
-            userName: (profile.email || 'User').split('@')[0],
+            userName: getProfileDisplayName(profile),
             data: usersData[idx]?.data as DailyStats
         })).filter(u => u.data);
 

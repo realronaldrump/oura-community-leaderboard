@@ -3,9 +3,10 @@ import { DailyStats } from '../../types';
 import { WhatIfResult, WhatIfScenario, WhatIfTargetScore } from '../../types/analyticsTypes';
 import { simulateWhatIf } from '../../services/analyticsService';
 import { Sparkles, BedDouble, Footprints, Heart, Moon, Lightbulb } from 'lucide-react';
+import { getProfileDisplayName } from '../../utils/profileName';
 
 interface WhatIfSimulatorProps {
-    profiles: Array<{ id: string; email?: string | null }>;
+    profiles: Array<{ id: string; firstName?: string | null; lastName?: string | null; email?: string | null }>;
     usersData: Array<{ data: DailyStats | undefined }>;
 }
 
@@ -142,7 +143,7 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
 
         const usersDataFormatted = profiles.map((profile, idx) => ({
             userId: profile.id,
-            userName: (profile.email || 'User').split('@')[0],
+            userName: getProfileDisplayName(profile),
             data: usersData[idx]?.data as DailyStats
         })).filter(u => u.data);
 

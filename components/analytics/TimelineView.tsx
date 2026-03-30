@@ -5,9 +5,10 @@ import { Clock, BedDouble, Activity, Heart } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
 import DateRangePicker from '../DateRangePicker';
 import { getRelativeLocalISODate } from '../../utils/date';
+import { getProfileDisplayName } from '../../utils/profileName';
 
 interface TimelineViewProps {
-    profiles: Array<{ id: string; email?: string | null }>;
+    profiles: Array<{ id: string; firstName?: string | null; lastName?: string | null; email?: string | null }>;
     usersData: Array<{ data: DailyStats | undefined }>;
 }
 
@@ -34,7 +35,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
     const { insights } = useMemo(() => {
         const usersDataFormatted = profiles.map((profile, idx) => ({
             userId: profile.id,
-            userName: (profile.email || 'User').split('@')[0],
+            userName: getProfileDisplayName(profile),
             data: usersData[idx]?.data as DailyStats
         })).filter(u => u.data);
 
@@ -50,7 +51,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
         return profiles.map((profile, idx) => {
             const data = usersData[idx]?.data;
             const session = data?.session?.find(s => s.day === selectedDate);
-            const userName = (profile.email || 'User').split('@')[0];
+            const userName = getProfileDisplayName(profile);
 
             return {
                 userId: profile.id,

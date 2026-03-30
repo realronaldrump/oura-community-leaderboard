@@ -7,9 +7,10 @@ import { Camera, Image, Pin, BedDouble, Zap, Flame, Footprints, Clock, Trophy, C
 import InfoTooltip from './InfoTooltip';
 import DateRangePicker from '../DateRangePicker';
 import { getRelativeLocalISODate } from '../../utils/date';
+import { getProfileDisplayName } from '../../utils/profileName';
 
 interface DailySnapshotProps {
-    profiles: Array<{ id: string; email?: string | null; challenges?: any[] }>;
+    profiles: Array<{ id: string; firstName?: string | null; lastName?: string | null; email?: string | null; challenges?: any[] }>;
     usersData: Array<{ data: DailyStats | undefined }>;
 }
 
@@ -45,7 +46,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
     const snapshot = useMemo((): DailySnapshotData | null => {
         const usersDataFormatted = profiles.map((profile, idx) => ({
             userId: profile.id,
-            userName: (profile.email || 'User').split('@')[0],
+            userName: getProfileDisplayName(profile),
             data: usersData[idx]?.data as DailyStats
         })).filter(u => u.data);
 

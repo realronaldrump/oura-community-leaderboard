@@ -4,8 +4,10 @@ import {
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Line, ComposedChart
 } from 'recharts';
 
+import { getProfileDisplayName } from '../utils/profileName';
+
 interface AllTimeHistoryProps {
-    profiles: { id: string; email?: string | null }[];
+    profiles: { id: string; firstName?: string | null; lastName?: string | null; email?: string | null }[];
     userQueries: { data: DailyStats | undefined; isFetching?: boolean; isPending?: boolean }[];
 }
 
@@ -50,7 +52,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
             const data = userQueries[idx]?.data;
             if (!data) return;
 
-            const userName = (profile.email || 'User').split('@')[0];
+            const userName = getProfileDisplayName(profile);
             const readinessByDay = new Map<string, number>();
             const activityByDay = new Map<string, number>();
 
@@ -460,7 +462,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                                         <Line
                                             key={p.id}
                                             type="monotone"
-                                            name={(p.email || 'User').split('@')[0]}
+                                            name={getProfileDisplayName(p)}
                                             data={data}
                                             dataKey="y"
                                             stroke={userColors[idx % userColors.length]}
@@ -489,7 +491,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                     >
                         <option value="all" className="bg-white text-[#2D2A26]">All Users</option>
                         {profiles.map(p => (
-                            <option key={p.id} value={p.id} className="bg-white text-[#2D2A26]">{(p.email || 'User').split('@')[0]}</option>
+                            <option key={p.id} value={p.id} className="bg-white text-[#2D2A26]">{getProfileDisplayName(p)}</option>
                         ))}
                     </select>
                 </div>

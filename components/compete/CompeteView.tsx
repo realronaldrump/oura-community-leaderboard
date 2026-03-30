@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarPlus, Check, Copy, Flag, Send, Sparkles, Trophy, Users } from 'lucide-react';
+import { AlertTriangle, CalendarPlus, Check, Copy, Flag, RefreshCw, Send, Sparkles, Trophy, Users } from 'lucide-react';
 import { COMPETITION_TEMPLATES } from '../../constants/competitionMetrics';
 import { useCompetitionInvitePreview, useCompetitions } from '../../hooks/useCompetitions';
 import { competitionService, CreateCompetitionInput } from '../../services/competitionService';
@@ -394,8 +394,26 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             ) : null}
 
             {error ? (
-                <div className="rounded-[1.25rem] border border-[rgba(212,137,123,0.3)] bg-[#FAF7F4] px-4 py-3 text-sm text-[#D4897B]">
-                    {error}
+                <div className="rounded-[1.35rem] border border-[rgba(212,137,123,0.2)] bg-white p-5 sm:p-6">
+                    <div className="flex flex-col items-center text-center gap-4 sm:flex-row sm:items-start sm:text-left">
+                        <span className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[rgba(212,137,123,0.1)]">
+                            <AlertTriangle className="h-5 w-5 text-[#D4897B]" />
+                        </span>
+                        <div className="flex-1 min-w-0">
+                            <h4 className="text-base font-semibold text-[#2D2A26]">Couldn't load competitions</h4>
+                            <p className="mt-1 text-sm leading-relaxed text-[#7A756E]">
+                                {error} This is usually temporary — your competitions and progress are safe.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => window.location.reload()}
+                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[rgba(0,0,0,0.08)] px-4 py-2.5 text-sm font-medium text-[#2D2A26] transition-colors hover:bg-[#FAF7F4] flex-shrink-0"
+                        >
+                            <RefreshCw className="h-4 w-4" />
+                            Try again
+                        </button>
+                    </div>
                 </div>
             ) : null}
 

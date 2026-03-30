@@ -4,9 +4,10 @@ import { Pattern, PatternType } from '../../types/analyticsTypes';
 import { detectPatterns } from '../../services/analyticsService';
 import { Calendar, Activity, Heart, Users, Sun, PartyPopper, Search, ChevronDown, Lightbulb, Info } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
+import { getProfileDisplayName } from '../../utils/profileName';
 
 interface PatternDetectorProps {
-    profiles: Array<{ id: string; email?: string | null }>;
+    profiles: Array<{ id: string; firstName?: string | null; lastName?: string | null; email?: string | null }>;
     usersData: Array<{ data: DailyStats | undefined }>;
 }
 
@@ -42,7 +43,7 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
     const patterns = useMemo(() => {
         const usersDataFormatted = profiles.map((profile, idx) => ({
             userId: profile.id,
-            userName: (profile.email || 'User').split('@')[0],
+            userName: getProfileDisplayName(profile),
             data: usersData[idx]?.data as DailyStats
         })).filter(u => u.data);
 
