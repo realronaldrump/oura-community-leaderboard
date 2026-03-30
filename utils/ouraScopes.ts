@@ -1,5 +1,5 @@
 const normalizeOuraScope = (scope: string): string =>
-  scope.toLowerCase().replace(/[^a-z0-9]/g, '');
+  scope.toLowerCase().replace(/^extapi:/, '').replace(/[^a-z0-9]/g, '');
 
 export const OURA_SCOPE_CANDIDATES = {
   daily: ['daily', 'daily_sleep', 'daily_readiness', 'daily_activity'],
