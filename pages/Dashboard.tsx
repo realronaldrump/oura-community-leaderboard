@@ -2045,7 +2045,7 @@ const Dashboard: React.FC = () => {
                                             ? 'Add a new friend without touching the existing setup.'
                                             : 'Start your shared Oura leaderboard.'}
                             </h1>
-                            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[#4A4541] sm:text-base">
+                            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[#3D3A36] sm:text-base">
                                 {competitionInviteToken
                                     ? 'Connect your Oura account once. You will join the shared leaderboard and the invited competition in the same flow.'
                                     : inviteLanding
