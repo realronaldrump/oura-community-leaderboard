@@ -323,7 +323,7 @@ export const syncDailyStats = async (
     const lastDay = getMostRecentDay(existingData);
     const startDate = lastDay
         ? shiftDate(lastDay, -INCREMENTAL_OVERLAP_DAYS)
-        : shiftDate(endDate, -INITIAL_RECENT_DAYS);
+        : FULL_HISTORY_START_DATE;
 
     const delta = await fetchDailyStats(token, {
         start: startDate,
