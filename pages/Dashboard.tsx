@@ -946,6 +946,7 @@ const Dashboard: React.FC = () => {
                 }, {
                     grantedScopes: activeProfile.grantedScopes,
                     availabilityKey: activeProfile.id,
+                    profileId: activeProfile.id,
                 })
             );
             queryClient.setQueryData(['dailyStats', activeProfile.id], syncedData);
@@ -977,6 +978,7 @@ const Dashboard: React.FC = () => {
                                 mode: 'incremental',
                                 grantedScopes: p.grantedScopes,
                                 availabilityKey: p.id,
+                                profileId: p.id,
                             })
                         );
                         await markProfileSyncSuccess(p.id);
@@ -1003,9 +1005,11 @@ const Dashboard: React.FC = () => {
             queryKey: ['allTimeStats', p.id],
             queryFn: async () => {
                 const fullHistory = await runWithAutoTokenRefresh(p.id, (token) =>
-                    fetchDailyStats(token, { start: FULL_HISTORY_START_DATE }, {
+                    syncDailyStats(token, undefined, {
+                        mode: 'full',
                         grantedScopes: p.grantedScopes,
                         availabilityKey: p.id,
+                        profileId: p.id,
                     })
                 );
                 await markProfileSyncSuccess(p.id);

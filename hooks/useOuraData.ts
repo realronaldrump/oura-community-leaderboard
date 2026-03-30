@@ -1,3 +1,4 @@
+import { getCachedDailyStats, setCachedDailyStats } from '../services/dailyStatsCache';
 import { ouraService } from '../services/ouraService';
 import { DailyStats } from '../types';
 import { getOuraFetchEndISODate, shiftLocalISODate } from '../utils/date';
@@ -20,6 +21,7 @@ type SyncDailyStatsOptions = {
     endDate?: string;
     grantedScopes?: string[];
     availabilityKey?: string;
+    profileId?: string;
 };
 
 const getFetchEndDate = (): string => getOuraFetchEndISODate();
@@ -308,9 +310,11 @@ export const syncDailyStats = async (
 ): Promise<DailyStats> => {
     const mode = options.mode || 'incremental';
     const endDate = options.endDate || getFetchEndDate();
+    const { profileId } = options;
 
+    // For full syncs, fetch everything and persist
     if (mode === 'full') {
-        return fetchDailyStats(token, {
+        const fullData = await fetchDailyStats(token, {
             start: FULL_HISTORY_START_DATE,
             end: endDate,
         }, {
@@ -318,9 +322,20 @@ export const syncDailyStats = async (
             grantedScopes: options.grantedScopes,
             availabilityKey: options.availabilityKey,
         });
+        if (profileId) setCachedDailyStats(profileId, fullData).catch(() => {});
+        return fullData;
     }
 
-    const lastDay = getMostRecentDay(existingData);
+    // Hydrate from IndexedDB if no in-memory data was provided
+    let baseData = existingData;
+    if (!baseData && profileId) {
+        const cached = await getCachedDailyStats(profileId);
+        if (cached?.data) {
+            baseData = cached.data;
+        }
+    }
+
+    const lastDay = getMostRecentDay(baseData);
     const startDate = lastDay
         ? shiftDate(lastDay, -INCREMENTAL_OVERLAP_DAYS)
         : FULL_HISTORY_START_DATE;
@@ -329,11 +344,16 @@ export const syncDailyStats = async (
         start: startDate,
         end: endDate,
     }, {
-        includeStaticCollections: !existingData,
+        includeStaticCollections: !baseData,
         grantedScopes: options.grantedScopes,
         availabilityKey: options.availabilityKey,
     });
 
-    return existingData ? mergeDailyStats(existingData, delta) : delta;
+    const result = baseData ? mergeDailyStats(baseData, delta) : delta;
+
+    // Persist merged result to IndexedDB
+    if (profileId) setCachedDailyStats(profileId, result).catch(() => {});
+
+    return result;
 };
 

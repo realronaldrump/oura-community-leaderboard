@@ -16,6 +16,7 @@ export type SyncProgressCallback = (progress: SyncProgress) => void;
 type SyncAuthContext = {
     grantedScopes?: string[];
     availabilityKey?: string;
+    profileId?: string;
 };
 
 const getToday = () => formatLocalISODate();
@@ -68,6 +69,7 @@ export const smartSync = async (
         endDate: fetchEndDate,
         grantedScopes: authContext.grantedScopes,
         availabilityKey: authContext.availabilityKey,
+        profileId: authContext.profileId,
     });
 
     const coverage = describeCoverage(data as DailyStats);
@@ -110,6 +112,7 @@ export const fullSync = async (
         endDate: fetchEndDate,
         grantedScopes: authContext.grantedScopes,
         availabilityKey: authContext.availabilityKey,
+        profileId: authContext.profileId,
     });
 
     const coverage = describeCoverage(data);
