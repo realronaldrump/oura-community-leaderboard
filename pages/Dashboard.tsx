@@ -513,6 +513,83 @@ const PersonalRecordsStrip: React.FC<{
 // ============================================
 // FRIEND TRENDS STRIP – See how your group is doing
 // ============================================
+
+type CategoryTrend = {
+    label: string;
+    icon: 'sleep' | 'readiness' | 'activity';
+    color: string;
+    recentAvg: number;
+    olderAvg: number | null;
+    delta: number | null;
+    direction: 'up' | 'down' | 'stable';
+};
+
+type FriendTrendData = {
+    id: string;
+    name: string;
+    average: number;
+    trend: number | null;
+    trendDirection: 'up' | 'down' | 'stable';
+    recentAvg: number;
+    categories: CategoryTrend[];
+    sparkline: number[];
+    summary: string;
+};
+
+const CATEGORY_COLORS = {
+    sleep: '#7BA8D4',
+    readiness: '#7BC4A0',
+    activity: '#D4B87B',
+};
+
+const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+    sleep: <Moon className="w-2.5 h-2.5" />,
+    readiness: <Brain className="w-2.5 h-2.5" />,
+    activity: <Flame className="w-2.5 h-2.5" />,
+};
+
+const MiniSparkline: React.FC<{ data: number[]; color: string; width?: number; height?: number }> = ({
+    data, color, width = 56, height = 20,
+}) => {
+    if (data.length < 2) return null;
+    const min = Math.min(...data);
+    const max = Math.max(...data);
+    const range = max - min || 1;
+    const pad = 1;
+    const points = data.map((v, i) => {
+        const x = pad + (i / (data.length - 1)) * (width - pad * 2);
+        const y = pad + (1 - (v - min) / range) * (height - pad * 2);
+        return `${x},${y}`;
+    });
+    return (
+        <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} fill="none" style={{ display: 'block' }}>
+            <defs>
+                <linearGradient id={`spark-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+                    <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+                </linearGradient>
+            </defs>
+            <path
+                d={`M${points[0]} ${points.slice(1).map(p => `L${p}`).join(' ')} L${width - pad},${height - pad} L${pad},${height - pad} Z`}
+                fill={`url(#spark-${color.replace('#', '')})`}
+            />
+            <polyline
+                points={points.join(' ')}
+                stroke={color}
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+            />
+            {/* Last point dot */}
+            {points.length > 0 && (() => {
+                const lastPt = points[points.length - 1].split(',');
+                return <circle cx={lastPt[0]} cy={lastPt[1]} r="2" fill={color} />;
+            })()}
+        </svg>
+    );
+};
+
 const FriendTrendsStrip: React.FC<{
     leaderboardData: LeaderboardEntry[];
     profiles: UserProfile[];
@@ -520,30 +597,60 @@ const FriendTrendsStrip: React.FC<{
     onViewCompare: () => void;
     onViewTrends: () => void;
 }> = ({ leaderboardData, profiles, userQueries, onViewCompare, onViewTrends }) => {
-    const friendTrends = useMemo(() => {
+    const friendTrends = useMemo((): FriendTrendData[] => {
         return leaderboardData.map((entry, idx) => {
             const data = userQueries[idx]?.data as DailyStats | undefined;
-            if (!data) return { ...entry, trend: null, trendDirection: 'stable' as const, recentAvg: entry.average, strongestCategory: '' as string, summary: '' as string };
-
-            // Calculate 7-day trend vs previous 7 days
-            const recentScores: number[] = [];
-            const olderScores: number[] = [];
-            let sleepSum = 0, readinessSum = 0, activitySum = 0, sleepCount = 0, readinessCount = 0, activityCount = 0;
+            const base: FriendTrendData = {
+                id: entry.id ?? entry.name,
+                name: entry.name,
+                average: entry.average,
+                trend: null,
+                trendDirection: 'stable',
+                recentAvg: entry.average,
+                categories: [],
+                sparkline: [],
+                summary: '',
+            };
+            if (!data) return base;
 
             const sortedSleep = [...(data.sleep || [])].sort((a, b) => (b.day || '').localeCompare(a.day || ''));
             const sortedReadiness = [...(data.readiness || [])].sort((a, b) => (b.day || '').localeCompare(a.day || ''));
             const sortedActivity = [...(data.activity || [])].sort((a, b) => (b.day || '').localeCompare(a.day || ''));
 
+            // Per-category averages for recent 7 vs older 7
+            const calcCat = (sorted: { score?: number | null }[], label: string, icon: 'sleep' | 'readiness' | 'activity', color: string): CategoryTrend => {
+                const recent: number[] = [];
+                const older: number[] = [];
+                for (let i = 0; i < Math.min(7, sorted.length); i++) {
+                    const val = Number(sorted[i]?.score) || 0;
+                    if (val > 0) recent.push(val);
+                }
+                for (let i = 7; i < Math.min(14, sorted.length); i++) {
+                    const val = Number(sorted[i]?.score) || 0;
+                    if (val > 0) older.push(val);
+                }
+                const recentAvg = recent.length > 0 ? Math.round(recent.reduce((a, b) => a + b, 0) / recent.length) : 0;
+                const olderAvg = older.length > 0 ? Math.round(older.reduce((a, b) => a + b, 0) / older.length) : null;
+                const delta = olderAvg !== null ? recentAvg - olderAvg : null;
+                const direction: 'up' | 'down' | 'stable' = delta === null ? 'stable' : delta > 2 ? 'up' : delta < -2 ? 'down' : 'stable';
+                return { label, icon, color, recentAvg, olderAvg, delta, direction };
+            };
+
+            const sleepCat = calcCat(sortedSleep, 'Sleep', 'sleep', CATEGORY_COLORS.sleep);
+            const readinessCat = calcCat(sortedReadiness, 'Readiness', 'readiness', CATEGORY_COLORS.readiness);
+            const activityCat = calcCat(sortedActivity, 'Activity', 'activity', CATEGORY_COLORS.activity);
+            const categories = [sleepCat, readinessCat, activityCat].filter(c => c.recentAvg > 0);
+
+            // Overall recent avg & trend
+            const recentOverall: number[] = [];
+            const olderOverall: number[] = [];
             for (let i = 0; i < Math.min(7, sortedSleep.length); i++) {
                 const s = Number(sortedSleep[i]?.score) || 0;
                 const r = Number(sortedReadiness[i]?.score) || 0;
                 const a = Number(sortedActivity[i]?.score) || 0;
-                if (s > 0) { sleepSum += s; sleepCount++; }
-                if (r > 0) { readinessSum += r; readinessCount++; }
-                if (a > 0) { activitySum += a; activityCount++; }
                 if (s > 0 || r > 0 || a > 0) {
                     const count = (s > 0 ? 1 : 0) + (r > 0 ? 1 : 0) + (a > 0 ? 1 : 0);
-                    recentScores.push((s + r + a) / count);
+                    recentOverall.push(Math.round((s + r + a) / count));
                 }
             }
             for (let i = 7; i < Math.min(14, sortedSleep.length); i++) {
@@ -552,28 +659,58 @@ const FriendTrendsStrip: React.FC<{
                 const a = Number(sortedActivity[i]?.score) || 0;
                 if (s > 0 || r > 0 || a > 0) {
                     const count = (s > 0 ? 1 : 0) + (r > 0 ? 1 : 0) + (a > 0 ? 1 : 0);
-                    olderScores.push((s + r + a) / count);
+                    olderOverall.push(Math.round((s + r + a) / count));
                 }
             }
 
-            const recentAvg = recentScores.length > 0 ? Math.round(recentScores.reduce((a, b) => a + b, 0) / recentScores.length) : entry.average;
-            const olderAvg = olderScores.length > 0 ? Math.round(olderScores.reduce((a, b) => a + b, 0) / olderScores.length) : null;
+            const recentAvg = recentOverall.length > 0 ? Math.round(recentOverall.reduce((a, b) => a + b, 0) / recentOverall.length) : entry.average;
+            const olderAvg = olderOverall.length > 0 ? Math.round(olderOverall.reduce((a, b) => a + b, 0) / olderOverall.length) : null;
             const trend = olderAvg !== null ? recentAvg - olderAvg : null;
-            const trendDirection = trend === null ? 'stable' as const : trend > 2 ? 'up' as const : trend < -2 ? 'down' as const : 'stable' as const;
+            const trendDirection: 'up' | 'down' | 'stable' = trend === null ? 'stable' : trend > 2 ? 'up' : trend < -2 ? 'down' : 'stable';
 
-            // Determine strongest category
-            const sleepAvg = sleepCount > 0 ? Math.round(sleepSum / sleepCount) : 0;
-            const readinessAvg = readinessCount > 0 ? Math.round(readinessSum / readinessCount) : 0;
-            const activityAvg = activityCount > 0 ? Math.round(activitySum / activityCount) : 0;
-            const strongest = sleepAvg >= readinessAvg && sleepAvg >= activityAvg ? 'Sleep' : activityAvg >= readinessAvg ? 'Activity' : 'Readiness';
+            // Build sparkline from last 7 days (reversed so oldest first)
+            const sparkline = [...recentOverall].reverse();
 
-            // Build a brief summary
+            // Build specific summary
+            const dipping = categories.filter(c => c.direction === 'down');
+            const rising = categories.filter(c => c.direction === 'up');
+            const strongest = [...categories].sort((a, b) => b.recentAvg - a.recentAvg)[0];
+            const weakest = [...categories].sort((a, b) => a.recentAvg - b.recentAvg)[0];
+
             let summary = '';
-            if (trendDirection === 'up') summary = `Improving, strongest in ${strongest.toLowerCase()}`;
-            else if (trendDirection === 'down') summary = `Dipping, but ${strongest.toLowerCase()} holds strong`;
-            else summary = `Steady this week, ${strongest.toLowerCase()} leads`;
+            if (trendDirection === 'down') {
+                if (dipping.length > 0) {
+                    summary = `${dipping.map(c => c.label).join(' & ')} ${dipping.length > 1 ? 'are' : 'is'} dipping`;
+                    if (strongest && strongest.direction !== 'down') summary += `, ${strongest.label} holds at ${strongest.recentAvg}`;
+                } else {
+                    summary = `Overall dipping, ${strongest?.label || 'scores'} strongest at ${strongest?.recentAvg || '--'}`;
+                }
+            } else if (trendDirection === 'up') {
+                if (rising.length > 0) {
+                    summary = `${rising.map(c => c.label).join(' & ')} ${rising.length > 1 ? 'are' : 'is'} climbing`;
+                    if (rising.length < categories.length && weakest && weakest.direction !== 'up') {
+                        summary += `, ${weakest.label} at ${weakest.recentAvg}`;
+                    }
+                } else {
+                    summary = `Trending up overall, led by ${strongest?.label || 'scores'}`;
+                }
+            } else {
+                if (dipping.length > 0 && rising.length > 0) {
+                    summary = `${rising[0].label} ↑${rising[0].delta !== null ? `+${rising[0].delta}` : ''}, ${dipping[0].label} ↓${dipping[0].delta !== null ? dipping[0].delta : ''}`;
+                } else {
+                    summary = `Holding steady, ${strongest?.label || 'scores'} leads at ${strongest?.recentAvg || '--'}`;
+                }
+            }
 
-            return { ...entry, trend, trendDirection, recentAvg, strongestCategory: strongest, summary };
+            return {
+                ...base,
+                trend,
+                trendDirection,
+                recentAvg,
+                categories,
+                sparkline,
+                summary,
+            };
         });
     }, [leaderboardData, userQueries]);
 
@@ -591,39 +728,84 @@ const FriendTrendsStrip: React.FC<{
                     Full compare <ArrowRight className="w-3 h-3" />
                 </button>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {friendTrends.slice(0, 6).map((friend, idx) => {
                     const color = FRIEND_COLORS[idx % FRIEND_COLORS.length];
+                    const overallTrendColor = friend.trendDirection === 'up' ? '#7BC4A0' :
+                        friend.trendDirection === 'down' ? '#D4897B' : '#A8A29E';
                     return (
                         <div
                             key={friend.id || friend.name}
-                            className={`friend-trend-card stagger-${idx + 1} animate-fade-in-up`}
+                            className={`friend-trend-card-v2 stagger-${idx + 1} animate-fade-in-up`}
                             style={{ animationFillMode: 'both' }}
                             onClick={onViewTrends}
                         >
-                            <div
-                                className="friend-avatar"
-                                style={{ backgroundColor: `${color}18`, color }}
-                            >
-                                {friend.name.charAt(0).toUpperCase()}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-xs font-semibold text-[#2D2A26] truncate">{friend.name}</p>
-                                <div className="flex items-center gap-1.5 mt-0.5">
-                                    <span className="text-sm font-mono font-bold text-[#2D2A26]">{friend.recentAvg}</span>
-                                    {friend.trend !== null && (
-                                        <span className={`flex items-center gap-0.5 text-[10px] font-medium ${friend.trendDirection === 'up' ? 'text-[#7BC4A0]' :
-                                                friend.trendDirection === 'down' ? 'text-[#D4897B]' : 'text-[#A8A29E]'
-                                            }`}>
-                                            {friend.trendDirection === 'up' ? <TrendingUp className="w-3 h-3" /> :
-                                                friend.trendDirection === 'down' ? <TrendingDown className="w-3 h-3" /> :
-                                                    <Minus className="w-3 h-3" />}
-                                            {friend.trend > 0 ? '+' : ''}{friend.trend}
-                                        </span>
-                                    )}
+                            {/* Header row: avatar + name + overall score + sparkline */}
+                            <div className="ftc-header">
+                                <div
+                                    className="ftc-avatar"
+                                    style={{ backgroundColor: `${color}18`, color }}
+                                >
+                                    {friend.name.charAt(0).toUpperCase()}
                                 </div>
-                                {friend.summary && <p className="text-[10px] text-[#A8A29E] mt-0.5 truncate">{friend.summary}</p>}
+                                <div className="ftc-name-block">
+                                    <p className="ftc-name">{friend.name}</p>
+                                    <div className="ftc-overall-score">
+                                        <span className="ftc-score-num">{friend.recentAvg}</span>
+                                        {friend.trend !== null && (
+                                            <span className="ftc-overall-delta" style={{ color: overallTrendColor }}>
+                                                {friend.trendDirection === 'up' ? <TrendingUp className="w-3 h-3" /> :
+                                                    friend.trendDirection === 'down' ? <TrendingDown className="w-3 h-3" /> :
+                                                        <Minus className="w-3 h-3" />}
+                                                {friend.trend > 0 ? '+' : ''}{friend.trend}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                                {friend.sparkline.length >= 2 && (
+                                    <div className="ftc-sparkline">
+                                        <MiniSparkline data={friend.sparkline} color={overallTrendColor} width={56} height={22} />
+                                    </div>
+                                )}
                             </div>
+
+                            {/* Category breakdown bars */}
+                            {friend.categories.length > 0 && (
+                                <div className="ftc-categories">
+                                    {friend.categories.map(cat => {
+                                        const deltaColor = cat.direction === 'up' ? '#7BC4A0' :
+                                            cat.direction === 'down' ? '#D4897B' : '#A8A29E';
+                                        return (
+                                            <div key={cat.icon} className="ftc-cat-row">
+                                                <span className="ftc-cat-icon" style={{ color: cat.color }}>
+                                                    {CATEGORY_ICONS[cat.icon]}
+                                                </span>
+                                                <span className="ftc-cat-label">{cat.label}</span>
+                                                <div className="ftc-cat-bar-track">
+                                                    <div
+                                                        className="ftc-cat-bar-fill"
+                                                        style={{
+                                                            width: `${Math.min(100, cat.recentAvg)}%`,
+                                                            backgroundColor: cat.color,
+                                                        }}
+                                                    />
+                                                </div>
+                                                <span className="ftc-cat-score">{cat.recentAvg}</span>
+                                                {cat.delta !== null && (
+                                                    <span className="ftc-cat-delta" style={{ color: deltaColor }}>
+                                                        {cat.delta > 0 ? '+' : ''}{cat.delta}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* Summary */}
+                            {friend.summary && (
+                                <p className="ftc-summary">{friend.summary}</p>
+                            )}
                         </div>
                     );
                 })}
