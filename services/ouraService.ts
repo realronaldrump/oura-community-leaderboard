@@ -9,7 +9,8 @@ import {
   DailySpO2,
   Workout,
   DailyStress,
-  DailyResilience
+  DailyResilience,
+  OuraEndpointDiagnostic
 } from '../types';
 import { formatLocalISODate, getOuraFetchEndISODate } from '../utils/date';
 
@@ -35,6 +36,7 @@ interface UnavailableEntry {
 
 class OuraService {
   private unavailableEndpointsByAvailability = new Map<string, Map<string, UnavailableEndpointState>>();
+  private endpointDiagnosticsByAvailability = new Map<string, Map<string, OuraEndpointDiagnostic>>();
   private readonly unavailableCacheKey = 'oura_unavailable_endpoints_v5';
   private readonly maxWindowDays = 90;
   private readonly maxConcurrentWindowRequests = 2;
@@ -85,6 +87,111 @@ class OuraService {
       return `profile:${scopedKey}`;
     }
     return `token:${token.slice(0, 20)}`;
+  }
+
+  private getEndpointLabel(endpoint: string): string {
+    switch (endpoint) {
+      case 'daily_resilience':
+        return 'Resilience';
+      case 'daily_stress':
+        return 'Stress';
+      case 'daily_spo2':
+        return 'SpO2';
+      default:
+        return endpoint.replace(/_/g, ' ');
+    }
+  }
+
+  private buildEndpointDiagnostic(
+    endpoint: string,
+    code: OuraEndpointDiagnostic['code'],
+    status?: number | null,
+    detail?: string | null
+  ): OuraEndpointDiagnostic {
+    const label = this.getEndpointLabel(endpoint);
+    const normalizedDetail = detail?.trim() || null;
+
+    let message: string;
+    switch (code) {
+      case 'missing_scope':
+        message = normalizedDetail
+          ? `Oura denied ${label}: ${normalizedDetail}`
+          : `Oura denied ${label} because this account is missing permission for that endpoint.`;
+        break;
+      case 'not_found':
+        message = normalizedDetail
+          ? `Oura reported ${label} unavailable: ${normalizedDetail}`
+          : `Oura reported ${label} is unavailable for this account.`;
+        break;
+      case 'forbidden':
+        message = normalizedDetail
+          ? `Oura returned 403 for ${label}: ${normalizedDetail}`
+          : `Oura returned 403 while loading ${label}.`;
+        break;
+      case 'bad_request':
+        message = normalizedDetail
+          ? `Oura rejected the ${label} request: ${normalizedDetail}`
+          : `Oura rejected the ${label} request.`;
+        break;
+      case 'rate_limited':
+        message = normalizedDetail
+          ? `Oura rate-limited ${label}: ${normalizedDetail}`
+          : `Oura rate-limited ${label}. Try again shortly.`;
+        break;
+      case 'unauthorized':
+        message = normalizedDetail
+          ? `Oura returned 401 for ${label}: ${normalizedDetail}`
+          : `Oura returned 401 while loading ${label}.`;
+        break;
+      case 'network':
+        message = normalizedDetail
+          ? `The ${label} request failed before Oura responded: ${normalizedDetail}`
+          : `The ${label} request failed before Oura responded.`;
+        break;
+      case 'request_failed':
+        message = normalizedDetail
+          ? `The ${label} request failed: ${normalizedDetail}`
+          : `The ${label} request failed.`;
+        break;
+      case 'skipped_missing_scope':
+        message = `This profile does not have the Oura permissions needed for ${label}. Reconnect the account and grant daily access.`;
+        break;
+      case 'no_data':
+        message = `Oura returned no ${label} records for this account or date range.`;
+        break;
+      default:
+        message = normalizedDetail || `Failed to load ${label}.`;
+        break;
+    }
+
+    return {
+      code,
+      endpoint,
+      message,
+      status: status ?? null,
+      detail: normalizedDetail,
+      recordedAt: new Date().toISOString(),
+    };
+  }
+
+  private setEndpointDiagnostic(availabilityKey: string, endpoint: string, diagnostic: OuraEndpointDiagnostic): void {
+    const diagnostics = this.endpointDiagnosticsByAvailability.get(availabilityKey) ?? new Map<string, OuraEndpointDiagnostic>();
+    diagnostics.set(endpoint, diagnostic);
+    this.endpointDiagnosticsByAvailability.set(availabilityKey, diagnostics);
+  }
+
+  private clearEndpointDiagnostic(availabilityKey: string, endpoint: string): void {
+    const diagnostics = this.endpointDiagnosticsByAvailability.get(availabilityKey);
+    if (!diagnostics) return;
+    diagnostics.delete(endpoint);
+    if (diagnostics.size === 0) {
+      this.endpointDiagnosticsByAvailability.delete(availabilityKey);
+    }
+  }
+
+  getEndpointDiagnostic(token: string, endpoint: string, explicitKey?: string): OuraEndpointDiagnostic | null {
+    const availabilityKey = this.getAvailabilityKey(token, explicitKey);
+    return this.endpointDiagnosticsByAvailability.get(availabilityKey)?.get(endpoint) ?? null;
   }
 
   private loadUnavailableCache(): void {
@@ -157,6 +264,7 @@ class OuraService {
   clearUnavailableEndpoints(token: string, availabilityKey?: string): void {
     const key = this.getAvailabilityKey(token, availabilityKey);
     this.unavailableEndpointsByAvailability.delete(key);
+    this.endpointDiagnosticsByAvailability.delete(key);
     this.persistUnavailableCache();
   }
 
@@ -290,6 +398,18 @@ class OuraService {
     const availabilityKey = this.getAvailabilityKey(token, options?.availabilityKey);
 
     if (optional && this.isEndpointUnavailable(availabilityKey, endpoint)) {
+      const cachedState = this.unavailableEndpointsByAvailability.get(availabilityKey)?.get(endpoint);
+      if (cachedState) {
+        this.setEndpointDiagnostic(
+          availabilityKey,
+          endpoint,
+          this.buildEndpointDiagnostic(
+            endpoint,
+            cachedState.reason === 'missing_scope' ? 'missing_scope' : 'not_found',
+            cachedState.reason === 'missing_scope' ? 403 : 404
+          )
+        );
+      }
       return [];
     }
 
@@ -330,7 +450,14 @@ class OuraService {
       }
 
       if (!response) {
-        if (optional) return results;
+        if (optional) {
+          this.setEndpointDiagnostic(
+            availabilityKey,
+            endpoint,
+            this.buildEndpointDiagnostic(endpoint, 'network', null, lastError instanceof Error ? lastError.message : String(lastError ?? 'Request timed out'))
+          );
+          return results;
+        }
         throw lastError ?? new Error(`Failed to fetch ${endpoint} data`);
       }
 
@@ -340,10 +467,22 @@ class OuraService {
         if (optional && this.isMissingScopeError(response.status, detail)) {
           this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
           this.markEndpointUnavailable(availabilityKey, endpoint, 'missing_scope');
+          this.setEndpointDiagnostic(
+            availabilityKey,
+            endpoint,
+            this.buildEndpointDiagnostic(endpoint, 'missing_scope', response.status, detail)
+          );
           return results;
         }
 
         if (response.status === 401) {
+          if (optional) {
+            this.setEndpointDiagnostic(
+              availabilityKey,
+              endpoint,
+              this.buildEndpointDiagnostic(endpoint, 'unauthorized', response.status, detail)
+            );
+          }
           const suffix = detail ? `: ${detail}` : '';
           throw new Error(`Unauthorized while fetching ${endpoint}${suffix}`);
         }
@@ -351,6 +490,11 @@ class OuraService {
         if (optional && response.status === 404) {
           this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
           this.markEndpointUnavailable(availabilityKey, endpoint, 'not_found');
+          this.setEndpointDiagnostic(
+            availabilityKey,
+            endpoint,
+            this.buildEndpointDiagnostic(endpoint, 'not_found', response.status, detail)
+          );
           return results;
         }
 
@@ -358,11 +502,31 @@ class OuraService {
           this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
           // Don't blacklist 403s — they may be transient (subscription lapses, server-side
           // permission propagation delays). Retrying on the next sync is cheap.
+          this.setEndpointDiagnostic(
+            availabilityKey,
+            endpoint,
+            this.buildEndpointDiagnostic(endpoint, 'forbidden', response.status, detail)
+          );
           return results;
         }
 
-        if (optional && (response.status === 400 || response.status === 429)) {
+        if (optional && response.status === 400) {
           this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
+          this.setEndpointDiagnostic(
+            availabilityKey,
+            endpoint,
+            this.buildEndpointDiagnostic(endpoint, 'bad_request', response.status, detail)
+          );
+          return results;
+        }
+
+        if (optional && response.status === 429) {
+          this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
+          this.setEndpointDiagnostic(
+            availabilityKey,
+            endpoint,
+            this.buildEndpointDiagnostic(endpoint, 'rate_limited', response.status, detail)
+          );
           return results;
         }
 
@@ -388,6 +552,8 @@ class OuraService {
     endDate: string,
     options?: DateWindowOptions
   ): Promise<T[]> {
+    const availabilityKey = this.getAvailabilityKey(token, options?.availabilityKey);
+    this.clearEndpointDiagnostic(availabilityKey, endpoint);
     const windows = this.splitDateRange(startDate, endDate, options?.windowDays ?? this.maxWindowDays);
     const chunksByWindow: T[][] = new Array(windows.length);
     let nextWindowIndex = 0;

@@ -212,6 +212,15 @@ export interface DailyResilience {
   contributors?: ResilienceContributors;
 }
 
+export interface OuraEndpointDiagnostic {
+  code: 'missing_scope' | 'not_found' | 'forbidden' | 'bad_request' | 'rate_limited' | 'unauthorized' | 'network' | 'request_failed' | 'skipped_missing_scope' | 'no_data';
+  endpoint: string;
+  message: string;
+  status?: number | null;
+  detail?: string | null;
+  recordedAt: string;
+}
+
 export interface Workout {
   id: string;
   activity: string;
@@ -269,4 +278,5 @@ export interface DailyStats {
   ringConfiguration?: any[];
   cardiovascularAge?: any[];
   vo2Max?: any[];
+  resilienceDiagnostic?: OuraEndpointDiagnostic | null;
 }

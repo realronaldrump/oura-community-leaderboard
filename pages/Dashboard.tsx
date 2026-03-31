@@ -1298,6 +1298,7 @@ const Dashboard: React.FC = () => {
     const spo2History = activeData?.spo2 || [];
     const stressHistory = activeData?.stress || [];
     const resilienceHistory = activeData?.resilience || [];
+    const resilienceDiagnostic = activeData?.resilienceDiagnostic ?? activeAllTimeData?.resilienceDiagnostic ?? null;
     const hrData = activeData?.heartrate || [];
 
     const availableDays = useMemo(() => {
@@ -1456,6 +1457,10 @@ const Dashboard: React.FC = () => {
         ? getResilienceLevelLabel(currentResilience.level)
         : null;
     const currentResilienceScore = getResilienceScore(currentResilience);
+    const resilienceCardValue = currentResilienceDisplayValue ?? (resilienceDiagnostic ? 'Unavailable' : null);
+    const resilienceCardSubtext = !currentResilience ? resilienceDiagnostic?.message : undefined;
+    const resilienceCardColor = resilienceDiagnostic ? '#D4897B' : getResilienceColor(currentResilience?.level);
+    const canOpenResilienceDetail = resilienceHistory.length > 0;
     const bodyTempDeviationF = (currentReadiness?.temperature_deviation ?? currentReadiness?.temperature_trend_deviation) != null
         ? (currentReadiness!.temperature_deviation ?? currentReadiness!.temperature_trend_deviation!) * CELSIUS_DELTA_TO_FAHRENHEIT_DELTA
         : null;
@@ -2729,7 +2734,16 @@ const Dashboard: React.FC = () => {
                                 <MetricCard title="Avg HR" value={currentSession?.average_heart_rate?.toFixed(0)} unit="bpm" color="#D4897B" showDrillDownIndicator onClick={() => handleMetricCardClick('heart_rate', currentSession?.average_heart_rate ?? null, 'bpm', '#D4897B')} />
                                 <MetricCard title="SpO2" value={currentSpo2DisplayValue} unit="%" color="#7BA8D4" showDrillDownIndicator onClick={() => handleMetricCardClick('spo2', currentSpo2?.spo2_percentage?.average ?? null, '%', '#7BA8D4')} />
                                 <MetricCard title="Stress" value={getStressLabel(currentStress?.day_summary)} color={getStressColor(currentStress?.day_summary)} showDrillDownIndicator onClick={() => handleMetricCardClick('stress', currentStress?.stress_high ?? null, undefined, getStressColor(currentStress?.day_summary))} />
-                                <MetricCard title="Resilience" value={currentResilienceDisplayValue} color={getResilienceColor(currentResilience?.level)} showDrillDownIndicator onClick={() => handleMetricCardClick('resilience', currentResilienceScore, 'score', getResilienceColor(currentResilience?.level))} />
+                                <MetricCard
+                                    title="Resilience"
+                                    value={resilienceCardValue}
+                                    color={resilienceCardColor}
+                                    subtext={resilienceCardSubtext}
+                                    showDrillDownIndicator={canOpenResilienceDetail}
+                                    onClick={canOpenResilienceDetail
+                                        ? () => handleMetricCardClick('resilience', currentResilienceScore, 'score', resilienceCardColor)
+                                        : undefined}
+                                />
                             </div>
                             <div className="grid grid-cols-2 gap-3 mb-5">
                                 <MetricCard title="Breathing" value={currentSession?.average_breath?.toFixed(1)} unit="br/min" subtext="Average during sleep" showDrillDownIndicator onClick={() => handleMetricCardClick('breathing_rate', currentSession?.average_breath ?? null, 'br/min', '#7BC4A0')} />

@@ -1,7 +1,7 @@
 import { getCachedDailyStats, setCachedDailyStats } from '../services/dailyStatsCache';
 import { firebaseService } from '../services/firebaseService';
 import { ouraService } from '../services/ouraService';
-import { DailyStats } from '../types';
+import { DailyStats, OuraEndpointDiagnostic } from '../types';
 import { getOuraFetchEndISODate, shiftLocalISODate } from '../utils/date';
 import { hasAnyOuraScope, normalizeGrantedOuraScopes, OURA_SCOPE_CANDIDATES } from '../utils/ouraScopes';
 import { deriveProfileTemporalMetadata } from '../utils/profileTemporal';
@@ -154,6 +154,32 @@ const getErrorMessage = (reason: unknown): string => {
     }
 };
 
+const buildDiagnostic = (
+    code: OuraEndpointDiagnostic['code'],
+    endpoint: string,
+    message: string,
+    status?: number | null,
+    detail?: string | null
+): OuraEndpointDiagnostic => ({
+    code,
+    endpoint,
+    message,
+    status: status ?? null,
+    detail: detail ?? null,
+    recordedAt: new Date().toISOString(),
+});
+
+const buildRejectedEndpointDiagnostic = (endpoint: string, reason: unknown): OuraEndpointDiagnostic => {
+    const message = getErrorMessage(reason);
+    const normalized = message.toLowerCase();
+
+    if (normalized.includes('unauthorized') || normalized.includes('401')) {
+        return buildDiagnostic('unauthorized', endpoint, `Oura returned 401 while loading Resilience: ${message}`, 401, message);
+    }
+
+    return buildDiagnostic('request_failed', endpoint, `The Resilience request failed: ${message}`, null, message);
+};
+
 const resolveCriticalSettled = (settled: PromiseSettledResult<any[]>[], names: string[]): any[][] => {
     const failures: Array<{ name: string; reason: unknown }> = [];
 
@@ -187,7 +213,8 @@ const buildDailyStats = (
     spo2: any[], stress: any[], resilience: any[], heartrate: any[],
     workout: any[], guidedSession: any[], sleepTime: any[], tag: any[],
     enhancedTag: any[], restModePeriod: any[], ringConfiguration: any[],
-    cardiovascularAge: any[], vo2Max: any[]
+    cardiovascularAge: any[], vo2Max: any[],
+    resilienceDiagnostic?: OuraEndpointDiagnostic | null
 ): DailyStats => ({
     sleep: mergeCollectionByDay([], sleep.map(s => ({ ...s, score: toNumberOrNull(s.score) }))),
     readiness: mergeCollectionByDay([], readiness.map(r => ({ ...r, score: toNumberOrNull(r.score) }))),
@@ -211,6 +238,7 @@ const buildDailyStats = (
     ringConfiguration,
     cardiovascularAge: mergeCollectionByDay([], cardiovascularAge),
     vo2Max: mergeCollectionByDay([], vo2Max),
+    resilienceDiagnostic: resilienceDiagnostic ?? null,
 });
 
 export const fetchDailyStats = async (
@@ -277,13 +305,32 @@ export const fetchDailyStats = async (
         'sleepTime', 'tag', 'enhancedTag', 'restModePeriod', 'ringConfiguration',
         'cardiovascularAge', 'vo2Max'
     ]);
+    const resilienceSettled = suppSettled[2];
+
+    const resilienceDiagnostic = !canFetchResilience
+        ? buildDiagnostic(
+            'skipped_missing_scope',
+            'daily_resilience',
+            'This profile does not have the Oura permissions needed for Resilience. Reconnect the account and grant daily access.'
+        )
+        : resilienceSettled?.status === 'rejected'
+            ? buildRejectedEndpointDiagnostic('daily_resilience', resilienceSettled.reason)
+            : ouraService.getEndpointDiagnostic(token, 'daily_resilience', availabilityKey)
+                ?? (resilience.length === 0
+                    ? buildDiagnostic(
+                        'no_data',
+                        'daily_resilience',
+                        'Oura returned no Resilience records for this account or date range.'
+                    )
+                    : null);
 
     const stats = buildDailyStats(
         sleep, readiness, activity, sessions,
         spo2, stress, resilience, heartrate,
         workout, guidedSession, sleepTime, tag,
         enhancedTag, restModePeriod, ringConfiguration,
-        cardiovascularAge, vo2Max
+        cardiovascularAge, vo2Max,
+        resilienceDiagnostic
     );
 
     if (config.profileId) {
@@ -317,6 +364,7 @@ const mergeDailyStats = (existingData: DailyStats, incomingData: DailyStats): Da
         ringConfiguration: mergeCollection(existingData.ringConfiguration || [], incomingData.ringConfiguration || [], sortByTimestampDesc),
         cardiovascularAge: mergeCollectionByDay(existingData.cardiovascularAge || [], incomingData.cardiovascularAge || []),
         vo2Max: mergeCollectionByDay(existingData.vo2Max || [], incomingData.vo2Max || []),
+        resilienceDiagnostic: incomingData.resilienceDiagnostic ?? null,
     };
 };
 
