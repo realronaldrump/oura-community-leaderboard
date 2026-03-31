@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, ReferenceLine, Dot } from 'recharts';
+import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, ReferenceLine } from 'recharts';
 import { HeartRate } from '../../types';
 import { IOSModal, IOSButton, IOSListItem } from '../ios';
 import { Clock, Info } from 'lucide-react';
@@ -30,22 +30,6 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
             case '48h': return 48;
             default: return 24;
         }
-    };
-
-    const CustomDot = (props: any) => {
-        const { cx, cy, payload } = props;
-        return (
-            <Dot
-                cx={cx}
-                cy={cy}
-                r={selectedPoint?.timestamp === payload?.timestamp ? 6 : 3}
-                fill={selectedPoint?.timestamp === payload?.timestamp ? '#D4897B' : '#D4897B'}
-                stroke="#D4897B"
-                strokeWidth={selectedPoint?.timestamp === payload?.timestamp ? 3 : 1.5}
-                className="cursor-pointer transition-all duration-300 hover:r-5"
-                onClick={() => handleDataPointClick(props)}
-            />
-        );
     };
 
     // Filter to selected time range and transform data for chart
@@ -173,9 +157,9 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                             type="monotone"
                             dataKey="bpm"
                             stroke="#D4897B"
-                            dot={<CustomDot />}
-                            activeDot={{ r: 6, stroke: '#D4897B', strokeWidth: 3 }}
-                            strokeWidth={1.5}
+                            dot={false}
+                            activeDot={false}
+                            strokeWidth={2}
                         />
                     </LineChart>
                 </ResponsiveContainer>

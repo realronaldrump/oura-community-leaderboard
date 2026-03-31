@@ -2443,7 +2443,7 @@ const Dashboard: React.FC = () => {
                         </div>
 
                         {/* ── Scores ── */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5 mb-10">
+                        <div className="grid grid-cols-3 gap-3 sm:gap-5 mb-10">
                             {([
                                 { type: 'readiness' as const, label: 'Readiness', score: currentReadiness?.score, color: '#7BC4A0' },
                                 { type: 'sleep' as const, label: 'Sleep', score: currentSleep?.score, color: '#7BA8D4' },
