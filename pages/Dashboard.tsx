@@ -1045,6 +1045,7 @@ const Dashboard: React.FC = () => {
         isOpen: boolean;
         metricType: MetricDetailType | null;
         currentValue: number | null;
+        currentTimestamp?: string;
         historyData: MetricHistoryPoint[];
         unit?: string;
         color?: string;
@@ -1695,7 +1696,8 @@ const Dashboard: React.FC = () => {
         metricType: MetricDetailType,
         currentValue: number | null,
         unit?: string,
-        color?: string
+        color?: string,
+        currentTimestamp?: string
     ) => {
         if (!activeProfile?.id) return;
 
@@ -1706,7 +1708,7 @@ const Dashboard: React.FC = () => {
         const historyData = bestAvailable
             ? getMetricHistoryData(metricType, bestAvailable)
             : [];
-        setMetricDetailModal({ isOpen: true, metricType, currentValue, historyData, unit, color, date: referenceDay });
+        setMetricDetailModal({ isOpen: true, metricType, currentValue, currentTimestamp, historyData, unit, color, date: referenceDay });
 
         if (!cachedAllTime) {
             void queryClient.fetchQuery({
@@ -2469,9 +2471,10 @@ const Dashboard: React.FC = () => {
             />
             <MetricDetailModal
                 isOpen={metricDetailModal.isOpen}
-                onClose={() => setMetricDetailModal({ isOpen: false, metricType: null, currentValue: null, historyData: [] })}
+                onClose={() => setMetricDetailModal({ isOpen: false, metricType: null, currentValue: null, currentTimestamp: undefined, historyData: [] })}
                 metricType={metricDetailModal.metricType || 'hrv'}
                 currentValue={metricDetailModal.currentValue}
+                currentTimestamp={metricDetailModal.currentTimestamp}
                 historyData={metricDetailModal.historyData}
                 unit={metricDetailModal.unit} color={metricDetailModal.color} date={metricDetailModal.date}
             />
@@ -2691,8 +2694,8 @@ const Dashboard: React.FC = () => {
                             </div>
                             {/* Timing & details */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-                                <MetricCard title="Bedtime" value={formatTime(currentSession?.bedtime_start)} subtext="Fell asleep" showDrillDownIndicator onClick={() => handleMetricCardClick('bedtime', currentBedtimeMinutes, undefined, '#A08BBE')} />
-                                <MetricCard title="Wake Time" value={formatTime(currentSession?.bedtime_end)} subtext="Woke up" showDrillDownIndicator onClick={() => handleMetricCardClick('wake_time', currentWakeTimeMinutes, undefined, '#D4B87B')} />
+                                <MetricCard title="Bedtime" value={formatTime(currentSession?.bedtime_start)} subtext="Fell asleep" showDrillDownIndicator onClick={() => handleMetricCardClick('bedtime', currentBedtimeMinutes, undefined, '#A08BBE', currentSession?.bedtime_start)} />
+                                <MetricCard title="Wake Time" value={formatTime(currentSession?.bedtime_end)} subtext="Woke up" showDrillDownIndicator onClick={() => handleMetricCardClick('wake_time', currentWakeTimeMinutes, undefined, '#D4B87B', currentSession?.bedtime_end)} />
                                 <MetricCard title="Latency" value={currentSession?.latency ? `${Math.round(currentSession.latency / 60)}` : null} unit="min" subtext="Time to fall asleep" showDrillDownIndicator onClick={() => handleMetricCardClick('latency', currentSession?.latency ?? null, 'min', '#7BC4A0')} />
                                 <MetricCard title="Awake Time" value={formatDuration(currentSession?.awake_time)} subtext="During sleep" showDrillDownIndicator onClick={() => handleMetricCardClick('awake_time', currentSession?.awake_time ?? null, 'hours', '#D4897B')} />
                             </div>

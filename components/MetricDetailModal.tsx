@@ -20,6 +20,7 @@ import { IOSModal, IOSListItem, IOSButton } from './ios';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatISODateForDisplay } from '../utils/date';
 import { CLAY_TOOLTIP_STYLE, CLAY_GRID_STROKE, CLAY_AXIS_STYLE } from '../utils/chartStyles';
+import { formatRecordLocalClockTime, getLocalMinutesOfDayFromIso } from '../utils/temporal';
 
 interface MetricDataPoint {
     date: string;
@@ -59,6 +60,7 @@ interface MetricDetailModalProps {
     onClose: () => void;
     metricType: MetricDetailType;
     currentValue?: number | null;
+    currentTimestamp?: string;
     historyData: MetricDataPoint[];
     unit?: string;
     color?: string;
@@ -658,6 +660,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
     onClose,
     metricType,
     currentValue,
+    currentTimestamp,
     historyData,
     unit,
     color,
@@ -679,6 +682,19 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
     const showTrend = config.showTrend ?? config.valueFormat !== 'clock';
     const showInsights = config.showInsights ?? true;
     const showPercentile = config.showPercentile ?? true;
+
+    const resolvedCurrentValue = (() => {
+        if (config.valueFormat !== 'clock' || !currentTimestamp) return currentValue ?? null;
+
+        const minutes = getLocalMinutesOfDayFromIso(currentTimestamp);
+        if (minutes == null) return currentValue ?? null;
+
+        if (metricType === 'bedtime') {
+            return minutes < 12 * 60 ? minutes + (24 * 60) : minutes;
+        }
+
+        return minutes;
+    })();
 
     const formatMetricValue = (
         value: number | null | undefined,
@@ -704,6 +720,14 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                 return includeUnit && effectiveUnit ? `${formatted} ${effectiveUnit}` : formatted;
             }
         }
+    };
+
+    const formatCurrentMetricValue = (): string => {
+        if (config.valueFormat === 'clock' && currentTimestamp) {
+            return formatRecordLocalClockTime(currentTimestamp);
+        }
+
+        return formatMetricValue(resolvedCurrentValue);
     };
 
     const compareMetricValues = (left: number, right: number, sortBy: 'best' | 'worst') => {
@@ -800,7 +824,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
         return sortedCategories[sortedCategories.length - 1];
     };
 
-    const currentCategory = currentValue !== null && currentValue !== undefined ? getCategory(currentValue) : null;
+    const currentCategory = resolvedCurrentValue !== null && resolvedCurrentValue !== undefined ? getCategory(resolvedCurrentValue) : null;
 
     const categoryBoundaries = Array.from(
         new Set(config.categories.flatMap((category) => [category.range[0], category.range[1]]))
@@ -816,12 +840,12 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
     const observedMax = historyData.reduce((maxValue, point) => Math.max(maxValue, point.value), Number.NEGATIVE_INFINITY);
     const observedMin = historyData.reduce((minValue, point) => Math.min(minValue, point.value), Number.POSITIVE_INFINITY);
 
-    const axisMin = Math.min(rawAxisMin, observedMin, currentValue ?? Number.POSITIVE_INFINITY);
+    const axisMin = Math.min(rawAxisMin, observedMin, resolvedCurrentValue ?? Number.POSITIVE_INFINITY);
     const axisMax = Math.max(
         axisMin + 1,
         hasOpenEndedTop
-            ? Math.max(finiteAxisMax + inferredOpenEndedSpan, observedMax, currentValue ?? Number.NEGATIVE_INFINITY)
-            : Math.max(rawAxisMax, observedMax, currentValue ?? Number.NEGATIVE_INFINITY)
+            ? Math.max(finiteAxisMax + inferredOpenEndedSpan, observedMax, resolvedCurrentValue ?? Number.NEGATIVE_INFINITY)
+            : Math.max(rawAxisMax, observedMax, resolvedCurrentValue ?? Number.NEGATIVE_INFINITY)
     );
 
     const toAxisPercent = (value: number) => {
@@ -829,7 +853,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
         return Math.max(0, Math.min(100, pct));
     };
 
-    const markerPercent = currentValue !== null && currentValue !== undefined ? toAxisPercent(currentValue) : null;
+    const markerPercent = resolvedCurrentValue !== null && resolvedCurrentValue !== undefined ? toAxisPercent(resolvedCurrentValue) : null;
     const axisTickValues = Array.from(new Set([...finiteBoundaries, axisMax])).sort((a, b) => a - b);
     const markerLabelStyle = (() => {
         if (markerPercent === null) return null;
@@ -854,10 +878,10 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
     };
 
     const getInsights = () => {
-        if (!showInsights || currentValue === null || currentValue === undefined) return [];
+        if (!showInsights || resolvedCurrentValue === null || resolvedCurrentValue === undefined) return [];
 
         const insights: string[] = [];
-        const percentile = showPercentile ? getPercentile(currentValue) : null;
+        const percentile = showPercentile ? getPercentile(resolvedCurrentValue) : null;
 
         if (percentile !== null) {
             if (percentile >= 75) {
@@ -915,8 +939,8 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
         ...(showPercentile
             ? [{
                 title: 'Personal Percentile',
-                subtitle: currentValue !== null && currentValue !== undefined
-                    ? `${getPercentile(currentValue)}th compared to history`
+                subtitle: resolvedCurrentValue !== null && resolvedCurrentValue !== undefined
+                    ? `${getPercentile(resolvedCurrentValue)}th compared to history`
                     : '--',
                 icon: <div className="text-[#7BA8D4]"><TrendingUp className="w-4 h-4" /></div>,
             }]
@@ -944,7 +968,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                 <p className="text-[#A8A29E] text-sm mb-1">Current Value</p>
                                 <div className="flex items-baseline gap-2">
                                     <span className="text-4xl font-bold font-mono" style={{ color: effectiveColor }}>
-                                        {formatMetricValue(currentValue)}
+                                        {formatCurrentMetricValue()}
                                     </span>
                                 </div>
                             </div>
@@ -1061,9 +1085,9 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                     <div className="bg-[#FAF7F4] p-4 rounded-xl border border-[rgba(0,0,0,0.06)]">
                         <div className="flex items-start justify-between gap-4 mb-3">
                             <h4 className="text-sm font-medium text-[#2D2A26]">Category Ranges</h4>
-                            {currentValue !== null && currentValue !== undefined && (
+                            {resolvedCurrentValue !== null && resolvedCurrentValue !== undefined && (
                                 <span className="text-[11px] text-[#A8A29E] font-mono">
-                                    Current: {formatMetricValue(currentValue)}
+                                    Current: {formatCurrentMetricValue()}
                                 </span>
                             )}
                         </div>
@@ -1086,7 +1110,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                         className="absolute top-0 text-[10px] text-[#FAF7F4] font-semibold bg-[#2D2A26] px-1.5 py-0.5 rounded whitespace-nowrap"
                                         style={markerLabelStyle}
                                     >
-                                        {formatMetricValue(currentValue)}
+                                        {formatCurrentMetricValue()}
                                     </span>
                                 )}
                                 <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-[#F0EBE5] rounded-full overflow-hidden">
