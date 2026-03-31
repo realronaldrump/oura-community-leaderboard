@@ -1,5 +1,5 @@
-import React from 'react';
-import { ChevronDown } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Check, ChevronDown } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { getProfileDisplayName } from '../utils/profileName';
 
@@ -13,8 +13,8 @@ const PrimaryProfileSwitcher: React.FC<PrimaryProfileSwitcherProps> = ({
     selectClassName = '',
 }) => {
     const { profiles, activeProfileId, setActiveProfileId } = useUser();
-
-    if (profiles.length < 2) return null;
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
 
     const fallbackProfileId = profiles[0]?.id || '';
     const selectedProfileId =
@@ -22,22 +22,82 @@ const PrimaryProfileSwitcher: React.FC<PrimaryProfileSwitcherProps> = ({
             ? activeProfileId
             : fallbackProfileId;
 
+    const selectedProfile = profiles.find((p) => p.id === selectedProfileId);
+
+    // Close on outside click
+    const handleClickOutside = useCallback((event: MouseEvent) => {
+        if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+            setIsOpen(false);
+        }
+    }, []);
+
+    // Close on Escape
+    const handleKeyDown = useCallback((event: KeyboardEvent) => {
+        if (event.key === 'Escape') setIsOpen(false);
+    }, []);
+
+    useEffect(() => {
+        if (isOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('keydown', handleKeyDown);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isOpen, handleClickOutside, handleKeyDown]);
+
+    if (profiles.length < 2) return null;
+
+    const handleSelect = (profileId: string) => {
+        setActiveProfileId(profileId || null);
+        setIsOpen(false);
+    };
+
     return (
-        <div className={`relative ${className}`}>
-            <select
-                value={selectedProfileId}
-                onChange={(event) => setActiveProfileId(event.target.value || null)}
-                className={`appearance-none pl-3 pr-9 py-2 rounded-md bg-white border border-[rgba(0,0,0,0.06)] text-sm text-[#2D2A26] focus:outline-none focus:border-[#6B9E8A] transition-colors ${selectClassName}`}
+        <div ref={containerRef} className={`profile-switcher ${className}`}>
+            {/* Trigger button */}
+            <button
+                type="button"
+                onClick={() => setIsOpen((prev) => !prev)}
+                className={`profile-switcher__trigger ${isOpen ? 'is-open' : ''} ${selectClassName}`}
                 aria-label="Primary profile"
+                aria-haspopup="listbox"
+                aria-expanded={isOpen}
                 title="Switch primary profile"
             >
-                {profiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                        {getProfileDisplayName(profile)}
-                    </option>
-                ))}
-            </select>
-            <ChevronDown className="w-4 h-4 text-[#A8A29E] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <span className="profile-switcher__name">
+                    {selectedProfile ? getProfileDisplayName(selectedProfile) : 'Select profile'}
+                </span>
+                <ChevronDown
+                    className={`profile-switcher__chevron ${isOpen ? 'is-open' : ''}`}
+                />
+            </button>
+
+            {/* Dropdown */}
+            {isOpen && (
+                <ul className="profile-switcher__menu" role="listbox">
+                    {profiles.map((profile) => {
+                        const isSelected = profile.id === selectedProfileId;
+                        return (
+                            <li key={profile.id} role="option" aria-selected={isSelected}>
+                                <button
+                                    type="button"
+                                    onClick={() => handleSelect(profile.id)}
+                                    className={`profile-switcher__option ${isSelected ? 'is-active' : ''}`}
+                                >
+                                    <span className="profile-switcher__option-check">
+                                        {isSelected && <Check className="w-3.5 h-3.5" />}
+                                    </span>
+                                    <span className="profile-switcher__option-label">
+                                        {getProfileDisplayName(profile)}
+                                    </span>
+                                </button>
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
         </div>
     );
 };

@@ -783,6 +783,160 @@ h1, h2, h3, h4 {
 }
 
 /* ========================================
+   PROFILE SWITCHER - Clay Dropdown
+   ======================================== */
+
+.profile-switcher {
+  position: relative;
+  z-index: 50;
+}
+
+.profile-switcher__trigger {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.7rem 0.45rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: var(--shadow-clay-sm);
+  transition: box-shadow 0.2s ease, transform 0.15s ease, border-color 0.2s ease;
+}
+
+.profile-switcher__trigger:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-clay);
+}
+
+.profile-switcher__trigger:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-clay-inset);
+}
+
+.profile-switcher__trigger.is-open {
+  border-color: rgba(107, 158, 138, 0.3);
+  box-shadow: var(--shadow-clay), 0 0 0 3px rgba(107, 158, 138, 0.1);
+}
+
+.profile-switcher__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-switcher__chevron {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.profile-switcher__chevron.is-open {
+  transform: rotate(180deg);
+}
+
+/* Dropdown menu */
+@keyframes profileMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.profile-switcher__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 100%;
+  width: max-content;
+  max-width: 18rem;
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem;
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-clay-lg);
+  animation: profileMenuIn 0.18s ease-out;
+  overflow: hidden;
+}
+
+.profile-switcher__menu li {
+  margin: 0;
+  padding: 0;
+}
+
+.profile-switcher__option {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.3;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.profile-switcher__option:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-subtle);
+  box-shadow: var(--shadow-clay-sm);
+}
+
+.profile-switcher__option:active {
+  box-shadow: var(--shadow-clay-inset);
+  transform: scale(0.98);
+}
+
+.profile-switcher__option.is-active {
+  background: rgba(107, 158, 138, 0.08);
+  border-color: rgba(107, 158, 138, 0.2);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.profile-switcher__option.is-active:hover {
+  background: rgba(107, 158, 138, 0.12);
+  box-shadow: none;
+}
+
+.profile-switcher__option-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.profile-switcher__option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ========================================
    FOCUS STATES - Accessible
    ======================================== */
 
