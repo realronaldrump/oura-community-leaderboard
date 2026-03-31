@@ -2460,7 +2460,7 @@ const Dashboard: React.FC = () => {
                                         onClick={() => handleScoreCardClick(type)}
                                         className="score-card-v2 group"
                                     >
-                                        <div className="relative w-[76px] h-[76px] sm:w-[88px] sm:h-[88px] mx-auto mb-3">
+                                        <div className="relative w-[60px] h-[60px] sm:w-[88px] sm:h-[88px] mx-auto mb-1 sm:mb-3">
                                             <svg viewBox="0 0 76 76" className="w-full h-full transform -rotate-90">
                                                 <circle cx="38" cy="38" r={radius} fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="3" />
                                                 <circle cx="38" cy="38" r={radius} fill="none" stroke={color} strokeWidth="3" strokeDasharray={circumference} strokeDashoffset={circumference - progress} strokeLinecap="round" className="transition-all duration-1000 ease-out" style={{ filter: `drop-shadow(0 0 4px ${color}22)` }} />
