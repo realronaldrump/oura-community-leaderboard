@@ -254,11 +254,9 @@ export const formatDuration = (seconds: number | null | undefined): string => {
   return `${minutes}m`;
 };
 
-export const formatTime = (isoString: string | undefined): string => {
-  if (!isoString) return '--';
-  const date = new Date(isoString);
-  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-};
+export const formatTime = (isoString: string | undefined): string => (
+  formatRecordLocalClockTime(isoString)
+);
 
 export interface DailyStats {
   sleep: DailySleep[];
