@@ -9,6 +9,7 @@ import { oauthService, OAuthRequestError } from './services/oauthService';
 import { competitionService } from './services/competitionService';
 import { getProfileDisplayName } from './utils/profileName';
 import { getCompetitionInviteToken } from './utils/inviteLink';
+import { formatISODateForDisplay } from './utils/date';
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
     Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -141,7 +142,7 @@ const Router = () => {
                         });
                         setDialogState({
                             title: 'Competition Joined',
-                            message: `You joined ${result.competition.title}. It starts ${new Date(`${result.competition.startDate}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.`,
+                            message: `You joined ${result.competition.title}. It starts ${formatISODateForDisplay(result.competition.startDate, 'en-US', { month: 'short', day: 'numeric' })}.`,
                         });
                     } catch (error) {
                         console.error('Competition invite acceptance failed', error);

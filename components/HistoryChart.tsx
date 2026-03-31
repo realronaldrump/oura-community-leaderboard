@@ -1,6 +1,7 @@
 import React from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Dot } from 'recharts';
 import { CLAY_TOOLTIP_STYLE } from '../utils/chartStyles';
+import { formatISODateForDisplay } from '../utils/date';
 
 interface HistoryChartProps {
   data: any[];
@@ -65,10 +66,7 @@ const HistoryChart: React.FC<HistoryChartProps> = ({ data, dataKey, color, heigh
           />
           <Tooltip
             contentStyle={CLAY_TOOLTIP_STYLE}
-            labelFormatter={(value) => {
-              const d = new Date(value + 'T12:00:00');
-              return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            }}
+            labelFormatter={(value) => formatISODateForDisplay(value, 'en-US', { month: 'short', day: 'numeric' })}
             formatter={(value: number) => [value, '']}
           />
           <Line

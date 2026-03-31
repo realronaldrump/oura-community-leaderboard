@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { formatISODateForDisplay } from '../utils/date';
+import { getUTCDateFromISODate } from '../utils/temporal';
 
 /* ─── Types ──────────────────────────────────────────────────────── */
 
@@ -24,6 +26,8 @@ type DateRangePickerProps = {
     label?: string;
     /** "dropdown" (default) = trigger + flyout panel. "field" = inline form field. */
     variant?: 'dropdown' | 'field';
+    /** Optional profile-local "today" ISO day for highlights and calendar anchoring. */
+    todayIsoDay?: string;
 };
 
 /* ─── Constants ──────────────────────────────────────────────────── */
@@ -44,19 +48,19 @@ const MONTH_NAMES = [
 
 /* ─── Helpers ────────────────────────────────────────────────────── */
 
-const toDateMs = (isoDay: string): number => new Date(`${isoDay}T12:00:00`).getTime();
+const toDateMs = (isoDay: string): number => getUTCDateFromISODate(isoDay)?.getTime() || 0;
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 const isoFromParts = (y: number, m: number, d: number) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
 
 const formatDayLong = (isoDay: string): string =>
-    new Date(`${isoDay}T12:00:00`).toLocaleDateString('en-US', {
+    formatISODateForDisplay(isoDay, 'en-US', {
         weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
     });
 
 const formatDayShort = (isoDay: string): string =>
-    new Date(`${isoDay}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    formatISODateForDisplay(isoDay, 'en-US', { month: 'short', day: 'numeric' });
 
 const clampRange = (start: string, end: string) =>
     start <= end ? { start, end } : { start: end, end: start };
@@ -76,9 +80,9 @@ const findClosestDay = (target: string, dates: string[]): string | undefined => 
 
 /** Build the list of ISO day strings for every cell in a month grid. */
 const buildMonthGrid = (year: number, month: number): (string | null)[] => {
-    const first = new Date(year, month, 1);
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const startDow = first.getDay();
+    const first = new Date(Date.UTC(year, month, 1, 12, 0, 0, 0));
+    const daysInMonth = new Date(Date.UTC(year, month + 1, 0, 12, 0, 0, 0)).getUTCDate();
+    const startDow = first.getUTCDay();
     const cells: (string | null)[] = [];
     for (let i = 0; i < startDow; i++) cells.push(null);
     for (let d = 1; d <= daysInMonth; d++) cells.push(isoFromParts(year, month, d));
@@ -100,6 +104,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
     max: maxProp,
     label,
     variant = 'dropdown',
+    todayIsoDay,
 }) => {
     const dates = datesProp ?? [];
     const rootRef = useRef<HTMLDivElement>(null);
@@ -223,25 +228,25 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
 
     /* ── Calendar month state ─────────────────────── */
 
-    const anchorDay = activeDay || maxDay || new Date().toISOString().slice(0, 10);
-    const anchorDate = new Date(`${anchorDay}T12:00:00`);
-    const [viewYear, setViewYear] = useState(anchorDate.getFullYear());
-    const [viewMonth, setViewMonth] = useState(anchorDate.getMonth());
+    const anchorDay = activeDay || maxDay || todayIsoDay || '';
+    const anchorDate = anchorDay ? (getUTCDateFromISODate(anchorDay) || new Date()) : new Date();
+    const [viewYear, setViewYear] = useState(anchorDate.getUTCFullYear());
+    const [viewMonth, setViewMonth] = useState(anchorDate.getUTCMonth());
 
     // Reset calendar view when the panel opens
     useEffect(() => {
         if (isOpen) {
-            const d = new Date(`${anchorDay}T12:00:00`);
-            setViewYear(d.getFullYear());
-            setViewMonth(d.getMonth());
+            const d = anchorDay ? (getUTCDateFromISODate(anchorDay) || new Date()) : new Date();
+            setViewYear(d.getUTCFullYear());
+            setViewMonth(d.getUTCMonth());
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen]);
 
     const navigateMonth = (delta: number) => {
-        const d = new Date(viewYear, viewMonth + delta, 1);
-        setViewYear(d.getFullYear());
-        setViewMonth(d.getMonth());
+        const d = new Date(Date.UTC(viewYear, viewMonth + delta, 1, 12, 0, 0, 0));
+        setViewYear(d.getUTCFullYear());
+        setViewMonth(d.getUTCMonth());
     };
 
     const monthGrid = useMemo(() => buildMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
@@ -342,7 +347,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                     const selectable = isDaySelectable(isoDay);
                     const selected = isDaySelected(isoDay);
                     const inRange = isDayInRange(isoDay);
-                    const isToday = isoDay === new Date().toISOString().slice(0, 10);
+                    const isToday = todayIsoDay ? isoDay === todayIsoDay : false;
 
                     return (
                         <button

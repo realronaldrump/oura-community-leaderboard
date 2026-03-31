@@ -1,6 +1,7 @@
 import { FULL_HISTORY_START_DATE, syncDailyStats } from '../hooks/useOuraData';
 import { DailyStats } from '../types';
-import { formatLocalISODate, getOuraFetchEndISODate } from '../utils/date';
+import { getOuraFetchEndISODate } from '../utils/date';
+import { getOffsetIsoDay } from '../utils/temporal';
 
 export interface SyncProgress {
     status: 'idle' | 'syncing' | 'complete' | 'error';
@@ -17,10 +18,15 @@ type SyncAuthContext = {
     grantedScopes?: string[];
     availabilityKey?: string;
     profileId?: string;
+    profileOffsetMinutes?: number | null;
 };
 
-const getToday = () => formatLocalISODate();
-const getFetchEndDate = () => getOuraFetchEndISODate();
+const getToday = (offsetMinutes?: number | null) => (
+    typeof offsetMinutes === 'number' && Number.isFinite(offsetMinutes)
+        ? getOffsetIsoDay(offsetMinutes)
+        : `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`
+);
+const getFetchEndDate = (offsetMinutes?: number | null) => getOuraFetchEndISODate(new Date(), offsetMinutes);
 
 const describeCoverage = (data: DailyStats): { start: string; end: string; days: number } | null => {
     const days = [
@@ -53,8 +59,8 @@ export const smartSync = async (
     onProgress: SyncProgressCallback,
     authContext: SyncAuthContext = {}
 ): Promise<Partial<DailyStats>> => {
-    const today = getToday();
-    const fetchEndDate = getFetchEndDate();
+    const today = getToday(authContext.profileOffsetMinutes);
+    const fetchEndDate = getFetchEndDate(authContext.profileOffsetMinutes);
 
     onProgress({
         status: 'syncing',
@@ -70,6 +76,7 @@ export const smartSync = async (
         grantedScopes: authContext.grantedScopes,
         availabilityKey: authContext.availabilityKey,
         profileId: authContext.profileId,
+        profileOffsetMinutes: authContext.profileOffsetMinutes,
     });
 
     const coverage = describeCoverage(data as DailyStats);
@@ -96,8 +103,8 @@ export const fullSync = async (
     onProgress: SyncProgressCallback,
     authContext: SyncAuthContext = {}
 ): Promise<DailyStats> => {
-    const today = getToday();
-    const fetchEndDate = getFetchEndDate();
+    const today = getToday(authContext.profileOffsetMinutes);
+    const fetchEndDate = getFetchEndDate(authContext.profileOffsetMinutes);
 
     onProgress({
         status: 'syncing',
@@ -113,6 +120,7 @@ export const fullSync = async (
         grantedScopes: authContext.grantedScopes,
         availabilityKey: authContext.availabilityKey,
         profileId: authContext.profileId,
+        profileOffsetMinutes: authContext.profileOffsetMinutes,
     });
 
     const coverage = describeCoverage(data);

@@ -52,6 +52,16 @@ import {
     isISODateString,
     shiftLocalISODate,
 } from '../utils/date';
+import {
+    extractIsoDayFromTimestamp,
+    formatRelativeDayLabel,
+    getLocalMinutesOfDayFromIso,
+} from '../utils/temporal';
+import {
+    getMillisecondsUntilNextProfileMidnight,
+    getProfileCurrentHour,
+    getProfileLocalISODate,
+} from '../utils/profileTemporal';
 
 const METERS_TO_MILES = 0.000621371;
 const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
@@ -105,9 +115,7 @@ const toTimestampMs = (value?: string | null): number => {
 const isIsoDay = (value: unknown): value is string => isISODateString(value);
 
 const toIsoDayFromTimestamp = (value?: string | null): string | null => {
-    if (!value) return null;
-    const rawPrefix = value.slice(0, 10);
-    return isIsoDay(rawPrefix) ? rawPrefix : null;
+    return extractIsoDayFromTimestamp(value);
 };
 
 const isScoreReady = (value: unknown): value is number =>
@@ -238,10 +246,7 @@ const getLatestDailyEntries = <T extends { day?: string; timestamp?: string }>(i
 };
 
 const getMinutesOfDay = (value?: string | null): number | null => {
-    if (!value) return null;
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return null;
-    return (date.getHours() * 60) + date.getMinutes();
+    return getLocalMinutesOfDayFromIso(value);
 };
 
 const getNormalizedBedtimeMinutes = (value?: string | null): number | null => {
@@ -926,8 +931,8 @@ const TrendInsightsPanel: React.FC<{
             const bestRecent = recent7.reduce((a, b) => a.avg > b.avg ? a : b);
             const worstRecent = recent7.reduce((a, b) => a.avg < b.avg ? a : b);
             if (bestRecent.avg !== worstRecent.avg) {
-                const bestDate = new Date(`${bestRecent.day}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                const worstDate = new Date(`${worstRecent.day}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                const bestDate = formatISODateForDisplay(bestRecent.day, 'en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                const worstDate = formatISODateForDisplay(worstRecent.day, 'en-US', { weekday: 'short', month: 'short', day: 'numeric' });
                 const bestCategory = bestRecent.sleep >= bestRecent.readiness && bestRecent.sleep >= bestRecent.activity ? 'sleep' : bestRecent.activity >= bestRecent.readiness ? 'activity' : 'readiness';
                 result.push({
                     color: '#7BA8D4', title: 'This week\'s best and toughest',
@@ -1133,6 +1138,7 @@ const Dashboard: React.FC = () => {
                     grantedScopes: activeProfile.grantedScopes,
                     availabilityKey: activeProfile.id,
                     profileId: activeProfile.id,
+                    profileOffsetMinutes: activeProfile.lastKnownUtcOffsetMinutes,
                 })
             );
             queryClient.setQueryData(['dailyStats', activeProfile.id], syncedData);
@@ -1165,6 +1171,7 @@ const Dashboard: React.FC = () => {
                                 grantedScopes: p.grantedScopes,
                                 availabilityKey: p.id,
                                 profileId: p.id,
+                                profileOffsetMinutes: p.lastKnownUtcOffsetMinutes,
                             })
                         );
                         await markProfileSyncSuccess(p.id);
@@ -1196,6 +1203,7 @@ const Dashboard: React.FC = () => {
                         grantedScopes: p.grantedScopes,
                         availabilityKey: p.id,
                         profileId: p.id,
+                        profileOffsetMinutes: p.lastKnownUtcOffsetMinutes,
                     })
                 );
                 await markProfileSyncSuccess(p.id);
@@ -1298,19 +1306,7 @@ const Dashboard: React.FC = () => {
         activityHistory.forEach((item) => item.day && daySet.add(item.day));
         return Array.from(daySet).sort((a, b) => b.localeCompare(a));
     }, [activityHistory, readinessHistory, sleepHistory]);
-    const todayIsoDay = useMemo(() => {
-        const observedDays = new Set<string>();
-        availableDays.forEach((day) => observedDays.add(day));
-        spo2History.forEach((item) => item.day && observedDays.add(item.day));
-        stressHistory.forEach((item) => item.day && observedDays.add(item.day));
-        resilienceHistory.forEach((item) => item.day && observedDays.add(item.day));
-        hrData.forEach((item) => {
-            const day = toIsoDayFromTimestamp(item.timestamp);
-            if (day) observedDays.add(day);
-        });
-
-        return Array.from(observedDays).sort((a, b) => b.localeCompare(a))[0] || formatLocalISODate();
-    }, [availableDays, hrData, resilienceHistory, spo2History, stressHistory]);
+    const todayIsoDay = useMemo(() => getProfileLocalISODate(activeProfile), [activeProfile]);
 
     const sleepScoreDays = useMemo(() => getScoredDays(sleepHistory), [sleepHistory]);
     const readinessScoreDays = useMemo(() => getScoredDays(readinessHistory), [readinessHistory]);
@@ -1682,6 +1678,8 @@ const Dashboard: React.FC = () => {
                 fetchDailyStats(token, { start: FULL_HISTORY_START_DATE }, {
                     grantedScopes: activeProfile.grantedScopes,
                     availabilityKey: activeProfile.id,
+                    profileId: activeProfile.id,
+                    profileOffsetMinutes: activeProfile.lastKnownUtcOffsetMinutes,
                 })
             ),
             staleTime: 1000 * 60 * 60 * 24,
@@ -1717,6 +1715,8 @@ const Dashboard: React.FC = () => {
                     fetchDailyStats(token, { start: FULL_HISTORY_START_DATE }, {
                         grantedScopes: activeProfile.grantedScopes,
                         availabilityKey: activeProfile.id,
+                        profileId: activeProfile.id,
+                        profileOffsetMinutes: activeProfile.lastKnownUtcOffsetMinutes,
                     })
                 ),
                 staleTime: 1000 * 60 * 60 * 24,
@@ -2089,9 +2089,7 @@ const Dashboard: React.FC = () => {
 
         const scheduleMidnightInvalidation = () => {
             const now = new Date();
-            const nextMidnight = new Date(now);
-            nextMidnight.setHours(24, 0, 5, 0);
-            const delayMs = Math.max(nextMidnight.getTime() - now.getTime(), 1000);
+            const delayMs = getMillisecondsUntilNextProfileMidnight(activeProfile, now);
 
             timer = window.setTimeout(() => {
                 queryClient.invalidateQueries({ queryKey: ['dailyStats'] });
@@ -2104,12 +2102,12 @@ const Dashboard: React.FC = () => {
         return () => {
             if (timer !== null) window.clearTimeout(timer);
         };
-    }, [profiles.length, queryClient]);
+    }, [activeProfile, profiles.length, queryClient]);
 
     const userName = activeProfile ? getProfileDisplayName(activeProfile) : 'there';
 
     const getTimeGreeting = () => {
-        const hour = new Date().getHours();
+        const hour = getProfileCurrentHour(activeProfile);
         if (hour < 12) return 'Good morning';
         if (hour < 17) return 'Good afternoon';
         return 'Good evening';
@@ -2125,18 +2123,12 @@ const Dashboard: React.FC = () => {
     };
 
     const formatDayLabel = (day: string | undefined) => {
-        if (!day) return 'Today';
-        const d = new Date(day + 'T12:00:00');
-        const today = new Date(); today.setHours(12, 0, 0, 0);
-        const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
-        if (d.toDateString() === today.toDateString()) return 'Today';
-        if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-        return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        return formatRelativeDayLabel(day, todayIsoDay);
     };
     const formatRangeLabel = (range: DayRange | null): string => {
         if (!range) return 'All available dates';
-        const start = new Date(`${range.start}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        const end = new Date(`${range.end}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const start = formatISODateForDisplay(range.start, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const end = formatISODateForDisplay(range.end, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         return `${start} - ${end}`;
     };
 
@@ -2620,6 +2612,7 @@ const Dashboard: React.FC = () => {
                                         selectedDate={referenceDay}
                                         onSelectDate={handleSelectReferenceDay}
                                         showStepper
+                                        todayIsoDay={todayIsoDay}
                                     />
                                 </div>
                             </div>
@@ -2819,7 +2812,9 @@ const Dashboard: React.FC = () => {
                                 <div className="min-w-0">
                                     <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Compare together</p>
                                     <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[#2D2A26]">
-                                        {compareDay ? formatDayLabel(compareDay) : 'Choose a shared date'}
+                                        {compareDay
+                                            ? formatISODateForDisplay(compareDay, 'en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+                                            : 'Choose a shared date'}
                                     </h2>
                                     <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#7A756E]">
                                         Compare any two or more people on the same Oura day. If the selected group has no shared day yet, remove one person or sync more recent data.
@@ -2831,6 +2826,7 @@ const Dashboard: React.FC = () => {
                                         dates={compareAvailableDays}
                                         selectedDate={compareDay}
                                         onSelectDate={setCompareDay}
+                                        todayIsoDay={todayIsoDay}
                                     />
                                 ) : (
                                     <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] px-4 py-3 text-sm text-[#777]">
@@ -3025,6 +3021,7 @@ const Dashboard: React.FC = () => {
                                 onSelectDate={handleSelectReferenceDay}
                                 range={effectiveTrendsRange || undefined}
                                 onRangeChange={(nextRange) => setTrendsRange(nextRange)}
+                                todayIsoDay={todayIsoDay}
                             />
                         </div>
                         <TrendInsightsPanel profiles={profiles} userQueries={scopedAllTimeQueriesForHistory} />

@@ -3,7 +3,8 @@ import { useUser } from '../../contexts/UserContext';
 import { CHALLENGE_DEFINITIONS } from '../../services/analyticsService';
 import { ChallengeDefinition, ChallengeType } from '../../types/analyticsTypes';
 import { Crown, Zap, Footprints, Moon, Play, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
-import { formatISODateForDisplay, formatLocalISODate } from '../../utils/date';
+import { formatISODateForDisplay } from '../../utils/date';
+import { getProfileLocalISODate, getProfileRelativeISODate } from '../../utils/profileTemporal';
 
 const ChallengeManager: React.FC = () => {
     const { activeProfile, updateProfile } = useUser();
@@ -30,16 +31,15 @@ const ChallengeManager: React.FC = () => {
     const handleJoin = async (challengeDef: ChallengeDefinition) => {
         setIsJoining(challengeDef.id);
         try {
-            const startDate = formatLocalISODate();
-            const endDate = new Date();
-            endDate.setDate(endDate.getDate() + challengeDef.durationDays - 1);
+            const startDate = getProfileLocalISODate(activeProfile);
+            const endDate = getProfileRelativeISODate(activeProfile, challengeDef.durationDays - 1);
 
             const newChallenge = {
                 id: crypto.randomUUID(),
                 challengeId: challengeDef.id,
                 userId: activeProfile.id,
                 startDate,
-                endDate: formatLocalISODate(endDate),
+                endDate,
                 status: 'active' as const,
                 progress: 0,
                 history: {}

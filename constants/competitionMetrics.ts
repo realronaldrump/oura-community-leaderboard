@@ -5,6 +5,7 @@ import {
     CompetitionTemplate,
     CompetitionRule,
 } from '../types/competitionTypes';
+import { getLocalMinutesOfDayFromIso } from '../utils/temporal';
 
 const RESILIENCE_LEVEL_SCORE: Record<string, number> = {
     limited: 20,
@@ -24,10 +25,8 @@ const findByDay = <T extends { day?: string }>(items: T[] | undefined, day: stri
 );
 
 const toAdjustedBedtimeMinutes = (isoString?: string | null): number | null => {
-    if (!isoString) return null;
-    const date = new Date(isoString);
-    if (Number.isNaN(date.getTime())) return null;
-    const minutes = date.getHours() * 60 + date.getMinutes();
+    const minutes = getLocalMinutesOfDayFromIso(isoString);
+    if (minutes == null) return null;
     return minutes < (12 * 60) ? minutes + (24 * 60) : minutes;
 };
 

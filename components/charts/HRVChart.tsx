@@ -2,6 +2,11 @@ import React, { useMemo } from 'react';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, ReferenceLine, Area, AreaChart } from 'recharts';
 import { SleepSession } from '../../types';
 import { CLAY_TOOLTIP_STYLE, CLAY_TOOLTIP_LABEL_STYLE } from '../../utils/chartStyles';
+import {
+    formatClockTimeFromOffsetTimestamp,
+    getWallClockTimestampMs,
+    parseUtcOffsetMinutesFromIso,
+} from '../../utils/temporal';
 
 interface Props {
     session: SleepSession | null | undefined;
@@ -14,19 +19,17 @@ const HRVChart: React.FC<Props> = ({ session, showLabels = false }) => {
         if (!session?.hrv?.items || !session.bedtime_start) return [];
 
         const startTime = new Date(session.bedtime_start).getTime();
+        const offsetMinutes = parseUtcOffsetMinutesFromIso(session.bedtime_start) ?? 0;
         const intervalMs = (session.hrv.interval || 300) * 1000; // interval in ms (default 5 min = 300s)
 
         return session.hrv.items
             .map((value, idx) => {
                 const timestamp = startTime + (idx * intervalMs);
+                const localTimestamp = getWallClockTimestampMs(timestamp, offsetMinutes);
                 return {
-                    timestamp,
+                    timestamp: localTimestamp,
                     hrv: value,
-                    time: new Date(timestamp).toLocaleTimeString('en-US', {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        hour12: true
-                    })
+                    time: formatClockTimeFromOffsetTimestamp(timestamp, offsetMinutes)
                 };
             })
             .filter(d => d.hrv > 0); // Filter out zero/null values
@@ -51,8 +54,8 @@ const HRVChart: React.FC<Props> = ({ session, showLabels = false }) => {
     // Format time for X-axis ticks
     const formatTime = (timestamp: number) => {
         const date = new Date(timestamp);
-        const hours = date.getHours();
-        const minutes = date.getMinutes();
+        const hours = date.getUTCHours();
+        const minutes = date.getUTCMinutes();
         if (minutes === 0) {
             if (hours === 0) return '12am';
             if (hours === 12) return '12pm';
@@ -114,7 +117,8 @@ const HRVChart: React.FC<Props> = ({ session, showLabels = false }) => {
                         labelFormatter={(timestamp: number) => new Date(timestamp).toLocaleTimeString('en-US', {
                             hour: 'numeric',
                             minute: '2-digit',
-                            hour12: true
+                            hour12: true,
+                            timeZone: 'UTC',
                         })}
                         formatter={(value: number) => [`${value} ms`, 'HRV']}
                     />

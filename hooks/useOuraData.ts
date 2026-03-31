@@ -1,8 +1,10 @@
 import { getCachedDailyStats, setCachedDailyStats } from '../services/dailyStatsCache';
+import { firebaseService } from '../services/firebaseService';
 import { ouraService } from '../services/ouraService';
 import { DailyStats } from '../types';
 import { getOuraFetchEndISODate, shiftLocalISODate } from '../utils/date';
 import { hasAnyOuraScope, normalizeGrantedOuraScopes, OURA_SCOPE_CANDIDATES } from '../utils/ouraScopes';
+import { deriveProfileTemporalMetadata } from '../utils/profileTemporal';
 
 export const FULL_HISTORY_START_DATE = '2016-01-01';
 const INITIAL_RECENT_DAYS = 28;
@@ -12,6 +14,8 @@ type FetchConfig = {
     includeStaticCollections?: boolean;
     grantedScopes?: string[];
     availabilityKey?: string;
+    profileId?: string;
+    profileOffsetMinutes?: number | null;
 };
 
 type SyncMode = 'incremental' | 'full';
@@ -22,9 +26,10 @@ type SyncDailyStatsOptions = {
     grantedScopes?: string[];
     availabilityKey?: string;
     profileId?: string;
+    profileOffsetMinutes?: number | null;
 };
 
-const getFetchEndDate = (): string => getOuraFetchEndISODate();
+const getFetchEndDate = (offsetMinutes?: number | null): string => getOuraFetchEndISODate(new Date(), offsetMinutes);
 const shiftDate = (day: string, daysDelta: number): string => shiftLocalISODate(day, daysDelta);
 
 const sortByDayDesc = (a: any, b: any): number => {
@@ -226,7 +231,7 @@ export const fetchDailyStats = async (
     const canFetchTag = hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.tag]);
     const canFetchRingConfiguration = hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.ringConfiguration]);
     const canFetchHeartHealth = hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.heartHealth]);
-    const end = dateRange?.end || getFetchEndDate();
+    const end = dateRange?.end || getOuraFetchEndISODate(new Date(), config.profileOffsetMinutes);
     const start = dateRange?.start || shiftDate(end, -INITIAL_RECENT_DAYS);
 
     // Phase 1: Critical endpoints the dashboard needs to render scores + details
@@ -272,13 +277,24 @@ export const fetchDailyStats = async (
         'cardiovascularAge', 'vo2Max'
     ]);
 
-    return buildDailyStats(
+    const stats = buildDailyStats(
         sleep, readiness, activity, sessions,
         spo2, stress, resilience, heartrate,
         workout, guidedSession, sleepTime, tag,
         enhancedTag, restModePeriod, ringConfiguration,
         cardiovascularAge, vo2Max
     );
+
+    if (config.profileId) {
+        const temporalMetadata = deriveProfileTemporalMetadata(stats);
+        if (temporalMetadata) {
+            firebaseService.patchProfile(config.profileId, temporalMetadata).catch((error) => {
+                console.warn('Failed to persist profile temporal metadata:', error);
+            });
+        }
+    }
+
+    return stats;
 };
 
 const mergeDailyStats = (existingData: DailyStats, incomingData: DailyStats): DailyStats => {
@@ -309,7 +325,7 @@ export const syncDailyStats = async (
     options: SyncDailyStatsOptions = {}
 ): Promise<DailyStats> => {
     const mode = options.mode || 'incremental';
-    const endDate = options.endDate || getFetchEndDate();
+    const endDate = options.endDate || getFetchEndDate(options.profileOffsetMinutes);
     const { profileId } = options;
 
     // For full syncs, fetch everything and persist
@@ -321,6 +337,8 @@ export const syncDailyStats = async (
             includeStaticCollections: true,
             grantedScopes: options.grantedScopes,
             availabilityKey: options.availabilityKey,
+            profileId: options.profileId,
+            profileOffsetMinutes: options.profileOffsetMinutes,
         });
         if (profileId) setCachedDailyStats(profileId, fullData).catch(() => {});
         return fullData;
@@ -347,6 +365,8 @@ export const syncDailyStats = async (
         includeStaticCollections: !baseData,
         grantedScopes: options.grantedScopes,
         availabilityKey: options.availabilityKey,
+        profileId: options.profileId,
+        profileOffsetMinutes: options.profileOffsetMinutes,
     });
 
     const result = baseData ? mergeDailyStats(baseData, delta) : delta;
@@ -356,4 +376,3 @@ export const syncDailyStats = async (
 
     return result;
 };
-

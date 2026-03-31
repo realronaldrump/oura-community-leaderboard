@@ -17,6 +17,12 @@ import {
     parseLocalISODate,
     shiftLocalISODate,
 } from '../utils/date';
+import {
+    extractLocalHourMinuteFromIso,
+    getLocalMinutesOfDayFromIso,
+    getOffsetIsoDay,
+} from '../utils/temporal';
+import { deriveProfileTemporalMetadata } from '../utils/profileTemporal';
 
 // ============================================
 // CHALLENGE DEFINITIONS
@@ -86,7 +92,10 @@ export function checkChallengeProgress(
     // Iterate through dates from startDate to today (or endDate)
     if (!parseLocalISODate(challenge.startDate)) return challenge;
 
-    const today = formatLocalISODate();
+    const temporalMetadata = deriveProfileTemporalMetadata(data);
+    const today = temporalMetadata
+        ? getOffsetIsoDay(temporalMetadata.lastKnownUtcOffsetMinutes)
+        : formatLocalISODate();
     const maxEndDate = shiftLocalISODate(challenge.startDate, def.durationDays - 1);
     const checkUntil = today < maxEndDate ? today : maxEndDate;
 
@@ -100,33 +109,7 @@ export function checkChallengeProgress(
 
         if (metricValue !== null) {
             if (def.type === 'early_bedtime') {
-                // Special case for bedtime: must be < threshold OR >= 22 (meaning 10PM, so technically > 22 if threshold is 22? No, < 22 is earlier) 
-                // Wait, 10 PM is 22:00. 
-                // "Before 10 PM" means hour < 22. But bedtime is usually late.
-                // 22:00, 23:00, 00:00, 01:00.
-                // If threshold is 22 (10 PM). 
-                // success if hour < 22 (e.g. 21) OR hour > 4 (next morning? No bedtime is usually evening).
-                // Let's assume standard logic: < threshold. But 01:00 is < 22.
-                // Usually bedtimes are 18:00 - 06:00.
-                // Let's use logic: if hour >= 18 and hour < threshold. Or hour < 4 (very late/early).
-                // Simple logic from `checkThreshold` earlier: `hour < threshold || hour >= 22` was for "Before 11 PM".
-                // If threshold is 22. We want < 22.
-                // What if bedtime is 23:00? > 22. Fail.
-                // What if bedtime is 01:00? < 22. But that's LATE.
-                // We need to handle the day wrap.
-                // Let's use the helper `checkThreshold` if possible, but we don't have the `item` here, just value.
-                // Let's replicate logic: < threshold means *earlier* than threshold?
-                // If threshold is 22 (10 PM). 
-                // 21:00 is OK. 23:00 is Bad. 01:00 is Bad.
-                // 01:00 is numerically < 22.
-                // We need to treat 0-4 as "High numbers" effectively.
-                // Adjusted hour: if hour < 12, hour += 24.
-                // 21 -> 21. 22 -> 22. 23 -> 23. 00 -> 24. 01 -> 25.
-                // Threshold 22.
-                // 21 < 22 (Pass). 23 > 22 (Fail). 24 > 22 (Fail).
-                const adjHour = metricValue < 12 ? metricValue + 24 : metricValue;
-                // Threshold also needs logic? If threshold is 22.
-                success = adjHour < def.threshold;
+                success = metricValue < (def.threshold * 60);
             } else {
                 success = metricValue >= def.threshold;
             }
@@ -308,9 +291,7 @@ function calculateSingleStreak(
     const dataArray = getMetricArray(data, definition.metric);
     if (!dataArray.length) return null;
 
-    const sortedData = [...dataArray].sort((a, b) =>
-        new Date(a.day).getTime() - new Date(b.day).getTime()
-    );
+    const sortedData = [...dataArray].sort((a, b) => a.day.localeCompare(b.day));
     if (!sortedData.length) return null;
 
     // Track current run and all-time record separately so the UI can display both clearly.
@@ -402,7 +383,7 @@ function getMetricValue(item: any, metric: string): number | null {
             return item.average_hrv ?? null;
         case 'bedtime':
             if (!item.bedtime_start) return null;
-            return normalizeBedtimeHour(new Date(item.bedtime_start).getHours());
+            return normalizeBedtimeMinutes(getLocalMinutesOfDayFromIso(item.bedtime_start));
         default:
             return null;
     }
@@ -432,14 +413,15 @@ function checkThreshold(item: any, metric: string, threshold: number): boolean {
             return (item.average_hrv ?? 0) >= threshold;
         case 'bedtime':
             if (!item.bedtime_start) return false;
-            return normalizeBedtimeHour(new Date(item.bedtime_start).getHours()) < threshold;
+            return normalizeBedtimeMinutes(getLocalMinutesOfDayFromIso(item.bedtime_start)) < (threshold * 60);
         default:
             return false;
     }
 }
 
-function normalizeBedtimeHour(hour: number): number {
-    return hour < 12 ? hour + 24 : hour;
+function normalizeBedtimeMinutes(minutes: number | null): number {
+    if (minutes == null) return Number.POSITIVE_INFINITY;
+    return minutes < (12 * 60) ? minutes + (24 * 60) : minutes;
 }
 
 function getDateDiffInDays(dayA: string, dayB: string): number {
@@ -457,7 +439,7 @@ function calculateStreakImpact(
     // Compare average readiness during streak vs the same number of prior readiness days.
     const readiness = [...(data.readiness || [])]
         .filter(r => r.score != null)
-        .sort((a, b) => new Date(a.day).getTime() - new Date(b.day).getTime());
+        .sort((a, b) => a.day.localeCompare(b.day));
     if (!readiness.length) return 0;
 
     const streakSet = new Set(streakDates);
@@ -854,10 +836,9 @@ function extractMetricValues(
         case 'bedtime':
             for (const s of data.session || []) {
                 if (s.bedtime_start && filterByDate(s.day)) {
-                    const hr = new Date(s.bedtime_start).getHours();
-                    // Adjust hour so 0-4 AM are treated as 24-28 (late bedtimes)
-                    const adjHr = hr < 12 ? hr + 24 : hr;
-                    results.push({ date: s.day, value: adjHr });
+                    const minutes = getLocalMinutesOfDayFromIso(s.bedtime_start);
+                    if (minutes == null) continue;
+                    results.push({ date: s.day, value: normalizeBedtimeMinutes(minutes) / 60 });
                 }
             }
             break;
@@ -1437,45 +1418,50 @@ export function generateTimelineData(
     const dataPoints: TimelineDataPoint[] = [];
     const insights: TimelineInsight[] = [];
 
-    const sleepTimes: Array<{ userId: string; userName: string; start?: Date; end?: Date }> = [];
+    const sleepTimes: Array<{ userId: string; userName: string; startMinutes?: number }> = [];
 
     for (const { userId, userName, data } of usersData) {
         const session = data.session?.find(s => s.day === date);
 
         if (session?.bedtime_start) {
-            const start = new Date(session.bedtime_start);
-            sleepTimes.push({ userId, userName, start, end: session.bedtime_end ? new Date(session.bedtime_end) : undefined });
+            const start = extractLocalHourMinuteFromIso(session.bedtime_start);
+            const startMinutes = normalizeBedtimeMinutes(getLocalMinutesOfDayFromIso(session.bedtime_start));
+            sleepTimes.push({ userId, userName, startMinutes });
 
-            dataPoints.push({
-                timestamp: session.bedtime_start,
-                hour: start.getHours(),
-                minute: start.getMinutes(),
-                userId,
-                userName,
-                type: 'sleep_start',
-                label: 'Fell asleep'
-            });
+            if (start) {
+                dataPoints.push({
+                    timestamp: session.bedtime_start,
+                    hour: start.hour,
+                    minute: start.minute,
+                    userId,
+                    userName,
+                    type: 'sleep_start',
+                    label: 'Fell asleep'
+                });
+            }
         }
 
         if (session?.bedtime_end) {
-            const end = new Date(session.bedtime_end);
-            dataPoints.push({
-                timestamp: session.bedtime_end,
-                hour: end.getHours(),
-                minute: end.getMinutes(),
-                userId,
-                userName,
-                type: 'sleep_end',
-                label: 'Woke up'
-            });
+            const end = extractLocalHourMinuteFromIso(session.bedtime_end);
+            if (end) {
+                dataPoints.push({
+                    timestamp: session.bedtime_end,
+                    hour: end.hour,
+                    minute: end.minute,
+                    userId,
+                    userName,
+                    type: 'sleep_end',
+                    label: 'Woke up'
+                });
+            }
         }
     }
 
     // Generate sleep timing insights
-    if (sleepTimes.length >= 2 && sleepTimes[0].start && sleepTimes[1].start) {
-        const diff = Math.abs(sleepTimes[0].start.getTime() - sleepTimes[1].start.getTime()) / 60000; // minutes
-        const earlier = sleepTimes[0].start < sleepTimes[1].start ? sleepTimes[0] : sleepTimes[1];
-        const later = sleepTimes[0].start < sleepTimes[1].start ? sleepTimes[1] : sleepTimes[0];
+    if (sleepTimes.length >= 2 && sleepTimes[0].startMinutes != null && sleepTimes[1].startMinutes != null) {
+        const diff = Math.abs(sleepTimes[0].startMinutes - sleepTimes[1].startMinutes);
+        const earlier = sleepTimes[0].startMinutes < sleepTimes[1].startMinutes ? sleepTimes[0] : sleepTimes[1];
+        const later = sleepTimes[0].startMinutes < sleepTimes[1].startMinutes ? sleepTimes[1] : sleepTimes[0];
 
         if (diff >= 15) {
             insights.push({

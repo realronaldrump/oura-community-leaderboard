@@ -5,7 +5,8 @@ import { UserProfile } from '../../types';
 import { CreateCompetitionInput } from '../../services/competitionService';
 import { CompetitionFormat, CompetitionMode, CompetitionRule, CompetitionTemplate } from '../../types/competitionTypes';
 import { getProfileDisplayName } from '../../utils/profileName';
-import { getRelativeLocalISODate, shiftLocalISODate } from '../../utils/date';
+import { formatISODateForDisplay, shiftLocalISODate } from '../../utils/date';
+import { getProfileLocalISODate, getProfileRelativeISODate } from '../../utils/profileTemporal';
 import DateRangePicker from '../DateRangePicker';
 
 type RuleDraft = {
@@ -72,7 +73,7 @@ const buildDraftFromTemplate = (template?: CompetitionTemplate | null) => {
         description: templateToUse.description,
         mode: templateToUse.mode,
         format: templateToUse.format,
-        startDate: getRelativeLocalISODate(1),
+        startDate: '',
         durationDays: templateToUse.durationDays,
         selectedParticipantIds: [] as string[],
         templateId: templateToUse.id,
@@ -101,7 +102,7 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
     const [description, setDescription] = useState('');
     const [mode, setMode] = useState<CompetitionMode>('solo');
     const [format, setFormat] = useState<CompetitionFormat>('goal');
-    const [startDate, setStartDate] = useState(getRelativeLocalISODate(1));
+    const [startDate, setStartDate] = useState(() => getProfileRelativeISODate(activeProfile, 1));
     const [durationDays, setDurationDays] = useState(7);
     const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
     const [templateId, setTemplateId] = useState<string | null>(null);
@@ -116,7 +117,7 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
         setDescription(next.description);
         setMode(next.mode);
         setFormat(next.format);
-        setStartDate(next.startDate);
+        setStartDate(next.startDate || getProfileRelativeISODate(activeProfile, 1));
         setDurationDays(next.durationDays);
         setSelectedParticipantIds(next.selectedParticipantIds);
         setTemplateId(next.templateId);
@@ -141,7 +142,7 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
     }, [rules]);
 
     const previewCopy = useMemo(() => {
-        const startLabel = new Date(`${startDate}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const startLabel = formatISODateForDisplay(startDate, 'en-US', { month: 'short', day: 'numeric' });
         return `Starts ${startLabel} for ${durationDays} day${durationDays === 1 ? '' : 's'}. ${ruleSummary}.`;
     }, [durationDays, ruleSummary, startDate]);
 
@@ -344,8 +345,9 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                 label="Start Date"
                                 selectedDate={startDate}
                                 onSelectDate={setStartDate}
-                                min={getRelativeLocalISODate(1)}
-                                max={getRelativeLocalISODate(365)}
+                                min={getProfileRelativeISODate(activeProfile, 1)}
+                                max={getProfileRelativeISODate(activeProfile, 365)}
+                                todayIsoDay={getProfileLocalISODate(activeProfile)}
                             />
                             <label className="block md:col-span-2">
                                 <span className="mb-2 block text-sm font-medium text-[#4A4540]">Description</span>
@@ -609,7 +611,7 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                             <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Checklist</p>
                             <div className="mt-4 space-y-3 text-sm text-[#7A756E]">
                                 <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-white px-4 py-3">
-                                    Starts on <span className="text-[#2D2A26]">{new Date(`${startDate}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                                    Starts on <span className="text-[#2D2A26]">{formatISODateForDisplay(startDate, 'en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
                                 </div>
                                 <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-white px-4 py-3">
                                     Runs for <span className="text-[#2D2A26]">{durationDays} day{durationDays === 1 ? '' : 's'}</span>

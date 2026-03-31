@@ -5,6 +5,8 @@ import {
 } from 'recharts';
 
 import { getProfileDisplayName } from '../utils/profileName';
+import { formatISODateForDisplay } from '../utils/date';
+import { getUTCDateFromISODate } from '../utils/temporal';
 
 interface AllTimeHistoryProps {
     profiles: { id: string; firstName?: string | null; lastName?: string | null; email?: string | null }[];
@@ -27,7 +29,7 @@ type SortField = 'date' | 'userName' | 'sleep' | 'readiness' | 'activity' | 'ave
 type SortDirection = 'asc' | 'desc';
 type Smoothing = 'raw' | '3d' | '7d' | '14d';
 
-const parseOuraDay = (day: string): Date => new Date(`${day}T12:00:00`);
+const parseOuraDay = (day: string): Date => getUTCDateFromISODate(day) || new Date(`${day}T12:00:00Z`);
 const compareNames = (a: string, b: string): number =>
     a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
 const TABLE_PAGE_SIZE = 250;
@@ -409,7 +411,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                                     dataKey="x"
                                     name="Date"
                                     domain={['auto', 'auto']}
-                                    tickFormatter={(unixTime) => new Date(unixTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                    tickFormatter={(unixTime) => new Date(unixTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}
                                     stroke="#A8A29E"
                                     tick={{ fill: '#A8A29E', fontSize: 12 }}
                                     allowDuplicatedCategory={false}
@@ -429,7 +431,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                                         if (active && payload && payload.length) {
                                             // Sort by score
                                             const sorted = [...payload].sort((a, b) => (b.value as number) - (a.value as number));
-                                            const dateStr = new Date(sorted[0].payload.x).toLocaleDateString();
+                                            const dateStr = new Date(sorted[0].payload.x).toLocaleDateString('en-US', { timeZone: 'UTC' });
 
                                             return (
                                                 <div className="glass-card p-3 text-xs bg-white/95 border border-black/5 shadow-xl">

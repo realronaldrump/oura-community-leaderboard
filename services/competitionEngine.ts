@@ -8,7 +8,8 @@ import {
     CompetitionRuleEvaluation,
     CompetitionStatus,
 } from '../types/competitionTypes';
-import { formatLocalISODate, shiftLocalISODate } from '../utils/date';
+import { shiftLocalISODate } from '../utils/date';
+import { getCompetitionTodayISODate } from '../utils/profileTemporal';
 
 const DEFAULT_SUMMARY = 'Track progress across your chosen Oura metrics.';
 
@@ -96,7 +97,7 @@ const aggregateRuleValues = (rule: CompetitionRule, values: Array<number | null>
 
 export const deriveCompetitionStatus = (
     competition: Competition,
-    today: string = formatLocalISODate()
+    today: string = getCompetitionTodayISODate(competition)
 ): CompetitionStatus => {
     if (competition.status === 'cancelled' || competition.status === 'draft') {
         return competition.status;
@@ -128,7 +129,7 @@ export const buildCompetitionSummary = (competition: Competition): string => {
 export const evaluateCompetition = (
     competition: Competition,
     statsByProfileId: Record<string, DailyStats | undefined>,
-    today: string = formatLocalISODate()
+    today: string = getCompetitionTodayISODate(competition)
 ): CompetitionEvaluation => {
     const status = deriveCompetitionStatus(competition, today);
     const scoringEndDate = status === 'scheduled' ? shiftLocalISODate(competition.startDate, -1) : (

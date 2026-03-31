@@ -4,6 +4,13 @@ import { HeartRate } from '../../types';
 import { IOSModal, IOSButton, IOSListItem } from '../ios';
 import { Clock, Info } from 'lucide-react';
 import { CLAY_TOOLTIP_STYLE, CLAY_TOOLTIP_LABEL_STYLE } from '../../utils/chartStyles';
+import {
+    extractLocalHourMinuteFromIso,
+    extractIsoDayFromTimestamp,
+    formatRecordLocalClockTime,
+    getWallClockTimestampMsFromIso,
+} from '../../utils/temporal';
+import { formatISODateForDisplay } from '../../utils/date';
 
 type TimeRange = '6h' | '12h' | '24h' | '48h';
 
@@ -12,9 +19,19 @@ interface Props {
     showLabels?: boolean;
 }
 
+type HeartRateChartPoint = {
+    timestamp: number;
+    absoluteTimestamp: number;
+    bpm: number;
+    time: string;
+    hour: number;
+    source: HeartRate['source'];
+    fullData: HeartRate;
+};
+
 const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
     const [timeRange, setTimeRange] = useState<TimeRange>('24h');
-    const [selectedPoint, setSelectedPoint] = useState<HeartRate | null>(null);
+    const [selectedPoint, setSelectedPoint] = useState<HeartRateChartPoint | null>(null);
 
     const handleDataPointClick = (data: any) => {
         if (data?.payload) {
@@ -40,18 +57,18 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
         return data
             .filter(hr => new Date(hr.timestamp) >= hoursAgo)
             .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-            .map((hr) => ({
-                timestamp: new Date(hr.timestamp).getTime(),
-                bpm: hr.bpm,
-                time: new Date(hr.timestamp).toLocaleTimeString('en-US', {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true
-                }),
-                hour: new Date(hr.timestamp).getHours(),
-                source: hr.source,
-                fullData: hr
-            }));
+            .map((hr): HeartRateChartPoint => {
+                const hourMinute = extractLocalHourMinuteFromIso(hr.timestamp);
+                return {
+                    timestamp: getWallClockTimestampMsFromIso(hr.timestamp) ?? new Date(hr.timestamp).getTime(),
+                    absoluteTimestamp: new Date(hr.timestamp).getTime(),
+                    bpm: hr.bpm,
+                    time: formatRecordLocalClockTime(hr.timestamp),
+                    hour: hourMinute?.hour ?? 0,
+                    source: hr.source,
+                    fullData: hr,
+                };
+            });
     }, [data, timeRange]);
 
     // Calculate stats
@@ -73,7 +90,7 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
     // Format hour for X-axis ticks
     const formatHour = (timestamp: number) => {
         const date = new Date(timestamp);
-        const hours = date.getHours();
+        const hours = date.getUTCHours();
         if (hours === 0) return '12am';
         if (hours === 12) return '12pm';
         return hours > 12 ? `${hours - 12}pm` : `${hours}am`;
@@ -149,7 +166,8 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                             labelFormatter={(timestamp: number) => new Date(timestamp).toLocaleTimeString('en-US', {
                                 hour: 'numeric',
                                 minute: '2-digit',
-                                hour12: true
+                                hour12: true,
+                                timeZone: 'UTC',
                             })}
                             formatter={(value: number) => [`${value} bpm`, 'Heart Rate']}
                         />
@@ -178,24 +196,17 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                             subtitle={`${selectedPoint.bpm} bpm`}
                             icon={<div className="text-[#D4897B]"><Clock className="w-4 h-4" /></div>}
                             rightElement={<div className="text-xs text-text-muted">
-                                {new Date(selectedPoint.timestamp).toLocaleTimeString('en-US', {
-                                    hour: 'numeric',
-                                    minute: '2-digit',
-                                    hour12: true
-                                })}
+                                {formatRecordLocalClockTime(selectedPoint.fullData?.timestamp)}
                             </div>}
                         />
                         <IOSListItem
                             title="Date & Time"
-                            subtitle={new Date(selectedPoint.timestamp).toLocaleString('en-US', {
+                            subtitle={`${formatISODateForDisplay(extractIsoDayFromTimestamp(selectedPoint.fullData?.timestamp) || '', 'en-US', {
                                 weekday: 'long',
                                 year: 'numeric',
                                 month: 'long',
                                 day: 'numeric',
-                                hour: 'numeric',
-                                minute: '2-digit',
-                                hour12: true
-                            })}
+                            })} at ${formatRecordLocalClockTime(selectedPoint.fullData?.timestamp)}`}
                             icon={<div className="text-[#6B7280]"><Info className="w-4 h-4" /></div>}
                         />
                         <IOSListItem

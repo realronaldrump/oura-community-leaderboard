@@ -9,7 +9,8 @@ import { ouraService } from '../services/ouraService';
 import { webhookService } from '../services/webhookService';
 import { DailyStats } from '../types';
 import { getProfileDisplayName } from '../utils/profileName';
-import { formatLocalISODate } from '../utils/date';
+import { shiftLocalISODate } from '../utils/date';
+import { getProfileLocalISODate } from '../utils/profileTemporal';
 
 type QuickCheckStatus = 'idle' | 'running' | 'ok' | 'warning' | 'error';
 
@@ -28,15 +29,6 @@ type WebhookStatusState = {
 };
 
 const QUICK_CHECK_LOOKBACK_DAYS = 3;
-
-const toDay = (date: Date): string => formatLocalISODate(date);
-
-const shiftDay = (day: string, delta: number): string => {
-    const value = new Date(`${day}T00:00:00`);
-    if (Number.isNaN(value.getTime())) return day;
-    value.setDate(value.getDate() + delta);
-    return toDay(value);
-};
 
 const getLatestDay = (items?: Array<{ day?: string }>): string | null => {
     if (!items?.length) return null;
@@ -201,6 +193,8 @@ const Settings: React.FC = () => {
                 return fullSync(token, (progress) => { setSyncProgress(progress); }, {
                     grantedScopes: activeProfile.grantedScopes,
                     availabilityKey: activeProfile.id,
+                    profileId: activeProfile.id,
+                    profileOffsetMinutes: activeProfile.lastKnownUtcOffsetMinutes,
                 });
             };
 
@@ -241,8 +235,8 @@ const Settings: React.FC = () => {
         });
 
         try {
-            const endDay = toDay(new Date());
-            const startDay = shiftDay(endDay, -QUICK_CHECK_LOOKBACK_DAYS);
+            const endDay = getProfileLocalISODate(activeProfile);
+            const startDay = shiftLocalISODate(endDay, -QUICK_CHECK_LOOKBACK_DAYS);
 
             const runCheck = async (forceRefresh: boolean = false) => {
                 const token = await getAccessTokenForProfile(activeProfile.id, { forceRefresh });

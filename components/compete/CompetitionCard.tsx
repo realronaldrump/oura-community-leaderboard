@@ -2,7 +2,7 @@ import React from 'react';
 import { CalendarDays, Copy, Medal, Send, Sparkles, Target, Timer, Trophy, Users } from 'lucide-react';
 import { COMPETITION_METRICS_BY_ID } from '../../constants/competitionMetrics';
 import { CompetitionEvaluation, CompetitionInvite } from '../../types/competitionTypes';
-import { formatISODateForDisplay } from '../../utils/date';
+import { formatISODateForDisplay, shiftLocalISODate } from '../../utils/date';
 
 interface CompetitionCardProps {
     evaluation: CompetitionEvaluation;
@@ -33,7 +33,7 @@ const CompetitionCard: React.FC<CompetitionCardProps> = ({
     const isCreator = evaluation.competition.createdByProfileId === activeProfileId;
     const hasInviteActions = canShareInvite && isCreator && evaluation.competition.mode === 'friends';
     const totalDays = evaluation.leaderboard[0]?.totalDays || (
-        Math.max(1, Math.round((new Date(`${evaluation.competition.endDate}T12:00:00`).getTime() - new Date(`${evaluation.competition.startDate}T12:00:00`).getTime()) / (1000 * 60 * 60 * 24)) + 1)
+        Math.max(1, Math.round((new Date(`${shiftLocalISODate(evaluation.competition.endDate, 1)}T00:00:00Z`).getTime() - new Date(`${evaluation.competition.startDate}T00:00:00Z`).getTime()) / (1000 * 60 * 60 * 24)))
     );
     const progressPercent = evaluation.status === 'scheduled' || evaluation.days.length === 0
         ? 0

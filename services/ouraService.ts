@@ -68,15 +68,14 @@ class OuraService {
     }
 
     const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const bufferedEnd = end || getOuraFetchEndISODate();
 
     const pastDate = new Date(today);
     pastDate.setDate(pastDate.getDate() - (typeof daysBackOrStart === 'number' ? daysBackOrStart : 30));
 
     return {
       start_date: formatLocalISODate(pastDate),
-      end_date: formatLocalISODate(tomorrow),
+      end_date: bufferedEnd,
     };
   }
 

@@ -6,7 +6,7 @@ import html2canvas from 'html2canvas';
 import { Camera, Image, Pin, BedDouble, Zap, Flame, Footprints, Clock, Trophy, Crown } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
 import DateRangePicker from '../DateRangePicker';
-import { getRelativeLocalISODate } from '../../utils/date';
+import { formatISODateForDisplay } from '../../utils/date';
 import { getProfileDisplayName } from '../../utils/profileName';
 
 interface DailySnapshotProps {
@@ -15,7 +15,7 @@ interface DailySnapshotProps {
 }
 
 const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) => {
-    const [selectedDate, setSelectedDate] = useState<string>(() => getRelativeLocalISODate(-1));
+    const [selectedDate, setSelectedDate] = useState<string>('');
     const [note, setNote] = useState('');
     const [isExporting, setIsExporting] = useState(false);
     const [pinnedSnapshots, setPinnedSnapshots] = useState<DailySnapshotData[]>([]);
@@ -59,7 +59,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
 
     const formattedSelectedDate = useMemo(() => {
         if (!activeDate) return 'No date selected';
-        return new Date(activeDate + 'T12:00:00').toLocaleDateString('en-US', {
+        return formatISODateForDisplay(activeDate, 'en-US', {
             weekday: 'long',
             month: 'long',
             day: 'numeric',
@@ -389,7 +389,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                                     }`}
                             >
                                 <p className="text-xs text-[var(--text-muted)]">
-                                    {new Date(snap.date + 'T12:00:00').toLocaleDateString('en-US', {
+                                    {formatISODateForDisplay(snap.date, 'en-US', {
                                         month: 'short',
                                         day: 'numeric'
                                     })}

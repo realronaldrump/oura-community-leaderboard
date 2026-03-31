@@ -4,8 +4,13 @@ import { generateTimelineData } from '../../services/analyticsService';
 import { Clock, BedDouble, Activity, Heart } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
 import DateRangePicker from '../DateRangePicker';
-import { getRelativeLocalISODate } from '../../utils/date';
+import { shiftLocalISODate } from '../../utils/date';
 import { getProfileDisplayName } from '../../utils/profileName';
+import {
+    extractIsoDayFromTimestamp,
+    formatRecordLocalClockTime,
+    getLocalMinutesOfDayFromIso,
+} from '../../utils/temporal';
 
 interface TimelineViewProps {
     profiles: Array<{ id: string; firstName?: string | null; lastName?: string | null; email?: string | null }>;
@@ -15,7 +20,7 @@ interface TimelineViewProps {
 const userColors = ['#6B9E8A', '#A08BBE', '#D4A574', '#7BA8D4'];
 
 const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
-    const [selectedDate, setSelectedDate] = useState<string>(() => getRelativeLocalISODate(-1));
+    const [selectedDate, setSelectedDate] = useState<string>('');
 
     const availableDates = useMemo(() => {
         const dates = new Set<string>();
@@ -62,8 +67,24 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
         }).filter(u => u.session);
     }, [profiles, usersData, selectedDate]);
 
-    const formatTime = (date: Date) => {
-        return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    const getWindowPositionMinutes = (isoString: string, targetDay: string): number | null => {
+        const eventDay = extractIsoDayFromTimestamp(isoString);
+        const minutesOfDay = getLocalMinutesOfDayFromIso(isoString);
+        if (!eventDay || minutesOfDay == null) return null;
+
+        const previousDay = shiftLocalISODate(targetDay, -1);
+        let dayOffset = 0;
+        if (eventDay === targetDay) {
+            dayOffset = 1440;
+        } else if (eventDay === previousDay) {
+            dayOffset = 0;
+        } else if (eventDay < previousDay) {
+            dayOffset = -1440;
+        } else {
+            dayOffset = 2880;
+        }
+
+        return dayOffset + minutesOfDay - 720;
     };
 
     const getInsightIcon = (type: string) => {
@@ -172,22 +193,15 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                     const { session, userName, color } = userData;
                     if (!session) return null;
 
-                    const sleepStart = session.bedtime_start ? new Date(session.bedtime_start) : null;
-                    const sleepEnd = session.bedtime_end ? new Date(session.bedtime_end) : null;
+                    const sleepStart = session.bedtime_start || null;
+                    const sleepEnd = session.bedtime_end || null;
 
-                    // Calculate window relative to Selected Date
-                    // "Day" for sleep is usually the wake-up day.
-                    // Window: 12PM (Day - 1) to 12PM (Day)
-                    const dateObj = new Date(selectedDate + 'T12:00:00'); // Valid ISO for noon
-                    const windowEnd = dateObj.getTime();
-                    const windowStart = windowEnd - 24 * 60 * 60 * 1000;
-                    const totalDuration = windowEnd - windowStart;
-
-                    const getLeftPercent = (date: Date) => {
-                        const t = date.getTime();
-                        if (t < windowStart) return 0;
-                        if (t > windowEnd) return 100;
-                        return ((t - windowStart) / totalDuration) * 100;
+                    const getLeftPercent = (isoString: string) => {
+                        const minutes = getWindowPositionMinutes(isoString, selectedDate);
+                        if (minutes == null) return 0;
+                        if (minutes < 0) return 0;
+                        if (minutes > 1440) return 100;
+                        return (minutes / 1440) * 100;
                     };
 
                     let sleepBarStyle: React.CSSProperties = { display: 'none' };
@@ -247,14 +261,14 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                                 {sleepStart && (
                                     <div
                                         className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 group cursor-pointer z-10"
-                                        style={{ left: `${startLeft}%` }}
-                                    >
-                                        <div
-                                            className="w-4 h-4 rounded-full border-2 border-white"
-                                            style={{ backgroundColor: color }}
-                                        />
+                                            style={{ left: `${startLeft}%` }}
+                                        >
+                                            <div
+                                                className="w-4 h-4 rounded-full border-2 border-white"
+                                                style={{ backgroundColor: color }}
+                                            />
                                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[var(--bg-base)] border border-[var(--border-default)] rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20 pointer-events-none shadow-lg">
-                                            Fell asleep: {formatTime(sleepStart)}
+                                            Fell asleep: {formatRecordLocalClockTime(sleepStart)}
                                         </div>
                                     </div>
                                 )}
@@ -263,14 +277,14 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                                 {sleepEnd && (
                                     <div
                                         className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 group cursor-pointer z-10"
-                                        style={{ left: `${endLeft}%` }}
-                                    >
-                                        <div
-                                            className="w-4 h-4 rounded-full border-2 border-white"
-                                            style={{ backgroundColor: color }}
-                                        />
+                                            style={{ left: `${endLeft}%` }}
+                                        >
+                                            <div
+                                                className="w-4 h-4 rounded-full border-2 border-white"
+                                                style={{ backgroundColor: color }}
+                                            />
                                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[var(--bg-base)] border border-[var(--border-default)] rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20 pointer-events-none shadow-lg">
-                                            Woke up: {formatTime(sleepEnd)}
+                                            Woke up: {formatRecordLocalClockTime(sleepEnd)}
                                         </div>
                                     </div>
                                 )}
@@ -320,12 +334,12 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                                 </div>
                                 <div className="text-center text-[var(--text-secondary)] font-mono text-sm">
                                     {session.bedtime_start
-                                        ? formatTime(new Date(session.bedtime_start))
+                                        ? formatRecordLocalClockTime(session.bedtime_start)
                                         : '--'}
                                 </div>
                                 <div className="text-center text-[var(--text-secondary)] font-mono text-sm">
                                     {session.bedtime_end
-                                        ? formatTime(new Date(session.bedtime_end))
+                                        ? formatRecordLocalClockTime(session.bedtime_end)
                                         : '--'}
                                 </div>
                                 <div className="text-center text-[var(--text-primary)] font-mono font-medium">
