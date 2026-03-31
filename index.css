@@ -1783,6 +1783,17 @@ select {
   text-overflow: ellipsis;
 }
 
+.ftc-overall-label {
+  font-size: 0.5625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #A8A29E);
+  line-height: 1;
+  margin-top: 0.25rem;
+  display: block;
+}
+
 .ftc-overall-score {
   display: flex;
   align-items: center;

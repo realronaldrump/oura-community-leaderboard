@@ -750,6 +750,7 @@ const FriendTrendsStrip: React.FC<{
                                 </div>
                                 <div className="ftc-name-block">
                                     <p className="ftc-name">{friend.name}</p>
+                                    <span className="ftc-overall-label">Overall avg</span>
                                     <div className="ftc-overall-score">
                                         <span className="ftc-score-num">{friend.recentAvg}</span>
                                         {friend.trend !== null && (
