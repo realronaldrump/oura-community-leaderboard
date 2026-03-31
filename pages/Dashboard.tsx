@@ -304,6 +304,35 @@ const getResilienceScore = (resilience?: DailyResilience): number | null => {
     }
 };
 
+const getStressColor = (summary: DailyStress['day_summary'] | null | undefined): string => {
+    switch (summary) {
+        case 'restored':
+            return '#7BC4A0';
+        case 'normal':
+            return '#D4B87B';
+        case 'stressful':
+            return '#D4897B';
+        default:
+            return '#A8A29E';
+    }
+};
+
+const getResilienceColor = (level: DailyResilience['level'] | null | undefined): string => {
+    switch (level) {
+        case 'exceptional':
+        case 'strong':
+            return '#7BC4A0';
+        case 'solid':
+            return '#7BA8D4';
+        case 'adequate':
+            return '#D4B87B';
+        case 'limited':
+            return '#D4897B';
+        default:
+            return '#A8A29E';
+    }
+};
+
 type CompareParticipant = {
     id: string;
     entry: LeaderboardEntry;
@@ -2140,12 +2169,6 @@ const Dashboard: React.FC = () => {
     };
 
     const getStressLabel = (summary: string | null | undefined) => getStressSummaryLabel(summary as DailyStress['day_summary']);
-    const getStressColor = (summary: string | null | undefined) => {
-        switch (summary) { case 'restored': return '#7BC4A0'; case 'normal': return '#D4B87B'; case 'stressful': return '#D4897B'; default: return '#A8A29E'; }
-    };
-    const getResilienceColor = (level: string | null | undefined) => {
-        switch (level) { case 'exceptional': return '#7BC4A0'; case 'strong': return '#7BC4A0'; case 'solid': return '#7BA8D4'; case 'adequate': return '#D4B87B'; case 'limited': return '#D4897B'; default: return '#A8A29E'; }
-    };
 
     const getScoreQuality = (score: number | null | undefined): string => {
         if (!score) return '';
