@@ -596,73 +596,135 @@ h1, h2, h3, h4 {
   box-shadow: var(--shadow-clay-inset);
 }
 
-.date-picker-field {
+/* ── Calendar grid ─────────────────────────── */
+
+.dp-calendar {
+  user-select: none;
+}
+
+.dp-month-nav {
   display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
 }
 
-.date-picker-field > span {
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: var(--text-muted);
+.dp-month-label {
+  font-size: 0.82rem;
   font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
 }
 
-.date-picker-field > input {
-  height: 2.5rem;
-  width: 100%;
-  border-radius: 12px;
+.dp-month-btn {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 10px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-raised);
-  color: var(--text-primary);
-  padding: 0 0.75rem;
-  font-size: 0.85rem;
-  font-family: 'IBM Plex Mono', monospace;
-  box-shadow: var(--shadow-clay-inset);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.date-picker-field > input:hover {
-  border-color: var(--border-default);
-}
-
-.date-picker-field > input:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: var(--shadow-clay-inset), 0 0 0 3px rgba(107, 158, 138, 0.15);
-}
-
-.date-picker-day {
-  width: 100%;
-  text-align: left;
-  min-height: 2.5rem;
-  border-radius: 12px;
-  border: 1px solid transparent;
-  background: var(--bg-elevated);
-  padding: 0.5rem 0.6rem;
   color: var(--text-secondary);
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   box-shadow: var(--shadow-clay-sm);
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
-.date-picker-day:hover {
+.dp-month-btn:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-clay);
   color: var(--text-primary);
 }
 
-.date-picker-day.is-active {
-  border-color: rgba(107, 158, 138, 0.3);
-  background: rgba(107, 158, 138, 0.08);
-  color: #4A7D66;
+.dp-month-btn:active {
+  transform: translateY(0);
   box-shadow: var(--shadow-clay-inset);
+}
+
+.dp-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.dp-weekday {
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  padding: 0.25rem 0;
+}
+
+.dp-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.dp-cell-empty {
+  aspect-ratio: 1;
+}
+
+.dp-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-clay-sm);
+  transition: all 0.15s ease;
+}
+
+.dp-cell:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-clay);
+  color: var(--text-primary);
+}
+
+.dp-cell:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow-clay-inset);
+}
+
+.dp-cell.is-selected {
+  border-color: rgba(107, 158, 138, 0.4);
+  background: var(--accent);
+  color: #fff;
+  box-shadow: var(--shadow-clay-sm);
+  font-weight: 700;
+}
+
+.dp-cell.is-in-range {
+  background: rgba(107, 158, 138, 0.12);
+  color: var(--accent);
+  border-color: rgba(107, 158, 138, 0.15);
+}
+
+.dp-cell.is-today {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.dp-cell.is-unavailable {
+  opacity: 0.28;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Field variant trigger – full-width form field look */
+.dp-field-trigger {
+  width: 100% !important;
+  min-width: 0 !important;
 }
 
 @media (min-width: 640px) {

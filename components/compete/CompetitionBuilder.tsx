@@ -6,6 +6,7 @@ import { CreateCompetitionInput } from '../../services/competitionService';
 import { CompetitionFormat, CompetitionMode, CompetitionRule, CompetitionTemplate } from '../../types/competitionTypes';
 import { getProfileDisplayName } from '../../utils/profileName';
 import { getRelativeLocalISODate, shiftLocalISODate } from '../../utils/date';
+import DateRangePicker from '../DateRangePicker';
 
 type RuleDraft = {
     id: string;
@@ -337,16 +338,15 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                     placeholder="Balanced Week"
                                 />
                             </label>
-                            <label className="block">
-                                <span className="mb-2 block text-sm font-medium text-[#4A4540]">Start Date</span>
-                                <input
-                                    type="date"
-                                    min={getRelativeLocalISODate(1)}
-                                    value={startDate}
-                                    onChange={(event) => setStartDate(event.target.value)}
-                                    className="w-full rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white px-4 py-3 text-[#2D2A26] outline-none transition-colors focus:border-[#6B9E8A]"
-                                />
-                            </label>
+                            <DateRangePicker
+                                mode="date"
+                                variant="field"
+                                label="Start Date"
+                                selectedDate={startDate}
+                                onSelectDate={setStartDate}
+                                min={getRelativeLocalISODate(1)}
+                                max={getRelativeLocalISODate(365)}
+                            />
                             <label className="block md:col-span-2">
                                 <span className="mb-2 block text-sm font-medium text-[#4A4540]">Description</span>
                                 <textarea
