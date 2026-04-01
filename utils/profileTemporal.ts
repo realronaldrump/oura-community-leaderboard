@@ -176,7 +176,7 @@ export const getCompetitionTodayISODate = (
     competition: Pick<UserProfile, never> | { timeZone?: string | null },
     baseDate: Date = new Date()
 ): string => {
-    const timeZone = typeof competition.timeZone === 'string' && competition.timeZone.trim().length > 0
+    const timeZone = 'timeZone' in competition && typeof competition.timeZone === 'string' && competition.timeZone.trim().length > 0
         ? competition.timeZone
         : null;
     if (!timeZone) {
