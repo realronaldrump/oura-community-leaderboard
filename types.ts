@@ -19,6 +19,9 @@ export interface UserProfile {
   lastSuccessfulSyncAt?: string | null;
   lastSyncError?: string | null;
   lastSyncErrorAt?: string | null;
+  lastKnownUtcOffsetMinutes?: number | null;
+  lastKnownOffsetObservedAt?: string | null;
+  lastKnownOffsetSource?: ProfileOffsetSource | null;
   activeChallenges?: any[]; // using any[] temporarilly to avoid circular dependency, or better yet, define a minimal type here or import if possible.
   // Actually, let's keep it simple and just use an array of objects that match the structure we know, 
   // or define the structure here if we can't import `UserChallenge` easily without cycles.

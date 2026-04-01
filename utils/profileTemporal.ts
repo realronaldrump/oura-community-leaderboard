@@ -94,7 +94,6 @@ export const deriveProfileTemporalMetadata = (data: DailyStats): ProfileTemporal
 
     const merged = chooseNewestCandidate([
         sessionCandidates,
-        heartrateCandidate,
         workoutCandidate,
         sleepTimeCandidate,
     ]);

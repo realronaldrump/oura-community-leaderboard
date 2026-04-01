@@ -1433,7 +1433,7 @@ const Dashboard: React.FC = () => {
         if (!todayPickerDays.length) return;
 
         const selectedDay = todayOverrideDay || availableDays[dateIndex];
-        if (selectedDay && todayPickerDays.includes(selectedDay)) return;
+        if (selectedDay && (selectedDay === todayIsoDay || availableDays.includes(selectedDay))) return;
 
         const nextDay = todayPickerDays[0];
         const fallbackIndex = availableDays.indexOf(nextDay);
