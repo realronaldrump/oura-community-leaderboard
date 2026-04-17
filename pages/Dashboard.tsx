@@ -1187,7 +1187,7 @@ const PersonalRecordsStrip: React.FC<{
     const expandedCategory = categories.find(c => c.id === expandedId) ?? null;
     if (categories.length === 0) return null;
 
-    const marqueeDurationSeconds = Math.min(600, Math.max(250, categories.length * 7));
+    const marqueeDurationSeconds = Math.min(1200, Math.max(500, categories.length * 14));
     const marqueeStyle = { '--records-marquee-duration': `${marqueeDurationSeconds}s` } as React.CSSProperties;
 
     const renderRecordChip = (cat: RecordCategory, idx: number, duplicate: boolean) => {
