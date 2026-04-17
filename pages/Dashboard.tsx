@@ -1187,8 +1187,12 @@ const PersonalRecordsStrip: React.FC<{
     const expandedCategory = categories.find(c => c.id === expandedId) ?? null;
     if (categories.length === 0) return null;
 
-    const marqueeDurationSeconds = Math.min(1200, Math.max(500, categories.length * 14));
+    const [speedMultiplier, setSpeedMultiplier] = useState(1);
+    const baseDuration = Math.min(1200, Math.max(500, categories.length * 14));
+    const marqueeDurationSeconds = baseDuration / speedMultiplier;
     const marqueeStyle = { '--records-marquee-duration': `${marqueeDurationSeconds}s` } as React.CSSProperties;
+    const speedSteps = [0.5, 1, 1.5, 2, 3];
+    const speedLabel = speedMultiplier === 1 ? '1×' : `${speedMultiplier}×`;
 
     const trackRef = useRef<HTMLDivElement>(null);
     const skipRecords = (direction: 'forward' | 'back') => {
@@ -1273,6 +1277,25 @@ const PersonalRecordsStrip: React.FC<{
                 </button>
                 <div className="records-strip-fade records-strip-fade-left" />
                 <div className="records-strip-fade records-strip-fade-right" />
+            </div>
+            <div className="records-speed-control">
+                <span className="records-speed-label">Speed</span>
+                <div className="records-speed-track">
+                    {speedSteps.map((step) => (
+                        <button
+                            key={step}
+                            type="button"
+                            className={`records-speed-dot${speedMultiplier === step ? ' active' : ''}`}
+                            onClick={() => setSpeedMultiplier(step)}
+                            aria-label={`${step}× speed`}
+                        />
+                    ))}
+                    <div
+                        className="records-speed-fill"
+                        style={{ width: `${(speedSteps.indexOf(speedMultiplier) / (speedSteps.length - 1)) * 100}%` }}
+                    />
+                </div>
+                <span className="records-speed-value">{speedLabel}</span>
             </div>
             {expandedCategory && (
                 <div className="records-top10-drawer animate-fade-in-up" style={{ animationFillMode: 'both' }}>
