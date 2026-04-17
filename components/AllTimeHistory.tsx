@@ -29,6 +29,7 @@ type SortField = 'date' | 'userName' | 'sleep' | 'readiness' | 'activity' | 'ave
 type SortDirection = 'asc' | 'desc';
 type Smoothing = 'raw' | '3d' | '7d' | '14d';
 
+const USER_COLORS = ['#A08BBE', '#7BA8D4', '#7BC4A0', '#D4A574', '#D4897B'];
 const parseOuraDay = (day: string): Date => getUTCDateFromISODate(day) || new Date(`${day}T12:00:00Z`);
 const compareNames = (a: string, b: string): number =>
     a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
@@ -44,6 +45,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
 
     const [showCommonDatesOnly, setShowCommonDatesOnly] = useState(false);
     const [smoothing, setSmoothing] = useState<Smoothing>('3d');
+    const [hiddenChartUserIds, setHiddenChartUserIds] = useState<Set<string>>(() => new Set());
     const [visibleRows, setVisibleRows] = useState(TABLE_PAGE_SIZE);
     const isHistoryFetching = userQueries.some(query => query.isFetching || query.isPending);
 
@@ -270,8 +272,28 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
         return finalSeries;
     }, [filteredData, chartMetric, smoothing]);
 
-    // User Colors
-    const userColors = ['#A08BBE', '#7BA8D4', '#7BC4A0', '#D4A574', '#D4897B'];
+    const chartProfiles = useMemo(
+        () => profiles
+            .map((profile, index) => ({ profile, index }))
+            .filter(({ profile }) => {
+                const data = chartData.get(profile.id);
+                if (!data || data.length === 0) return false;
+                return filterUser === 'all' || filterUser === profile.id;
+            }),
+        [profiles, chartData, filterUser]
+    );
+
+    const toggleChartUser = (userId: string) => {
+        setHiddenChartUserIds((current) => {
+            const next = new Set(current);
+            if (next.has(userId)) {
+                next.delete(userId);
+            } else {
+                next.add(userId);
+            }
+            return next;
+        });
+    };
 
     // Friendly chart summary
     const chartSummary = useMemo(() => {
@@ -451,14 +473,50 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                                         return null;
                                     }}
                                 />
-                                <Legend />
-                                {profiles.map((p, idx) => {
+                                <Legend
+                                    align="center"
+                                    verticalAlign="bottom"
+                                    height={64}
+                                    content={() => (
+                                        <div className="flex flex-wrap items-center justify-center gap-2 px-2 pt-3">
+                                            {chartProfiles.map(({ profile, index }) => {
+                                                const userName = getProfileDisplayName(profile);
+                                                const isHidden = hiddenChartUserIds.has(profile.id);
+                                                const color = USER_COLORS[index % USER_COLORS.length];
+
+                                                return (
+                                                    <button
+                                                        key={profile.id}
+                                                        type="button"
+                                                        onClick={() => toggleChartUser(profile.id)}
+                                                        aria-pressed={!isHidden}
+                                                        aria-label={`${isHidden ? 'Show' : 'Hide'} ${userName}'s scores`}
+                                                        className={`inline-flex h-7 items-center gap-2 rounded-md border px-2.5 text-xs font-medium transition-colors ${isHidden
+                                                            ? 'border-black/5 bg-black/[0.03] text-text-muted hover:text-text-secondary'
+                                                            : 'border-black/10 bg-white/45 text-text-primary hover:bg-white/65'
+                                                            }`}
+                                                    >
+                                                        <span
+                                                            className={`h-2 w-2 rounded-full transition-opacity ${isHidden ? 'opacity-35' : 'opacity-100'}`}
+                                                            style={{ backgroundColor: color }}
+                                                            aria-hidden="true"
+                                                        />
+                                                        <span className={isHidden ? 'line-through decoration-black/30' : ''}>{userName}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                />
+                                {chartProfiles.map(({ profile: p, index: idx }) => {
                                     // Only render if we have data for this user
                                     const data = chartData.get(p.id);
                                     if (!data || data.length === 0) return null;
 
                                     // If filterUser is set, only show that user
                                     if (filterUser !== 'all' && filterUser !== p.id) return null;
+
+                                    const color = USER_COLORS[idx % USER_COLORS.length];
 
                                     return (
                                         <Line
@@ -467,11 +525,12 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                                             name={getProfileDisplayName(p)}
                                             data={data}
                                             dataKey="y"
-                                            stroke={userColors[idx % userColors.length]}
+                                            stroke={color}
                                             strokeWidth={2}
-                                            dot={filteredData.length <= 60 ? { r: 3, fill: userColors[idx % userColors.length] } : false}
+                                            dot={filteredData.length <= 60 ? { r: 3, fill: color } : false}
                                             activeDot={{ r: 6 }}
                                             connectNulls
+                                            hide={hiddenChartUserIds.has(p.id)}
                                         />
                                     );
                                 })}
