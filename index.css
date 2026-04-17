@@ -1700,6 +1700,54 @@ select {
   background: linear-gradient(to left, var(--bg-base), transparent);
 }
 
+/* Navigation arrows */
+.records-strip-wrapper {
+  position: relative;
+}
+
+.records-strip-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-clay-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.records-strip-wrapper:hover .records-strip-nav {
+  opacity: 1;
+}
+
+.records-strip-nav:hover {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-clay);
+}
+
+.records-strip-nav:active {
+  box-shadow: var(--shadow-clay-inset);
+  transform: translateY(-50%) scale(0.92);
+}
+
+.records-strip-nav-left {
+  left: 0.25rem;
+}
+
+.records-strip-nav-right {
+  right: 0.25rem;
+}
+
 /* Top-10 expandable drawer */
 .records-top10-drawer {
   background: var(--bg-raised);

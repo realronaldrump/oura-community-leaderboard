@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     DailyActivity, DailyReadiness, DailySleep, SleepSession, HeartRate,
     DailySpO2, DailyStress, DailyResilience, LeaderboardEntry, UserProfile, formatDuration, formatTime, DailyStats
@@ -43,7 +43,7 @@ import {
 import { useAutoSync, formatLastSync } from '../hooks/useAutoSync';
 import { useWebhookRefresh } from '../hooks/useWebhookRefresh';
 import { useCompetitionInvitePreview } from '../hooks/useCompetitions';
-import { X, RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain, Users, Trophy, TrendingUp, TrendingDown, Minus, BarChart3, Swords, Download, CalendarDays, Sparkles, GitCompareArrows, ArrowRight } from 'lucide-react';
+import { X, RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain, Users, Trophy, TrendingUp, TrendingDown, Minus, BarChart3, Swords, Download, CalendarDays, Sparkles, GitCompareArrows, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getProfileDisplayName } from '../utils/profileName';
 import { getCompetitionInviteToken, isInviteLocation } from '../utils/inviteLink';
 import {
@@ -1190,6 +1190,23 @@ const PersonalRecordsStrip: React.FC<{
     const marqueeDurationSeconds = Math.min(1200, Math.max(500, categories.length * 14));
     const marqueeStyle = { '--records-marquee-duration': `${marqueeDurationSeconds}s` } as React.CSSProperties;
 
+    const trackRef = useRef<HTMLDivElement>(null);
+    const skipRecords = (direction: 'forward' | 'back') => {
+        const track = trackRef.current;
+        if (!track) return;
+        const animations = track.getAnimations();
+        if (animations.length === 0) return;
+        const anim = animations[0];
+        const duration = (anim.effect?.getComputedTiming().duration as number) || 0;
+        if (!duration) return;
+        const skipAmount = (duration / categories.length) * 3;
+        const ct = (anim.currentTime as number) || 0;
+        const next = direction === 'forward'
+            ? (ct + skipAmount) % duration
+            : ((ct - skipAmount) % duration + duration) % duration;
+        anim.currentTime = next;
+    };
+
     const renderRecordChip = (cat: RecordCategory, idx: number, duplicate: boolean) => {
         const record = cat.entries[0];
         const isExpanded = expandedId === cat.id;
@@ -1227,9 +1244,9 @@ const PersonalRecordsStrip: React.FC<{
                     Highs, lows, averages, streaks
                 </span>
             </div>
-            <div className="relative">
+            <div className="relative records-strip-wrapper">
                 <div className="records-strip mb-3" style={marqueeStyle} aria-label="Personal record highlights">
-                    <div className="records-strip-track">
+                    <div className="records-strip-track" ref={trackRef}>
                         <div className="records-strip-group">
                             {categories.map((cat, idx) => renderRecordChip(cat, idx, false))}
                         </div>
@@ -1238,6 +1255,22 @@ const PersonalRecordsStrip: React.FC<{
                         </div>
                     </div>
                 </div>
+                <button
+                    type="button"
+                    className="records-strip-nav records-strip-nav-left"
+                    onClick={() => skipRecords('back')}
+                    aria-label="Skip back"
+                >
+                    <ChevronLeft size={16} />
+                </button>
+                <button
+                    type="button"
+                    className="records-strip-nav records-strip-nav-right"
+                    onClick={() => skipRecords('forward')}
+                    aria-label="Skip forward"
+                >
+                    <ChevronRight size={16} />
+                </button>
                 <div className="records-strip-fade records-strip-fade-left" />
                 <div className="records-strip-fade records-strip-fade-right" />
             </div>
