@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { DailyStats } from '../../types';
 import { Streak, Badge, BadgeTier, StreakType } from '../../types/analyticsTypes';
 import { calculateStreaks, generateBadges, BADGE_TIERS, STREAK_DEFINITIONS } from '../../services/analyticsService';
@@ -14,7 +14,10 @@ import {
     Moon,
     Award,
     HeartPulse,
-    Info
+    Info,
+    ChevronRight,
+    ListChecks,
+    BookOpen
 } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
 import DetailsModal from './DetailsModal';
@@ -27,6 +30,7 @@ interface StreakTrackerProps {
 }
 
 type DetailContext = 'active' | 'record' | 'badge';
+type StreakTab = 'active' | 'all' | 'badges' | 'rules';
 
 const tierColors: Record<BadgeTier, string> = {
     bronze: 'from-[#D4B87B] to-[#D4B87B]/60',
@@ -235,6 +239,10 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
         ? (selectedStreak?.currentDates?.length ? selectedStreak.currentDates : selectedStreak?.dates)
         : (selectedStreak?.longestDates?.length ? selectedStreak.longestDates : selectedStreak?.dates);
 
+    const [activeTab, setActiveTab] = useState<StreakTab>(() =>
+        activeStreaks.length > 0 ? 'active' : 'all'
+    );
+
     return (
         <div className="space-y-6">
             <DetailsModal
@@ -299,185 +307,303 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                 dates={selectedDates}
             />
 
-            <div className="card p-5 border-[var(--accent)]/40 bg-[var(--accent)]/[0.04]">
-                <div className="flex items-start gap-3">
-                    <div className="mt-0.5">
-                        <Info className="w-5 h-5 text-[var(--accent)]" />
+            {/* ── Summary Cards ── */}
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+                <button
+                    onClick={() => setActiveTab('active')}
+                    className={`card p-4 text-left transition-colors ${activeTab === 'active' ? 'ring-2 ring-[var(--accent)]/40' : 'hover:bg-[var(--bg-hover)]'}`}
+                >
+                    <div className="flex items-center gap-2 mb-1">
+                        <Flame className="w-4 h-4 text-[#D4897B]" />
+                        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Active</p>
                     </div>
-                    <div>
-                        <h3 className="text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wider mb-2">
-                            How Streaks Are Calculated
-                        </h3>
-                        <ol className="space-y-1.5 text-sm text-[var(--text-secondary)]">
-                            <li>1. Each streak type has a daily rule shown in the grid below.</li>
-                            <li>2. A day counts only if data exists for that metric and meets the rule.</li>
-                            <li>3. A failed day or missing calendar day resets the current run.</li>
-                            <li>4. `Current` is your live run, `Record` is your all-time best run, and badges are based on `Record`.</li>
-                        </ol>
+                    <p className="text-2xl font-mono font-bold text-[var(--accent)]">{activeStreaks.length}</p>
+                    <p className="text-xs text-[var(--text-secondary)] mt-1">live streaks</p>
+                </button>
+                <button
+                    onClick={() => setActiveTab('active')}
+                    className={`card p-4 text-left transition-colors hover:bg-[var(--bg-hover)]`}
+                >
+                    <div className="flex items-center gap-2 mb-1">
+                        <TrendingUp className="w-4 h-4 text-[#7BC4A0]" />
+                        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Best Run</p>
                     </div>
-                </div>
-            </div>
-
-            <div>
-                <h3 className="section-header flex items-center gap-2">
-                    <Star className="w-5 h-5 text-[#D4B87B]" />
-                    Streak Rules
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {STREAK_DEFINITIONS.map(def => (
-                        <div key={def.type} className="card p-4">
-                            <div className="flex items-center gap-2 mb-2">
-                                {getStreakIcon(def.type, def.icon)}
-                                <p className="font-medium text-[var(--text-primary)]">{getStreakLabel(def.type)}</p>
-                            </div>
-                            <p className="text-sm text-[var(--text-secondary)]">
-                                {formatRule(def.type, def.threshold)}
-                            </p>
-                            <p className="text-xs text-[var(--text-muted)] mt-2">
-                                Minimum qualifying streak: {def.minDays} days
-                            </p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                <div className="card p-4">
-                    <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Active Streaks</p>
-                    <p className="text-2xl font-mono font-bold text-[var(--accent)] mt-1">{activeStreaks.length}</p>
-                    <p className="text-xs text-[var(--text-secondary)] mt-1">Runs ending on latest tracked day</p>
-                </div>
-                <div className="card p-4">
-                    <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Best Live Run</p>
-                    <p className="text-2xl font-mono font-bold text-[var(--text-primary)] mt-1">{bestActive?.currentLength ?? 0}</p>
-                    <p className="text-xs text-[var(--text-secondary)] mt-1">
+                    <p className="text-2xl font-mono font-bold text-[var(--text-primary)]">{bestActive?.currentLength ?? 0}</p>
+                    <p className="text-xs text-[var(--text-secondary)] mt-1 truncate">
                         {bestActive ? `${bestActive.userName} · ${getStreakLabel(bestActive.type)}` : 'No active run'}
                     </p>
-                </div>
-                <div className="card p-4">
-                    <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Top Record</p>
-                    <p className="text-2xl font-mono font-bold text-[var(--text-primary)] mt-1">{bestRecord?.longestLength ?? 0}</p>
-                    <p className="text-xs text-[var(--text-secondary)] mt-1">
-                        {bestRecord ? `${bestRecord.userName} · ${getStreakLabel(bestRecord.type)}` : 'No qualifying records yet'}
+                </button>
+                <button
+                    onClick={() => setActiveTab('all')}
+                    className={`card p-4 text-left transition-colors ${activeTab === 'all' ? 'ring-2 ring-[var(--accent)]/40' : 'hover:bg-[var(--bg-hover)]'}`}
+                >
+                    <div className="flex items-center gap-2 mb-1">
+                        <Trophy className="w-4 h-4 text-[#D4B87B]" />
+                        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Record</p>
+                    </div>
+                    <p className="text-2xl font-mono font-bold text-[var(--text-primary)]">{bestRecord?.longestLength ?? 0}</p>
+                    <p className="text-xs text-[var(--text-secondary)] mt-1 truncate">
+                        {bestRecord ? `${bestRecord.userName} · ${getStreakLabel(bestRecord.type)}` : 'None yet'}
                     </p>
-                </div>
-                <div className="card p-4">
-                    <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Closest Badge</p>
-                    <p className="text-2xl font-mono font-bold text-[var(--text-primary)] mt-1">{closestBadge ? `${closestBadge.progress.toFixed(0)}%` : '—'}</p>
-                    <p className="text-xs text-[var(--text-secondary)] mt-1">
-                        {closestBadge ? closestBadge.name : 'No badge progress yet'}
+                </button>
+                <button
+                    onClick={() => setActiveTab('badges')}
+                    className={`card p-4 text-left transition-colors ${activeTab === 'badges' ? 'ring-2 ring-[var(--accent)]/40' : 'hover:bg-[var(--bg-hover)]'}`}
+                >
+                    <div className="flex items-center gap-2 mb-1">
+                        <Award className="w-4 h-4 text-[#A08BBE]" />
+                        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Closest Badge</p>
+                    </div>
+                    <p className="text-2xl font-mono font-bold text-[var(--text-primary)]">{closestBadge ? `${closestBadge.progress.toFixed(0)}%` : '—'}</p>
+                    <p className="text-xs text-[var(--text-secondary)] mt-1 truncate">
+                        {closestBadge ? closestBadge.name : 'No badge progress'}
                     </p>
-                </div>
+                </button>
             </div>
 
-            <div>
-                <h3 className="section-header flex items-center gap-2">
-                    <Flame className="w-5 h-5 text-[#D4897B]" />
-                    Active Now
-                    <InfoTooltip
-                        title="Active Streaks"
-                        description="These streaks currently continue through your latest tracked day."
-                        calculation="Current streak resets when a day fails the rule or when a calendar day is skipped in the source metric."
-                    />
-                </h3>
-                {activeStreaks.length === 0 ? (
-                    <div className="card p-5 text-sm text-[var(--text-secondary)]">
-                        No active streaks right now. Your record streaks and badge progress are still tracked below.
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                        {activeStreaks.map(streak => {
-                            const nextBadge = getNextBadgeTarget(streak.longestLength);
-                            return (
-                                <button
-                                    key={streak.id}
-                                    onClick={() => handleStreakClick(streak, 'active')}
-                                    className="card p-4 text-left border-l-4 border-l-[var(--accent)] hover:bg-[var(--bg-hover)] transition-colors min-h-[44px]"
-                                >
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="flex items-center gap-2">
-                                            {getStreakIcon(streak.type, streak.icon)}
-                                            <div>
-                                                <p className="font-semibold text-[var(--text-primary)]">{streak.userName}</p>
-                                                <p className="text-xs text-[var(--text-muted)]">{getStreakLabel(streak.type)}</p>
+            {/* ── Section Tabs ── */}
+            <div className="flex gap-1 border-b border-[var(--border-subtle)] overflow-x-auto hide-scrollbar">
+                {([
+                    { key: 'active' as const, label: 'Active Now', icon: <Flame className="w-3.5 h-3.5" />, count: activeStreaks.length },
+                    { key: 'all' as const, label: 'All Streaks', icon: <ListChecks className="w-3.5 h-3.5" />, count: streakRows.length },
+                    { key: 'badges' as const, label: 'Badges', icon: <Award className="w-3.5 h-3.5" />, count: unlockedBadges.length },
+                    { key: 'rules' as const, label: 'How It Works', icon: <BookOpen className="w-3.5 h-3.5" /> },
+                ]).map(t => (
+                    <button
+                        key={t.key}
+                        onClick={() => setActiveTab(t.key)}
+                        className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                            activeTab === t.key
+                                ? 'border-[var(--accent)] text-[var(--accent)]'
+                                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:border-[var(--border-subtle)]'
+                        }`}
+                    >
+                        {t.icon}
+                        <span>{t.label}</span>
+                        {'count' in t && typeof t.count === 'number' && (
+                            <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${
+                                activeTab === t.key ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : 'bg-[var(--bg-elevated)] text-[var(--text-muted)]'
+                            }`}>
+                                {t.count}
+                            </span>
+                        )}
+                    </button>
+                ))}
+            </div>
+
+            {/* ── Active Now Tab ── */}
+            {activeTab === 'active' && (
+                <div className="space-y-4">
+                    {activeStreaks.length === 0 ? (
+                        <div className="card p-8 text-center">
+                            <Flame className="w-8 h-8 text-[var(--text-muted)] mx-auto mb-3 opacity-40" />
+                            <p className="text-sm font-medium text-[var(--text-secondary)]">No active streaks right now</p>
+                            <p className="text-xs text-[var(--text-muted)] mt-1">Your record streaks and badge progress are tracked in the other tabs.</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                            {activeStreaks.map(streak => {
+                                const nextBadge = getNextBadgeTarget(streak.longestLength);
+                                return (
+                                    <button
+                                        key={streak.id}
+                                        onClick={() => handleStreakClick(streak, 'active')}
+                                        className="card p-4 text-left border-l-4 border-l-[var(--accent)] hover:bg-[var(--bg-hover)] transition-colors min-h-[44px]"
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="flex items-center gap-2">
+                                                {getStreakIcon(streak.type, streak.icon)}
+                                                <div>
+                                                    <p className="font-semibold text-[var(--text-primary)]">{streak.userName}</p>
+                                                    <p className="text-xs text-[var(--text-muted)]">{getStreakLabel(streak.type)}</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-3xl leading-none font-mono font-bold text-[var(--accent)]">
+                                                    {streak.currentLength}
+                                                </p>
+                                                <p className="text-xs text-[var(--text-muted)] mt-1">days</p>
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="text-3xl leading-none font-mono font-bold text-[var(--accent)]">
-                                                {streak.currentLength}
+
+                                        <p className="text-sm text-[var(--text-secondary)] mt-3">
+                                            {formatRule(streak.type, streak.threshold)}
+                                        </p>
+
+                                        <div className="grid grid-cols-2 gap-3 mt-3">
+                                            <div>
+                                                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Window</p>
+                                                <p className="text-xs text-[var(--text-secondary)] mt-1">
+                                                    {formatDate(streak.currentStartDate)} → {formatDate(streak.currentEndDate)}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Record</p>
+                                                <p className="text-sm font-mono text-[var(--text-primary)] mt-1">{streak.longestLength} days</p>
+                                            </div>
+                                        </div>
+
+                                        {nextBadge && (
+                                            <div className="mt-3 pt-3 border-t border-[var(--border-subtle)]">
+                                                <div className="flex items-center justify-between text-xs">
+                                                    <span className="text-[var(--text-muted)]">Next: {nextBadge.tier} badge</span>
+                                                    <span className="text-[var(--text-secondary)] font-mono">{nextBadge.remaining}d left</span>
+                                                </div>
+                                                <div className="progress-bar mt-1.5">
+                                                    <div
+                                                        className={`progress-fill bg-gradient-to-r ${tierColors[nextBadge.tier]}`}
+                                                        style={{ width: `${Math.min(100, ((nextBadge.requirement - nextBadge.remaining) / nextBadge.requirement) * 100)}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {streak.impactOnTrend != null && streak.impactOnTrend !== 0 && (
+                                            <p className={`text-xs mt-2 flex items-center gap-1 ${streak.impactOnTrend > 0 ? 'text-[#7BC4A0]' : 'text-[#D4897B]'}`}>
+                                                {streak.impactOnTrend > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                                {Math.abs(streak.impactOnTrend).toFixed(1)}% readiness delta
                                             </p>
-                                            <p className="text-xs text-[var(--text-muted)] mt-1">current days</p>
-                                        </div>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ── All Streaks Tab ── */}
+            {activeTab === 'all' && (
+                <div>
+                    {streakRows.length === 0 ? (
+                        <div className="card p-8 text-center">
+                            <ListChecks className="w-8 h-8 text-[var(--text-muted)] mx-auto mb-3 opacity-40" />
+                            <p className="text-sm font-medium text-[var(--text-secondary)]">No qualifying streaks yet</p>
+                            <p className="text-xs text-[var(--text-muted)] mt-1">You need at least one 3-day run to appear here.</p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Mobile cards */}
+                            <div className="space-y-3 md:hidden">
+                                {streakRows.map(streak => {
+                                    const nextBadge = getNextBadgeTarget(streak.longestLength);
+                                    return (
+                                        <button
+                                            key={streak.id}
+                                            onClick={() => handleStreakClick(streak, 'record')}
+                                            className="w-full card p-4 text-left hover:bg-[var(--bg-hover)] transition-colors min-h-[44px]"
+                                        >
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    {getStreakIcon(streak.type, streak.icon)}
+                                                    <div className="min-w-0">
+                                                        <p className="font-medium text-[var(--text-primary)] truncate">{streak.userName}</p>
+                                                        <p className="text-xs text-[var(--text-muted)] mt-0.5">{getStreakLabel(streak.type)}</p>
+                                                    </div>
+                                                </div>
+                                                <span className={`text-xs px-2 py-1 rounded-full shrink-0 ${streak.isActive ? 'bg-[var(--accent)]/20 text-[var(--accent)]' : 'bg-[var(--bg-elevated)] text-[var(--text-muted)]'}`}>
+                                                    {streak.isActive ? 'active' : 'idle'}
+                                                </span>
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
+                                                <div>
+                                                    <p className="text-[var(--text-muted)] uppercase tracking-wider">Current</p>
+                                                    <p className={`font-mono mt-1 ${streak.isActive ? 'text-[var(--accent)] font-bold' : 'text-[var(--text-secondary)]'}`}>
+                                                        {streak.currentLength}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[var(--text-muted)] uppercase tracking-wider">Record</p>
+                                                    <p className="font-mono mt-1 font-bold text-[var(--text-primary)]">{streak.longestLength}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[var(--text-muted)] uppercase tracking-wider">Next Badge</p>
+                                                    <p className="mt-1 text-[var(--text-secondary)]">
+                                                        {nextBadge ? `${nextBadge.remaining}d` : 'Done'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Desktop table */}
+                            <div className="hidden md:block card overflow-x-auto">
+                                <div className="min-w-[760px]">
+                                    <div className="grid grid-cols-[1fr_1.4fr_1.5fr_0.7fr_0.7fr_0.8fr] text-xs text-[var(--text-muted)] uppercase tracking-wider p-3 border-b border-[var(--border-subtle)] font-medium">
+                                        <div>User</div>
+                                        <div>Streak Type</div>
+                                        <div>Rule</div>
+                                        <div className="text-center">Current</div>
+                                        <div className="text-center">Record</div>
+                                        <div className="text-right">Next Badge</div>
                                     </div>
+                                    {streakRows.map(streak => {
+                                        const nextBadge = getNextBadgeTarget(streak.longestLength);
+                                        return (
+                                            <button
+                                                key={streak.id}
+                                                onClick={() => handleStreakClick(streak, 'record')}
+                                                className="grid grid-cols-[1fr_1.4fr_1.5fr_0.7fr_0.7fr_0.8fr] w-full p-3 items-center hover:bg-[var(--bg-hover)] transition-colors text-left min-h-[44px]"
+                                            >
+                                                <div className="font-medium text-[var(--text-primary)]">
+                                                    {streak.userName}
+                                                </div>
+                                                <div className="text-sm text-[var(--text-secondary)] flex items-center gap-2">
+                                                    {getStreakIcon(streak.type, streak.icon)}
+                                                    {getStreakLabel(streak.type)}
+                                                </div>
+                                                <div className="text-sm text-[var(--text-secondary)]">
+                                                    {formatRule(streak.type, streak.threshold)}
+                                                </div>
+                                                <div className={`text-center font-mono ${streak.isActive ? 'text-[var(--accent)] font-bold' : 'text-[var(--text-muted)]'}`}>
+                                                    {streak.currentLength}
+                                                </div>
+                                                <div className="text-center font-mono font-bold text-[var(--text-primary)]">
+                                                    {streak.longestLength}
+                                                </div>
+                                                <div className="text-right text-sm text-[var(--text-secondary)]">
+                                                    {nextBadge ? `${nextBadge.remaining}d to ${nextBadge.tier}` : 'Complete'}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+            )}
 
-                                    <p className="text-sm text-[var(--text-secondary)] mt-3">
-                                        {formatRule(streak.type, streak.threshold)}
-                                    </p>
-
-                                    <div className="grid grid-cols-2 gap-3 mt-3">
-                                        <div>
-                                            <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Current Window</p>
-                                            <p className="text-xs text-[var(--text-secondary)] mt-1">
-                                                {formatDate(streak.currentStartDate)} → {formatDate(streak.currentEndDate)}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Record</p>
-                                            <p className="text-sm font-mono text-[var(--text-primary)] mt-1">{streak.longestLength} days</p>
-                                        </div>
-                                    </div>
-
-                                    {nextBadge ? (
-                                        <p className="text-xs text-[var(--text-muted)] mt-3">
-                                            {nextBadge.remaining} days to {nextBadge.tier} ({nextBadge.requirement}-day) badge
-                                        </p>
-                                    ) : (
-                                        <p className="text-xs text-[#7BC4A0] mt-3">
-                                            All badge tiers unlocked for this streak
-                                        </p>
-                                    )}
-
-                                    {streak.impactOnTrend != null && streak.impactOnTrend !== 0 && (
-                                        <p className={`text-xs mt-2 flex items-center gap-1 ${streak.impactOnTrend > 0 ? 'text-[#7BC4A0]' : 'text-[#D4897B]'}`}>
-                                            {streak.impactOnTrend > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                                            {Math.abs(streak.impactOnTrend).toFixed(1)}% readiness delta during this run
-                                        </p>
-                                    )}
-                                </button>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
-
-            <div>
-                <h3 className="section-header flex items-center gap-2">
-                    <Trophy className="w-5 h-5 text-[#D4B87B]" />
-                    Badge Progression
-                    <InfoTooltip
-                        title="Badge Progress"
-                        description="Badges are tied to your record streak length for each habit."
-                        calculation="Bronze: 7 days, Silver: 14 days, Gold: 30 days, Platinum: 60 days."
-                    />
-                </h3>
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                    <div className="card p-4">
-                        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-3">Unlocked Badges</p>
+            {/* ── Badges Tab ── */}
+            {activeTab === 'badges' && (
+                <div className="space-y-6">
+                    {/* Unlocked Badges */}
+                    <div>
+                        <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-wider font-medium mb-3 flex items-center gap-2">
+                            <Trophy className="w-4 h-4 text-[#D4B87B]" />
+                            Unlocked Badges
+                        </h3>
                         {unlockedBadges.length === 0 ? (
-                            <p className="text-sm text-[var(--text-secondary)]">No unlocked badges yet.</p>
+                            <div className="card p-6 text-center">
+                                <Award className="w-8 h-8 text-[var(--text-muted)] mx-auto mb-3 opacity-40" />
+                                <p className="text-sm text-[var(--text-secondary)]">No badges unlocked yet.</p>
+                                <p className="text-xs text-[var(--text-muted)] mt-1">Keep your streaks going — Bronze unlocks at 7 days!</p>
+                            </div>
                         ) : (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
                                 {unlockedBadges.map(badge => (
                                     <button
                                         key={badge.id}
                                         onClick={() => handleBadgeClick(badge)}
-                                        className={`relative p-3 rounded-lg border ${tierBorderColors[badge.tier]} bg-[var(--bg-elevated)] text-left hover:bg-[var(--bg-hover)] transition-colors min-h-[44px]`}
+                                        className={`relative p-3 rounded-xl border ${tierBorderColors[badge.tier]} bg-[var(--bg-elevated)] text-left hover:bg-[var(--bg-hover)] transition-colors min-h-[44px]`}
                                     >
-                                        <div className={`absolute inset-0 bg-gradient-to-br ${tierColors[badge.tier]} opacity-10 rounded-lg`} />
+                                        <div className={`absolute inset-0 bg-gradient-to-br ${tierColors[badge.tier]} opacity-10 rounded-xl`} />
                                         <div className="relative z-10">
                                             <div className="flex items-center gap-2 mb-1">
                                                 <Award className={`w-4 h-4 ${tierTextColors[badge.tier]}`} />
-                                                <span className={`text-[10px] uppercase tracking-wider ${tierTextColors[badge.tier]}`}>
+                                                <span className={`text-[10px] uppercase tracking-wider font-semibold ${tierTextColors[badge.tier]}`}>
                                                     {badge.tier}
                                                 </span>
                                             </div>
@@ -494,12 +620,14 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                         )}
                     </div>
 
-                    <div className="card p-4">
-                        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-3">Next Badge Targets</p>
-                        {upcomingBadges.length === 0 ? (
-                            <p className="text-sm text-[var(--text-secondary)]">All current streak badges are unlocked.</p>
-                        ) : (
-                            <div className="space-y-3">
+                    {/* Upcoming Badges */}
+                    {upcomingBadges.length > 0 && (
+                        <div>
+                            <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-wider font-medium mb-3 flex items-center gap-2">
+                                <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
+                                Next Targets
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 {upcomingBadges.map(badge => {
                                     const streak = analytics.streaks.find(s =>
                                         s.userId === badge.userId && s.type === badge.streakType
@@ -511,13 +639,13 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                                             className="w-full card p-3 text-left hover:bg-[var(--bg-hover)] transition-colors min-h-[44px]"
                                         >
                                             <div className="flex items-center justify-between gap-3">
-                                                <div>
-                                                    <p className="text-sm font-medium text-[var(--text-primary)]">{badge.name}</p>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium text-[var(--text-primary)] truncate">{badge.name}</p>
                                                     <p className="text-xs text-[var(--text-muted)] mt-0.5">
                                                         Record {streak?.longestLength || 0} / {badge.requirement} days
                                                     </p>
                                                 </div>
-                                                <span className="font-mono text-sm text-[var(--text-secondary)]">
+                                                <span className="font-mono text-sm text-[var(--text-secondary)] shrink-0">
                                                     {badge.progress.toFixed(0)}%
                                                 </span>
                                             </div>
@@ -531,120 +659,84 @@ const StreakTracker: React.FC<StreakTrackerProps> = ({ profiles, usersData }) =>
                                     );
                                 })}
                             </div>
-                        )}
+                        </div>
+                    )}
+
+                    {/* Tier legend */}
+                    <div className="card p-4">
+                        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider font-medium mb-3">Badge Tiers</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {TIER_ORDER.map(tier => (
+                                <div key={tier} className="flex items-center gap-2">
+                                    <div className={`w-3 h-3 rounded-full bg-gradient-to-br ${tierColors[tier]}`} />
+                                    <span className="text-xs text-[var(--text-secondary)] capitalize">{tier}</span>
+                                    <span className="text-xs text-[var(--text-muted)] font-mono">{BADGE_TIERS[tier].days}d</span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
 
-            <div>
-                <h3 className="section-header flex items-center gap-2">
-                    <Star className="w-5 h-5 text-[#D4B87B]" />
-                    All Streaks
-                    <InfoTooltip
-                        title="Current vs Record"
-                        description="Current is your active run. Record is your all-time best run for the same streak type."
-                        calculation="Rows include only streak types where you have at least one 3-day qualifying run."
-                    />
-                </h3>
-
-                {streakRows.length === 0 ? (
-                    <div className="card p-5 text-sm text-[var(--text-secondary)]">
-                        No qualifying streaks yet. You need at least one 3-day run to appear here.
-                    </div>
-                ) : (
-                    <>
-                        <div className="space-y-3 md:hidden">
-                            {streakRows.map(streak => {
-                                const nextBadge = getNextBadgeTarget(streak.longestLength);
-                                return (
-                                    <button
-                                        key={streak.id}
-                                        onClick={() => handleStreakClick(streak, 'record')}
-                                        className="w-full card p-4 text-left hover:bg-[var(--bg-hover)] transition-colors min-h-[44px]"
-                                    >
-                                        <div className="flex items-center justify-between gap-3">
-                                            <div>
-                                                <p className="font-medium text-[var(--text-primary)]">{streak.userName}</p>
-                                                <p className="text-xs text-[var(--text-muted)] mt-0.5">{getStreakLabel(streak.type)}</p>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                {getStreakIcon(streak.type, streak.icon)}
-                                                <span className={`text-xs px-2 py-1 rounded-full ${streak.isActive ? 'bg-[var(--accent)]/20 text-[var(--accent)]' : 'bg-[var(--bg-elevated)] text-[var(--text-muted)]'}`}>
-                                                    {streak.isActive ? 'active' : 'idle'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <p className="text-sm text-[var(--text-secondary)] mt-2">
-                                            {formatRule(streak.type, streak.threshold)}
-                                        </p>
-                                        <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
-                                            <div>
-                                                <p className="text-[var(--text-muted)] uppercase tracking-wider">Current</p>
-                                                <p className={`font-mono mt-1 ${streak.isActive ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>
-                                                    {streak.currentLength}
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[var(--text-muted)] uppercase tracking-wider">Record</p>
-                                                <p className="font-mono mt-1 text-[var(--text-primary)]">{streak.longestLength}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[var(--text-muted)] uppercase tracking-wider">Next Badge</p>
-                                                <p className="mt-1 text-[var(--text-secondary)]">
-                                                    {nextBadge ? `${nextBadge.remaining}d` : 'Done'}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </button>
-                                );
-                            })}
-                        </div>
-
-                        <div className="hidden md:block card overflow-x-auto">
-                            <div className="min-w-[760px]">
-                                <div className="grid grid-cols-[1fr_1.4fr_1.5fr_0.7fr_0.7fr_0.8fr] text-xs text-[var(--text-muted)] uppercase tracking-wider p-3 border-b border-[var(--border-subtle)] font-medium">
-                                    <div>User</div>
-                                    <div>Streak Type</div>
-                                    <div>Rule</div>
-                                    <div className="text-center">Current</div>
-                                    <div className="text-center">Record</div>
-                                    <div className="text-right">Next Badge</div>
-                                </div>
-                                {streakRows.map(streak => {
-                                    const nextBadge = getNextBadgeTarget(streak.longestLength);
-                                    return (
-                                        <button
-                                            key={streak.id}
-                                            onClick={() => handleStreakClick(streak, 'record')}
-                                            className="grid grid-cols-[1fr_1.4fr_1.5fr_0.7fr_0.7fr_0.8fr] w-full p-3 items-center hover:bg-[var(--bg-hover)] transition-colors text-left min-h-[44px]"
-                                        >
-                                            <div className="font-medium text-[var(--text-primary)]">
-                                                {streak.userName}
-                                            </div>
-                                            <div className="text-sm text-[var(--text-secondary)] flex items-center gap-2">
-                                                {getStreakIcon(streak.type, streak.icon)}
-                                                {getStreakLabel(streak.type)}
-                                            </div>
-                                            <div className="text-sm text-[var(--text-secondary)]">
-                                                {formatRule(streak.type, streak.threshold)}
-                                            </div>
-                                            <div className={`text-center font-mono ${streak.isActive ? 'text-[var(--accent)] font-bold' : 'text-[var(--text-muted)]'}`}>
-                                                {streak.currentLength}
-                                            </div>
-                                            <div className="text-center font-mono font-bold text-[var(--text-primary)]">
-                                                {streak.longestLength}
-                                            </div>
-                                            <div className="text-right text-sm text-[var(--text-secondary)]">
-                                                {nextBadge ? `${nextBadge.remaining}d to ${nextBadge.tier}` : 'Complete'}
-                                            </div>
-                                        </button>
-                                    );
-                                })}
+            {/* ── Rules Tab ── */}
+            {activeTab === 'rules' && (
+                <div className="space-y-6">
+                    <div className="card p-5 border-[var(--accent)]/40 bg-[var(--accent)]/[0.04]">
+                        <div className="flex items-start gap-3">
+                            <div className="mt-0.5">
+                                <Info className="w-5 h-5 text-[var(--accent)]" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-2">
+                                    How Streaks Are Calculated
+                                </h3>
+                                <ol className="space-y-1.5 text-sm text-[var(--text-secondary)]">
+                                    <li>1. Each streak type has a daily rule shown in the grid below.</li>
+                                    <li>2. A day counts only if data exists for that metric and meets the rule.</li>
+                                    <li>3. A failed day or missing calendar day resets the current run.</li>
+                                    <li>4. <strong>Current</strong> is your live run, <strong>Record</strong> is your all-time best, and badges are based on Record.</li>
+                                </ol>
                             </div>
                         </div>
-                    </>
-                )}
-            </div>
+                    </div>
+
+                    <div>
+                        <h3 className="text-xs text-[var(--text-muted)] uppercase tracking-wider font-medium mb-3 flex items-center gap-2">
+                            <Star className="w-4 h-4 text-[#D4B87B]" />
+                            Streak Rules
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                            {STREAK_DEFINITIONS.map(def => (
+                                <div key={def.type} className="card p-4">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        {getStreakIcon(def.type, def.icon)}
+                                        <p className="font-medium text-[var(--text-primary)]">{getStreakLabel(def.type)}</p>
+                                    </div>
+                                    <p className="text-sm text-[var(--text-secondary)]">
+                                        {formatRule(def.type, def.threshold)}
+                                    </p>
+                                    <p className="text-xs text-[var(--text-muted)] mt-2">
+                                        Minimum qualifying streak: {def.minDays} days
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="card p-4">
+                        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider font-medium mb-3">Badge Tiers</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {TIER_ORDER.map(tier => (
+                                <div key={tier} className="flex items-center gap-2">
+                                    <div className={`w-3 h-3 rounded-full bg-gradient-to-br ${tierColors[tier]}`} />
+                                    <span className="text-sm text-[var(--text-secondary)] capitalize">{tier}</span>
+                                    <span className="text-sm text-[var(--text-muted)] font-mono">{BADGE_TIERS[tier].days} days</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

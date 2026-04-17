@@ -1847,7 +1847,7 @@ const Dashboard: React.FC = () => {
     const [competitionInviteToken, setCompetitionInviteToken] = useState<string | null>(() => (
         typeof window !== 'undefined' ? getCompetitionInviteToken(window.location.search) : null
     ));
-    const [viewMode, setViewMode] = useState<'today' | 'compare' | 'compete' | 'trends' | 'insights' | 'export'>(() => (
+    const [viewMode, setViewMode] = useState<'today' | 'compare' | 'compete' | 'trends' | 'streaks' | 'insights' | 'export'>(() => (
         typeof window !== 'undefined' && getCompetitionInviteToken(window.location.search) ? 'compete' : 'today'
     ));
     const [isSyncing, setIsSyncing] = useState(false);
@@ -3352,6 +3352,7 @@ const Dashboard: React.FC = () => {
                         ...(profiles.length > 1 ? [{ key: 'compare', label: 'Compare', icon: <GitCompareArrows className="w-4 h-4" /> }] : []),
                         { key: 'compete', label: 'Compete', icon: <Swords className="w-4 h-4" /> },
                         { key: 'trends', label: 'Trends', icon: <BarChart3 className="w-4 h-4" /> },
+                        { key: 'streaks', label: 'Streaks', icon: <Flame className="w-4 h-4" /> },
                         { key: 'insights', label: 'Insights', icon: <Sparkles className="w-4 h-4" /> },
                         { key: 'export', label: 'Export', icon: <Download className="w-4 h-4" /> },
                     ].map(tab => (
@@ -3373,6 +3374,7 @@ const Dashboard: React.FC = () => {
                     { key: 'today', label: 'Today', icon: <CalendarDays className="w-5 h-5" /> },
                     { key: 'compete', label: 'Compete', icon: <Swords className="w-5 h-5" /> },
                     { key: 'trends', label: 'Trends', icon: <BarChart3 className="w-5 h-5" /> },
+                    { key: 'streaks', label: 'Streaks', icon: <Flame className="w-5 h-5" /> },
                     { key: 'insights', label: 'Insights', icon: <Sparkles className="w-5 h-5" /> },
                     { key: 'export', label: 'Export', icon: <Download className="w-5 h-5" /> },
                 ].map(tab => (
@@ -3869,6 +3871,16 @@ const Dashboard: React.FC = () => {
                         </div>
                         <TrendInsightsPanel profiles={profiles} userQueries={scopedAllTimeQueriesForHistory} />
                         <AllTimeHistory profiles={profiles} userQueries={scopedAllTimeQueriesForHistory} />
+                    </div>
+                )}
+
+                {/* ======== STREAKS VIEW ======== */}
+                {viewMode === 'streaks' && (
+                    <div className="pt-6">
+                        <StreakTracker
+                            profiles={profiles.map(p => ({ id: p.id, firstName: p.firstName, lastName: p.lastName, email: p.email }))}
+                            usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))}
+                        />
                     </div>
                 )}
 
