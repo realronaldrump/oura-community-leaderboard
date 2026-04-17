@@ -25,6 +25,13 @@ interface HistoryEntry {
     average: number;
 }
 
+interface ChartPoint {
+    x: number;
+    y: number;
+    original: HistoryEntry;
+    dateStr: string;
+}
+
 type SortField = 'date' | 'userName' | 'sleep' | 'readiness' | 'activity' | 'average';
 type SortDirection = 'asc' | 'desc';
 type Smoothing = 'raw' | '3d' | '7d' | '14d';
@@ -36,6 +43,8 @@ const compareNames = (a: string, b: string): number =>
 const TABLE_PAGE_SIZE = 250;
 const countAvailableScores = (sleep: number, readiness: number, activity: number): number =>
     Number(sleep > 0) + Number(readiness > 0) + Number(activity > 0);
+const formatScoreStat = (value: number): string =>
+    Number.isInteger(value) ? String(value) : value.toFixed(1);
 
 const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }) => {
     const [sortField, setSortField] = useState<SortField>('date');
@@ -223,7 +232,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
             userGroups.get(d.userId)!.push(d);
         });
 
-        const finalSeries = new Map<string, any[]>();
+        const finalSeries = new Map<string, ChartPoint[]>();
 
         // Window Size
         let windowSize = 1;
@@ -295,26 +304,28 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
         });
     };
 
+    const visibleChartPoints = useMemo(
+        () => chartProfiles.flatMap(({ profile }) => {
+            if (hiddenChartUserIds.has(profile.id)) return [];
+            return (chartData.get(profile.id) || []).filter((point) => point.y > 0);
+        }),
+        [chartData, chartProfiles, hiddenChartUserIds]
+    );
+
     // Friendly chart summary
     const chartSummary = useMemo(() => {
-        if (filteredData.length === 0) return null;
+        if (visibleChartPoints.length < 3) return null;
 
-        // Get entries for the selected metric, excluding zeros
-        const validEntries = filteredData.filter(d => {
-            const val = d[chartMetric === 'average' ? 'average' : chartMetric];
-            return val > 0;
-        });
-
-        if (validEntries.length < 3) return null;
-
-        const sorted = [...validEntries].sort((a, b) => a.dateStr.localeCompare(b.dateStr));
-        const values = sorted.map(e => e[chartMetric === 'average' ? 'average' : chartMetric]);
+        const sorted = [...visibleChartPoints].sort((a, b) => a.dateStr.localeCompare(b.dateStr));
+        const values = sorted.map(point => point.y);
         const allTimeAvg = Math.round(values.reduce((s, v) => s + v, 0) / values.length);
         const recentCount = Math.min(7, values.length);
         const recentSlice = values.slice(-recentCount);
         const recentAvg = Math.round(recentSlice.reduce((s, v) => s + v, 0) / recentSlice.length);
         const allTimeBest = Math.max(...values);
         const allTimeWorst = Math.min(...values);
+        const bestDisplay = formatScoreStat(allTimeBest);
+        const worstDisplay = formatScoreStat(allTimeWorst);
         const metricLabel = chartMetric.charAt(0).toUpperCase() + chartMetric.slice(1);
 
         const parts: string[] = [];
@@ -332,14 +343,14 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
         // Add range context for everyday users
         const range = allTimeBest - allTimeWorst;
         if (range > 0) {
-            parts.push(`Your scores have ranged from ${allTimeWorst} to ${allTimeBest} across ${values.length} days`);
+            parts.push(`Your scores have ranged from ${worstDisplay} to ${bestDisplay} across ${values.length} days`);
         }
 
         return {
             text: parts.join('. ') + '.',
-            stats: { allTimeAvg, recentAvg, best: allTimeBest, worst: allTimeWorst, totalDays: values.length },
+            stats: { allTimeAvg, recentAvg, best: bestDisplay, worst: worstDisplay, totalDays: values.length },
         };
-    }, [filteredData, chartMetric]);
+    }, [chartMetric, visibleChartPoints]);
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -478,7 +489,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                                     verticalAlign="bottom"
                                     height={64}
                                     content={() => (
-                                        <div className="flex flex-wrap items-center justify-center gap-2 px-2 pt-3">
+                                        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 px-2 pt-3">
                                             {chartProfiles.map(({ profile, index }) => {
                                                 const userName = getProfileDisplayName(profile);
                                                 const isHidden = hiddenChartUserIds.has(profile.id);
@@ -491,17 +502,14 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                                                         onClick={() => toggleChartUser(profile.id)}
                                                         aria-pressed={!isHidden}
                                                         aria-label={`${isHidden ? 'Show' : 'Hide'} ${userName}'s scores`}
-                                                        className={`inline-flex h-7 items-center gap-2 rounded-md border px-2.5 text-xs font-medium transition-colors ${isHidden
-                                                            ? 'border-black/5 bg-black/[0.03] text-text-muted hover:text-text-secondary'
-                                                            : 'border-black/10 bg-white/45 text-text-primary hover:bg-white/65'
-                                                            }`}
+                                                        className={`inline-flex cursor-pointer items-center gap-2 bg-transparent p-0 text-sm font-normal transition-opacity hover:opacity-75 focus-visible:outline-none focus-visible:underline ${isHidden ? 'opacity-40' : 'opacity-100'}`}
                                                     >
                                                         <span
-                                                            className={`h-2 w-2 rounded-full transition-opacity ${isHidden ? 'opacity-35' : 'opacity-100'}`}
+                                                            className="h-2 w-2 rounded-full"
                                                             style={{ backgroundColor: color }}
                                                             aria-hidden="true"
                                                         />
-                                                        <span className={isHidden ? 'line-through decoration-black/30' : ''}>{userName}</span>
+                                                        <span>{userName}</span>
                                                     </button>
                                                 );
                                             })}

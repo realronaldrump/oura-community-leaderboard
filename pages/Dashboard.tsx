@@ -375,33 +375,407 @@ const formatContributionCaption = (label: string, value?: number | null): string
 
 
 // ============================================
-// PERSONAL RECORDS STRIP – Best scores with dates and top-10 expansion
+// PERSONAL RECORDS STRIP - highs, lows, averages, ranges, and streaks
 // ============================================
 
-type RecordEntry = { day: string; value: number; displayValue: string };
-type RecordCategory = { id: string; label: string; color: string; bg: string; entries: RecordEntry[] };
+type RecordOrder = 'desc' | 'asc';
+type RawRecordItem = { day: string; raw: number; display: string; detail?: string };
+type DailyRecordValue = { day: string; value: number };
+type RecordEntry = {
+    id: string;
+    value: number;
+    displayValue: string;
+    day?: string;
+    startDay?: string;
+    endDay?: string;
+    detail?: string;
+    rankLabel?: string;
+};
+type RecordCategory = {
+    id: string;
+    label: string;
+    color: string;
+    bg: string;
+    entries: RecordEntry[];
+    drawerTitle?: string;
+};
+
+const RECORD_LIMIT = 10;
+const RANGE_DEFINITIONS = [
+    { label: 'All time', rankLabel: 'All', days: null },
+    { label: 'Last year', rankLabel: '365', days: 365 },
+    { label: 'Last 90', rankLabel: '90', days: 90 },
+    { label: 'Last 30', rankLabel: '30', days: 30 },
+    { label: 'Last 14', rankLabel: '14', days: 14 },
+    { label: 'Last 7', rankLabel: '7', days: 7 },
+] as const;
+
+const recordColors = {
+    readiness: { color: '#6B9E8A', bg: 'rgba(107,158,138,0.12)' },
+    sleep: { color: '#5F8FB8', bg: 'rgba(95,143,184,0.12)' },
+    activity: { color: '#B9944A', bg: 'rgba(185,148,74,0.14)' },
+    recovery: { color: '#8E7AA8', bg: 'rgba(142,122,168,0.12)' },
+    low: { color: '#C66F5F', bg: 'rgba(198,111,95,0.12)' },
+    balance: { color: '#4F9A92', bg: 'rgba(79,154,146,0.12)' },
+    neutral: { color: '#7A756E', bg: 'rgba(122,117,110,0.12)' },
+};
 
 const formatRecordDate = (isoDay: string): string =>
     formatISODateForDisplay(isoDay, undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
+const formatCompactRecordDate = (isoDay: string): string =>
+    formatISODateForDisplay(isoDay, undefined, { month: 'short', day: 'numeric' });
+
+const getRecordContext = (entry: RecordEntry): string => {
+    if (entry.detail) return entry.detail;
+    if (entry.day) return formatRecordDate(entry.day);
+    if (entry.startDay && entry.endDay) {
+        return entry.startDay === entry.endDay
+            ? formatRecordDate(entry.startDay)
+            : `${formatCompactRecordDate(entry.startDay)} to ${formatCompactRecordDate(entry.endDay)}`;
+    }
+    return 'All time';
+};
+
+const toRecordNumber = (value: unknown): number | null => {
+    if (value == null) return null;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
+};
+
+const formatRecordScore = (value: number): string => String(Math.round(value));
+const formatRecordCount = (value: number): string => Math.round(value).toLocaleString();
+const formatRecordDecimal = (value: number, digits = 1): string => value.toFixed(digits);
+const formatRecordPercent = (value: number): string => `${Math.round(value)}%`;
+const formatRecordBpm = (value: number): string => `${Math.round(value)} bpm`;
+const formatRecordMs = (value: number): string => `${Math.round(value)} ms`;
+const formatRecordKcal = (value: number): string => `${Math.round(value).toLocaleString()} kcal`;
+const formatRecordMiles = (value: number): string => `${(value * METERS_TO_MILES).toFixed(1)} mi`;
+const formatRecordDuration = (seconds: number): string => formatDuration(Math.max(0, Math.round(seconds)));
+const formatRecordTempDelta = (celsius: number): string => {
+    const fahrenheit = celsius * CELSIUS_DELTA_TO_FAHRENHEIT_DELTA;
+    const sign = fahrenheit > 0 ? '+' : '';
+    return `${sign}${fahrenheit.toFixed(1)} deg F`;
+};
+
+const createDailyItems = <T extends { day?: string }>(
+    items: T[],
+    getValue: (item: T) => number | null | undefined,
+    formatValue: (value: number, item: T) => string,
+    options: {
+        positiveOnly?: boolean;
+        includeZero?: boolean;
+        detail?: (item: T, value: number) => string | undefined;
+    } = {}
+): RawRecordItem[] => items
+    .map((item) => {
+        if (!isIsoDay(item.day)) return null;
+        const value = toRecordNumber(getValue(item));
+        if (value == null) return null;
+        if (options.positiveOnly && value <= 0) return null;
+        if (!options.includeZero && value === 0) return null;
+        return {
+            day: item.day,
+            raw: value,
+            display: formatValue(value, item),
+            detail: options.detail?.(item, value),
+        };
+    })
+    .filter((item): item is RawRecordItem => item !== null);
+
 const buildCategoryEntries = (
-    items: { day: string; raw: number; display: string }[],
-    order: 'desc' | 'asc',
-    limit = 10
+    items: RawRecordItem[],
+    order: RecordOrder,
+    limit = RECORD_LIMIT
 ): RecordEntry[] => {
-    const bestByDay = new Map<string, { raw: number; display: string }>();
+    const bestByDay = new Map<string, RawRecordItem>();
     for (const item of items) {
-        if (!item.day) continue;
         const current = bestByDay.get(item.day);
         const isBetter = order === 'desc'
             ? !current || item.raw > current.raw
             : !current || item.raw < current.raw;
-        if (isBetter) bestByDay.set(item.day, { raw: item.raw, display: item.display });
+        if (isBetter) bestByDay.set(item.day, item);
     }
-    return Array.from(bestByDay.entries())
-        .map(([day, { raw, display }]) => ({ day, value: raw, displayValue: display }))
-        .sort((a, b) => order === 'desc' ? b.value - a.value : a.value - b.value)
+
+    return Array.from(bestByDay.values())
+        .map((item, index) => ({
+            id: `${item.day}-${index}`,
+            day: item.day,
+            value: item.raw,
+            displayValue: item.display,
+            detail: item.detail,
+        }))
+        .sort((a, b) => {
+            const valueDelta = order === 'desc' ? b.value - a.value : a.value - b.value;
+            if (valueDelta !== 0) return valueDelta;
+            return (b.day || '').localeCompare(a.day || '');
+        })
         .slice(0, limit);
+};
+
+const dedupeDailyValues = (values: DailyRecordValue[]): DailyRecordValue[] => {
+    const byDay = new Map<string, number>();
+    values.forEach((item) => {
+        if (!isIsoDay(item.day) || !Number.isFinite(item.value)) return;
+        byDay.set(item.day, item.value);
+    });
+    return Array.from(byDay.entries())
+        .map(([day, value]) => ({ day, value }))
+        .sort((a, b) => a.day.localeCompare(b.day));
+};
+
+const toDailyValues = (items: RawRecordItem[]): DailyRecordValue[] =>
+    dedupeDailyValues(items.map((item) => ({ day: item.day, value: item.raw })));
+
+const averageDailyValue = (values: DailyRecordValue[]): number | null => {
+    if (values.length === 0) return null;
+    return values.reduce((sum, item) => sum + item.value, 0) / values.length;
+};
+
+const getRangeStart = (newestDay: string, days: number | null, oldestDay: string): string =>
+    days == null ? oldestDay : shiftLocalISODate(newestDay, -(days - 1));
+
+const buildRangeAverageEntries = (
+    values: DailyRecordValue[],
+    formatValue: (value: number) => string
+): RecordEntry[] => {
+    const sorted = dedupeDailyValues(values);
+    if (sorted.length === 0) return [];
+
+    const oldestDay = sorted[0].day;
+    const newestDay = sorted[sorted.length - 1].day;
+    return RANGE_DEFINITIONS
+        .map((range) => {
+            const startDay = getRangeStart(newestDay, range.days, oldestDay);
+            const points = sorted.filter((item) => item.day >= startDay && item.day <= newestDay);
+            const average = averageDailyValue(points);
+            if (average == null) return null;
+            return {
+                id: `${range.rankLabel}-${startDay}-${newestDay}`,
+                value: average,
+                displayValue: formatValue(average),
+                startDay,
+                endDay: newestDay,
+                rankLabel: range.rankLabel,
+                detail: `${range.label} - ${points.length} logged days`,
+            };
+        })
+        .filter((entry): entry is RecordEntry => entry !== null);
+};
+
+const buildRangeCountEntries = (
+    values: DailyRecordValue[],
+    predicate: (value: number) => boolean
+): RecordEntry[] => {
+    const sorted = dedupeDailyValues(values);
+    if (sorted.length === 0) return [];
+
+    const oldestDay = sorted[0].day;
+    const newestDay = sorted[sorted.length - 1].day;
+    return RANGE_DEFINITIONS
+        .map((range) => {
+            const startDay = getRangeStart(newestDay, range.days, oldestDay);
+            const points = sorted.filter((item) => item.day >= startDay && item.day <= newestDay);
+            if (points.length === 0) return null;
+            const count = points.filter((item) => predicate(item.value)).length;
+            return {
+                id: `${range.rankLabel}-${startDay}-${newestDay}`,
+                value: count,
+                displayValue: formatRecordCount(count),
+                startDay,
+                endDay: newestDay,
+                rankLabel: range.rankLabel,
+                detail: `${range.label} - ${count}/${points.length} days`,
+            };
+        })
+        .filter((entry): entry is RecordEntry => entry !== null);
+};
+
+const buildRollingAverageEntries = (
+    values: DailyRecordValue[],
+    windowDays: number,
+    order: RecordOrder,
+    formatValue: (value: number) => string,
+    limit = RECORD_LIMIT
+): RecordEntry[] => {
+    const sorted = dedupeDailyValues(values);
+    const minLoggedDays = Math.max(2, Math.ceil(windowDays * 0.7));
+    const entries: RecordEntry[] = [];
+    let startIndex = 0;
+    let sum = 0;
+
+    sorted.forEach((item, endIndex) => {
+        sum += item.value;
+        const windowStart = shiftLocalISODate(item.day, -(windowDays - 1));
+        while (startIndex <= endIndex && sorted[startIndex].day < windowStart) {
+            sum -= sorted[startIndex].value;
+            startIndex += 1;
+        }
+        const count = endIndex - startIndex + 1;
+        if (count < minLoggedDays) return;
+        const average = sum / count;
+        entries.push({
+            id: `${windowDays}-${windowStart}-${item.day}`,
+            value: average,
+            displayValue: formatValue(average),
+            startDay: windowStart,
+            endDay: item.day,
+            detail: `${windowDays} days - ${count} logged days`,
+        });
+    });
+
+    return entries
+        .sort((a, b) => {
+            const valueDelta = order === 'desc' ? b.value - a.value : a.value - b.value;
+            if (valueDelta !== 0) return valueDelta;
+            return (b.endDay || '').localeCompare(a.endDay || '');
+        })
+        .slice(0, limit);
+};
+
+const buildRollingSpreadEntries = (
+    values: DailyRecordValue[],
+    windowDays: number,
+    order: RecordOrder,
+    limit = RECORD_LIMIT
+): RecordEntry[] => {
+    const sorted = dedupeDailyValues(values);
+    const minLoggedDays = Math.max(2, Math.ceil(windowDays * 0.7));
+    const entries: RecordEntry[] = [];
+    let startIndex = 0;
+
+    sorted.forEach((item, endIndex) => {
+        const windowStart = shiftLocalISODate(item.day, -(windowDays - 1));
+        while (startIndex <= endIndex && sorted[startIndex].day < windowStart) {
+            startIndex += 1;
+        }
+        const points = sorted.slice(startIndex, endIndex + 1);
+        if (points.length < minLoggedDays) return;
+        const rawValues = points.map((point) => point.value);
+        const spread = Math.max(...rawValues) - Math.min(...rawValues);
+        entries.push({
+            id: `${windowDays}-${windowStart}-${item.day}`,
+            value: spread,
+            displayValue: `${Math.round(spread)} pt spread`,
+            startDay: windowStart,
+            endDay: item.day,
+            detail: `${windowDays} days - ${points.length} logged days`,
+        });
+    });
+
+    return entries
+        .sort((a, b) => {
+            const valueDelta = order === 'desc' ? b.value - a.value : a.value - b.value;
+            if (valueDelta !== 0) return valueDelta;
+            return (b.endDay || '').localeCompare(a.endDay || '');
+        })
+        .slice(0, limit);
+};
+
+const buildStreakEntries = (
+    values: DailyRecordValue[],
+    predicate: (value: number) => boolean,
+    limit = RECORD_LIMIT
+): RecordEntry[] => {
+    const sorted = dedupeDailyValues(values);
+    const entries: RecordEntry[] = [];
+    let currentStart: string | null = null;
+    let currentEnd: string | null = null;
+    let currentLength = 0;
+
+    const closeStreak = () => {
+        if (!currentStart || !currentEnd || currentLength === 0) return;
+        entries.push({
+            id: `${currentStart}-${currentEnd}`,
+            value: currentLength,
+            displayValue: `${currentLength} days`,
+            startDay: currentStart,
+            endDay: currentEnd,
+            detail: `${formatCompactRecordDate(currentStart)} to ${formatCompactRecordDate(currentEnd)}`,
+        });
+    };
+
+    sorted.forEach((item) => {
+        if (!predicate(item.value)) {
+            closeStreak();
+            currentStart = null;
+            currentEnd = null;
+            currentLength = 0;
+            return;
+        }
+
+        const expectedNextDay = currentEnd ? shiftLocalISODate(currentEnd, 1) : null;
+        if (!currentEnd || expectedNextDay === item.day) {
+            currentStart = currentStart || item.day;
+            currentEnd = item.day;
+            currentLength += 1;
+            return;
+        }
+
+        closeStreak();
+        currentStart = item.day;
+        currentEnd = item.day;
+        currentLength = 1;
+    });
+    closeStreak();
+
+    return entries
+        .sort((a, b) => {
+            const valueDelta = b.value - a.value;
+            if (valueDelta !== 0) return valueDelta;
+            return (b.endDay || '').localeCompare(a.endDay || '');
+        })
+        .slice(0, limit);
+};
+
+const buildCombinedScoreItems = (
+    readinessItems: RawRecordItem[],
+    sleepItems: RawRecordItem[],
+    activityItems: RawRecordItem[]
+): RawRecordItem[] => {
+    const readinessByDay = new Map(toDailyValues(readinessItems).map((item) => [item.day, item.value]));
+    const sleepByDay = new Map(toDailyValues(sleepItems).map((item) => [item.day, item.value]));
+    const activityByDay = new Map(toDailyValues(activityItems).map((item) => [item.day, item.value]));
+
+    return Array.from(readinessByDay.keys())
+        .filter((day) => sleepByDay.has(day) && activityByDay.has(day))
+        .map((day) => {
+            const average = ((readinessByDay.get(day) || 0) + (sleepByDay.get(day) || 0) + (activityByDay.get(day) || 0)) / 3;
+            return {
+                day,
+                raw: average,
+                display: formatRecordScore(average),
+                detail: '3-score average',
+            };
+        });
+};
+
+const groupWorkoutValuesByDay = (workouts: NonNullable<DailyStats['workout']>) => {
+    const byDay = new Map<string, { count: number; calories: number; distance: number; duration: number }>();
+    workouts.forEach((workout) => {
+        if (!isIsoDay(workout.day)) return;
+        const current = byDay.get(workout.day) || { count: 0, calories: 0, distance: 0, duration: 0 };
+        const start = new Date(workout.start_datetime || 0).getTime();
+        const end = new Date(workout.end_datetime || 0).getTime();
+        const duration = Number.isFinite(start) && Number.isFinite(end) && end > start ? (end - start) / 1000 : 0;
+        byDay.set(workout.day, {
+            count: current.count + 1,
+            calories: current.calories + (toRecordNumber(workout.calories) || 0),
+            distance: current.distance + (toRecordNumber(workout.distance) || 0),
+            duration: current.duration + duration,
+        });
+    });
+    return Array.from(byDay.entries()).map(([day, value]) => ({ day, ...value }));
+};
+
+const getNumberByKeys = (item: unknown, keys: string[]): number | null => {
+    if (!item || typeof item !== 'object') return null;
+    const record = item as Record<string, unknown>;
+    for (const key of keys) {
+        const value = toRecordNumber(record[key]);
+        if (value != null) return value;
+    }
+    return null;
 };
 
 const PersonalRecordsStrip: React.FC<{
@@ -409,134 +783,495 @@ const PersonalRecordsStrip: React.FC<{
     activityHistory: DailyActivity[];
     readinessHistory: DailyReadiness[];
     sleepHistory: DailySleep[];
+    spo2History?: DailySpO2[];
+    stressHistory?: DailyStress[];
+    resilienceHistory?: DailyResilience[];
+    workoutHistory?: NonNullable<DailyStats['workout']>;
+    cardiovascularAgeHistory?: NonNullable<DailyStats['cardiovascularAge']>;
+    vo2MaxHistory?: NonNullable<DailyStats['vo2Max']>;
     onNavigateToDay: (day: string) => void;
-}> = ({ sessionHistory, activityHistory, readinessHistory, sleepHistory, onNavigateToDay }) => {
+}> = ({
+    sessionHistory,
+    activityHistory,
+    readinessHistory,
+    sleepHistory,
+    spo2History = [],
+    stressHistory = [],
+    resilienceHistory = [],
+    workoutHistory = [],
+    cardiovascularAgeHistory = [],
+    vo2MaxHistory = [],
+    onNavigateToDay,
+}) => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
 
     const categories = useMemo((): RecordCategory[] => {
         const result: RecordCategory[] = [];
+        const pushCategory = (
+            id: string,
+            label: string,
+            palette: typeof recordColors[keyof typeof recordColors],
+            entries: RecordEntry[],
+            drawerTitle?: string
+        ) => {
+            if (entries.length === 0) return;
+            result.push({ id, label, color: palette.color, bg: palette.bg, entries, drawerTitle });
+        };
+        const pushRankedCategory = (
+            id: string,
+            label: string,
+            palette: typeof recordColors[keyof typeof recordColors],
+            items: RawRecordItem[],
+            order: RecordOrder,
+            drawerTitle?: string
+        ) => pushCategory(id, label, palette, buildCategoryEntries(items, order), drawerTitle);
+        const pushAverageCategory = (
+            id: string,
+            label: string,
+            palette: typeof recordColors[keyof typeof recordColors],
+            values: DailyRecordValue[],
+            formatValue: (value: number) => string
+        ) => pushCategory(id, label, palette, buildRangeAverageEntries(values, formatValue), `${label} by range`);
+        const pushCountCategory = (
+            id: string,
+            label: string,
+            palette: typeof recordColors[keyof typeof recordColors],
+            values: DailyRecordValue[],
+            predicate: (value: number) => boolean
+        ) => pushCategory(id, label, palette, buildRangeCountEntries(values, predicate), `${label} by range`);
+        const pushRollingCategory = (
+            id: string,
+            label: string,
+            palette: typeof recordColors[keyof typeof recordColors],
+            values: DailyRecordValue[],
+            windowDays: number,
+            order: RecordOrder,
+            formatValue: (value: number) => string
+        ) => pushCategory(id, label, palette, buildRollingAverageEntries(values, windowDays, order, formatValue), `${label} windows`);
+        const pushStreakCategory = (
+            id: string,
+            label: string,
+            palette: typeof recordColors[keyof typeof recordColors],
+            values: DailyRecordValue[],
+            predicate: (value: number) => boolean
+        ) => pushCategory(id, label, palette, buildStreakEntries(values, predicate), `${label} runs`);
 
-        // Best Readiness Score
-        const readinessItems = readinessHistory
-            .filter(r => r.score != null && r.score > 0)
-            .map(r => ({ day: r.day, raw: r.score!, display: String(Math.round(r.score!)) }));
-        const readinessEntries = buildCategoryEntries(readinessItems, 'desc');
-        if (readinessEntries.length > 0) result.push({ id: 'readiness', label: 'Best Readiness', color: '#7BC4A0', bg: 'rgba(123,196,160,0.12)', entries: readinessEntries });
+        const readinessItems = createDailyItems(readinessHistory, (item) => item.score, (value) => formatRecordScore(value), { positiveOnly: true });
+        const sleepScoreItems = createDailyItems(sleepHistory, (item) => item.score, (value) => formatRecordScore(value), { positiveOnly: true });
+        const activityScoreItems = createDailyItems(activityHistory, (item) => item.score, (value) => formatRecordScore(value), { positiveOnly: true });
+        const combinedScoreItems = buildCombinedScoreItems(readinessItems, sleepScoreItems, activityScoreItems);
 
-        // Best Sleep Score
-        const sleepScoreItems = sleepHistory
-            .filter(s => s.score != null && s.score > 0)
-            .map(s => ({ day: s.day, raw: s.score!, display: String(Math.round(s.score!)) }));
-        const sleepScoreEntries = buildCategoryEntries(sleepScoreItems, 'desc');
-        if (sleepScoreEntries.length > 0) result.push({ id: 'sleep_score', label: 'Best Sleep', color: '#7BA8D4', bg: 'rgba(123,168,212,0.12)', entries: sleepScoreEntries });
+        const readinessValues = toDailyValues(readinessItems);
+        const sleepScoreValues = toDailyValues(sleepScoreItems);
+        const activityScoreValues = toDailyValues(activityScoreItems);
+        const combinedScoreValues = toDailyValues(combinedScoreItems);
 
-        // Best Activity Score
-        const activityScoreItems = activityHistory
-            .filter(a => a.score != null && a.score > 0)
-            .map(a => ({ day: a.day, raw: a.score!, display: String(Math.round(a.score!)) }));
-        const activityScoreEntries = buildCategoryEntries(activityScoreItems, 'desc');
-        if (activityScoreEntries.length > 0) result.push({ id: 'activity_score', label: 'Best Activity', color: '#D4B87B', bg: 'rgba(212,184,123,0.12)', entries: activityScoreEntries });
+        pushRankedCategory('best_daily_average', 'Best Daily Avg', recordColors.balance, combinedScoreItems, 'desc', 'Top average-score days');
+        pushRankedCategory('lowest_daily_average', 'Lowest Daily Avg', recordColors.low, combinedScoreItems, 'asc', 'Lowest average-score days');
+        pushRankedCategory('best_readiness', 'Best Readiness', recordColors.readiness, readinessItems, 'desc', 'Top readiness days');
+        pushRankedCategory('lowest_readiness', 'Lowest Readiness', recordColors.low, readinessItems, 'asc', 'Lowest readiness days');
+        pushRankedCategory('best_sleep_score', 'Best Sleep', recordColors.sleep, sleepScoreItems, 'desc', 'Top sleep-score days');
+        pushRankedCategory('lowest_sleep_score', 'Lowest Sleep', recordColors.low, sleepScoreItems, 'asc', 'Lowest sleep-score days');
+        pushRankedCategory('best_activity_score', 'Best Activity', recordColors.activity, activityScoreItems, 'desc', 'Top activity-score days');
+        pushRankedCategory('lowest_activity_score', 'Lowest Activity', recordColors.low, activityScoreItems, 'asc', 'Lowest activity-score days');
 
-        // Best HRV
-        const hrvItems = sessionHistory
-            .filter(s => s.average_hrv != null && s.average_hrv > 0)
-            .map(s => ({ day: s.day, raw: s.average_hrv!, display: `${Math.round(s.average_hrv!)} ms` }));
-        const hrvEntries = buildCategoryEntries(hrvItems, 'desc');
-        if (hrvEntries.length > 0) result.push({ id: 'hrv', label: 'Best HRV', color: '#A08BBE', bg: 'rgba(160,139,190,0.12)', entries: hrvEntries });
+        pushAverageCategory('average_score_ranges', 'Average Score', recordColors.balance, combinedScoreValues, formatRecordScore);
+        pushAverageCategory('average_readiness_ranges', 'Readiness Avg', recordColors.readiness, readinessValues, formatRecordScore);
+        pushAverageCategory('average_sleep_ranges', 'Sleep Avg', recordColors.sleep, sleepScoreValues, formatRecordScore);
+        pushAverageCategory('average_activity_ranges', 'Activity Avg', recordColors.activity, activityScoreValues, formatRecordScore);
 
-        // Most Steps
-        const stepsItems = activityHistory
-            .filter(a => a.steps != null && a.steps > 0)
-            .map(a => ({ day: a.day, raw: a.steps!, display: a.steps!.toLocaleString() }));
-        const stepsEntries = buildCategoryEntries(stepsItems, 'desc');
-        if (stepsEntries.length > 0) result.push({ id: 'steps', label: 'Most Steps', color: '#D4B87B', bg: 'rgba(212,184,123,0.12)', entries: stepsEntries });
+        const primarySessions = getPrimarySessionsByDay(sessionHistory).map(({ day, session }) => ({ ...session, day }));
+        const hrvItems = createDailyItems(primarySessions, (item) => item.average_hrv, (value) => formatRecordMs(value), { positiveOnly: true });
+        const lowestHrItems = createDailyItems(primarySessions, (item) => item.lowest_heart_rate, (value) => formatRecordBpm(value), { positiveOnly: true });
+        const averageHrItems = createDailyItems(primarySessions, (item) => item.average_heart_rate, (value) => formatRecordBpm(value), { positiveOnly: true });
+        const breathItems = createDailyItems(primarySessions, (item) => item.average_breath, (value) => `${formatRecordDecimal(value)} br/min`, { positiveOnly: true });
+        const efficiencyItems = createDailyItems(primarySessions, (item) => item.efficiency, (value) => formatRecordPercent(value), { positiveOnly: true });
+        const latencyItems = createDailyItems(primarySessions, (item) => item.latency, (value) => formatRecordDuration(value), { positiveOnly: true });
+        const awakeItems = createDailyItems(primarySessions, (item) => item.awake_time, (value) => formatRecordDuration(value), { positiveOnly: true });
+        const totalSleepItems = createDailyItems(primarySessions, (item) => item.total_sleep_duration, (value) => formatRecordDuration(value), { positiveOnly: true });
+        const timeInBedItems = createDailyItems(primarySessions, (item) => item.time_in_bed, (value) => formatRecordDuration(value), { positiveOnly: true });
+        const deepSleepItems = createDailyItems(primarySessions, (item) => item.deep_sleep_duration, (value) => formatRecordDuration(value), { positiveOnly: true });
+        const remSleepItems = createDailyItems(primarySessions, (item) => item.rem_sleep_duration, (value) => formatRecordDuration(value), { positiveOnly: true });
+        const lightSleepItems = createDailyItems(primarySessions, (item) => item.light_sleep_duration, (value) => formatRecordDuration(value), { positiveOnly: true });
+        const restlessItems = createDailyItems(primarySessions, (item) => item.restless_periods, (value) => formatRecordCount(value), { positiveOnly: true });
 
-        // Best Deep Sleep
-        const deepSleepItems = sessionHistory
-            .filter(s => s.deep_sleep_duration != null && s.deep_sleep_duration > 0)
-            .map(s => {
-                const h = Math.floor(s.deep_sleep_duration! / 3600);
-                const m = Math.floor((s.deep_sleep_duration! % 3600) / 60);
-                return { day: s.day, raw: s.deep_sleep_duration!, display: h > 0 ? `${h}h ${m}m` : `${m}m` };
+        pushRankedCategory('best_hrv', 'Best HRV', recordColors.recovery, hrvItems, 'desc', 'Highest HRV days');
+        pushRankedCategory('lowest_hrv', 'Lowest HRV', recordColors.low, hrvItems, 'asc', 'Lowest HRV days');
+        pushRankedCategory('lowest_resting_hr', 'Lowest HR', recordColors.low, lowestHrItems, 'asc', 'Lowest resting-heart-rate days');
+        pushRankedCategory('highest_resting_hr', 'Highest HR', recordColors.low, lowestHrItems, 'desc', 'Highest resting-heart-rate days');
+        pushRankedCategory('lowest_sleep_hr', 'Lowest Sleep HR', recordColors.low, averageHrItems, 'asc', 'Lowest average sleeping heart rate');
+        pushRankedCategory('highest_sleep_hr', 'Highest Sleep HR', recordColors.low, averageHrItems, 'desc', 'Highest average sleeping heart rate');
+        pushRankedCategory('lowest_breathing', 'Lowest Breathing', recordColors.sleep, breathItems, 'asc', 'Lowest breathing-rate nights');
+        pushRankedCategory('highest_breathing', 'Highest Breathing', recordColors.low, breathItems, 'desc', 'Highest breathing-rate nights');
+        pushRankedCategory('best_efficiency', 'Best Efficiency', recordColors.sleep, efficiencyItems, 'desc', 'Highest sleep-efficiency nights');
+        pushRankedCategory('lowest_efficiency', 'Lowest Efficiency', recordColors.low, efficiencyItems, 'asc', 'Lowest sleep-efficiency nights');
+        pushRankedCategory('fastest_latency', 'Fastest Sleep Start', recordColors.sleep, latencyItems, 'asc', 'Shortest sleep latency');
+        pushRankedCategory('slowest_latency', 'Slowest Sleep Start', recordColors.low, latencyItems, 'desc', 'Longest sleep latency');
+        pushRankedCategory('least_awake_time', 'Least Awake Time', recordColors.sleep, awakeItems, 'asc', 'Lowest awake time in bed');
+        pushRankedCategory('most_awake_time', 'Most Awake Time', recordColors.low, awakeItems, 'desc', 'Highest awake time in bed');
+        pushRankedCategory('longest_sleep', 'Longest Sleep', recordColors.sleep, totalSleepItems, 'desc', 'Longest total sleep');
+        pushRankedCategory('shortest_sleep', 'Shortest Sleep', recordColors.low, totalSleepItems, 'asc', 'Shortest total sleep');
+        pushRankedCategory('most_time_in_bed', 'Most Time in Bed', recordColors.sleep, timeInBedItems, 'desc', 'Longest time in bed');
+        pushRankedCategory('least_time_in_bed', 'Least Time in Bed', recordColors.low, timeInBedItems, 'asc', 'Shortest time in bed');
+        pushRankedCategory('most_deep_sleep', 'Most Deep Sleep', recordColors.sleep, deepSleepItems, 'desc', 'Longest deep sleep');
+        pushRankedCategory('least_deep_sleep', 'Least Deep Sleep', recordColors.low, deepSleepItems, 'asc', 'Shortest deep sleep');
+        pushRankedCategory('most_rem_sleep', 'Most REM Sleep', recordColors.sleep, remSleepItems, 'desc', 'Longest REM sleep');
+        pushRankedCategory('least_rem_sleep', 'Least REM Sleep', recordColors.low, remSleepItems, 'asc', 'Shortest REM sleep');
+        pushRankedCategory('most_light_sleep', 'Most Light Sleep', recordColors.sleep, lightSleepItems, 'desc', 'Longest light sleep');
+        pushRankedCategory('least_light_sleep', 'Least Light Sleep', recordColors.low, lightSleepItems, 'asc', 'Shortest light sleep');
+        pushRankedCategory('fewest_restless_periods', 'Fewest Restless', recordColors.sleep, restlessItems, 'asc', 'Fewest restless periods');
+        pushRankedCategory('most_restless_periods', 'Most Restless', recordColors.low, restlessItems, 'desc', 'Most restless periods');
+
+        const hrvValues = toDailyValues(hrvItems);
+        const restingHrValues = toDailyValues(lowestHrItems);
+        const totalSleepValues = toDailyValues(totalSleepItems);
+        const deepSleepValues = toDailyValues(deepSleepItems);
+        const efficiencyValues = toDailyValues(efficiencyItems);
+        pushAverageCategory('average_hrv_ranges', 'HRV Avg', recordColors.recovery, hrvValues, formatRecordMs);
+        pushAverageCategory('average_resting_hr_ranges', 'Resting HR Avg', recordColors.low, restingHrValues, formatRecordBpm);
+        pushAverageCategory('average_sleep_duration_ranges', 'Sleep Duration Avg', recordColors.sleep, totalSleepValues, formatRecordDuration);
+        pushAverageCategory('average_deep_sleep_ranges', 'Deep Sleep Avg', recordColors.sleep, deepSleepValues, formatRecordDuration);
+        pushAverageCategory('average_efficiency_ranges', 'Efficiency Avg', recordColors.sleep, efficiencyValues, formatRecordPercent);
+
+        const activityMetricConfigs: Array<{
+            key: keyof DailyActivity;
+            highLabel: string;
+            lowLabel: string;
+            format: (value: number) => string;
+            palette: typeof recordColors[keyof typeof recordColors];
+        }> = [
+            { key: 'steps', highLabel: 'Most Steps', lowLabel: 'Fewest Steps', format: formatRecordCount, palette: recordColors.activity },
+            { key: 'active_calories', highLabel: 'Most Active kcal', lowLabel: 'Fewest Active kcal', format: formatRecordKcal, palette: recordColors.activity },
+            { key: 'total_calories', highLabel: 'Most Total kcal', lowLabel: 'Fewest Total kcal', format: formatRecordKcal, palette: recordColors.activity },
+            { key: 'equivalent_walking_distance', highLabel: 'Farthest Walk Eq', lowLabel: 'Shortest Walk Eq', format: formatRecordMiles, palette: recordColors.activity },
+            { key: 'high_activity_time', highLabel: 'Most Hard Activity', lowLabel: 'Least Hard Activity', format: formatRecordDuration, palette: recordColors.activity },
+            { key: 'medium_activity_time', highLabel: 'Most Medium Activity', lowLabel: 'Least Medium Activity', format: formatRecordDuration, palette: recordColors.activity },
+            { key: 'low_activity_time', highLabel: 'Most Easy Activity', lowLabel: 'Least Easy Activity', format: formatRecordDuration, palette: recordColors.activity },
+            { key: 'sedentary_time', highLabel: 'Most Sedentary', lowLabel: 'Least Sedentary', format: formatRecordDuration, palette: recordColors.low },
+            { key: 'resting_time', highLabel: 'Most Rest Time', lowLabel: 'Least Rest Time', format: formatRecordDuration, palette: recordColors.recovery },
+            { key: 'inactivity_alerts', highLabel: 'Most Alerts', lowLabel: 'Fewest Alerts', format: formatRecordCount, palette: recordColors.low },
+            { key: 'average_met_minutes', highLabel: 'Highest MET Avg', lowLabel: 'Lowest MET Avg', format: (value) => formatRecordDecimal(value), palette: recordColors.activity },
+        ];
+
+        const activityValuesByKey = new Map<keyof DailyActivity, DailyRecordValue[]>();
+        activityMetricConfigs.forEach((config) => {
+            const items = createDailyItems(activityHistory, (item) => item[config.key] as number | null | undefined, (value) => config.format(value), {
+                positiveOnly: config.key !== 'inactivity_alerts',
+                includeZero: config.key === 'inactivity_alerts',
             });
-        const deepSleepEntries = buildCategoryEntries(deepSleepItems, 'desc');
-        if (deepSleepEntries.length > 0) result.push({ id: 'deep_sleep', label: 'Best Deep Sleep', color: '#7BA8D4', bg: 'rgba(123,168,212,0.12)', entries: deepSleepEntries });
+            activityValuesByKey.set(config.key, toDailyValues(items));
+            pushRankedCategory(`${String(config.key)}_high`, config.highLabel, config.palette, items, 'desc', `${config.highLabel} days`);
+            pushRankedCategory(`${String(config.key)}_low`, config.lowLabel, recordColors.low, items, 'asc', `${config.lowLabel} days`);
+        });
 
-        // Lowest Resting HR
-        const lowestHrItems = sessionHistory
-            .filter(s => s.lowest_heart_rate != null && s.lowest_heart_rate > 0)
-            .map(s => ({ day: s.day, raw: s.lowest_heart_rate!, display: `${Math.round(s.lowest_heart_rate!)} bpm` }));
-        const lowestHrEntries = buildCategoryEntries(lowestHrItems, 'asc');
-        if (lowestHrEntries.length > 0) result.push({ id: 'lowest_hr', label: 'Lowest HR', color: '#D4897B', bg: 'rgba(212,137,123,0.12)', entries: lowestHrEntries });
+        const stepsValues = activityValuesByKey.get('steps') || [];
+        const activeCaloriesValues = activityValuesByKey.get('active_calories') || [];
+        const highActivityValues = activityValuesByKey.get('high_activity_time') || [];
+        const sedentaryValues = activityValuesByKey.get('sedentary_time') || [];
+        pushAverageCategory('average_steps_ranges', 'Steps Avg', recordColors.activity, stepsValues, (value) => Math.round(value).toLocaleString());
+        pushAverageCategory('average_active_calories_ranges', 'Active kcal Avg', recordColors.activity, activeCaloriesValues, formatRecordKcal);
+        pushAverageCategory('average_high_activity_ranges', 'Hard Activity Avg', recordColors.activity, highActivityValues, formatRecordDuration);
+        pushAverageCategory('average_sedentary_ranges', 'Sedentary Avg', recordColors.low, sedentaryValues, formatRecordDuration);
 
-        // Most Calories
-        const caloriesItems = activityHistory
-            .filter(a => a.active_calories != null && a.active_calories > 0)
-            .map(a => ({ day: a.day, raw: a.active_calories!, display: `${a.active_calories!.toLocaleString()} kcal` }));
-        const caloriesEntries = buildCategoryEntries(caloriesItems, 'desc');
-        if (caloriesEntries.length > 0) result.push({ id: 'calories', label: 'Most Calories', color: '#D4A574', bg: 'rgba(212,165,116,0.12)', entries: caloriesEntries });
+        const readinessTempItems = createDailyItems(readinessHistory, (item) => item.temperature_deviation, formatRecordTempDelta, { includeZero: true });
+        const readinessTempTrendItems = createDailyItems(readinessHistory, (item) => item.temperature_trend_deviation, formatRecordTempDelta, { includeZero: true });
+        pushRankedCategory('warmest_temp_deviation', 'Warmest Temp Dev', recordColors.low, readinessTempItems, 'desc', 'Highest body-temperature deviation');
+        pushRankedCategory('coolest_temp_deviation', 'Coolest Temp Dev', recordColors.recovery, readinessTempItems, 'asc', 'Lowest body-temperature deviation');
+        pushRankedCategory('warmest_temp_trend', 'Warmest Temp Trend', recordColors.low, readinessTempTrendItems, 'desc', 'Highest temperature trend');
+        pushRankedCategory('coolest_temp_trend', 'Coolest Temp Trend', recordColors.recovery, readinessTempTrendItems, 'asc', 'Lowest temperature trend');
+
+        const contributorGroups: Array<{
+            prefix: string;
+            source: Array<{ day?: string; contributors?: Record<string, number | null | undefined> }>;
+            palette: typeof recordColors[keyof typeof recordColors];
+            contributors: Array<{ key: string; label: string }>;
+        }> = [
+            {
+                prefix: 'readiness_contributor',
+                source: readinessHistory.map((item) => ({ day: item.day, contributors: item.contributors as Record<string, number | null | undefined> })),
+                palette: recordColors.readiness,
+                contributors: [
+                    { key: 'activity_balance', label: 'Activity Balance' },
+                    { key: 'body_temperature', label: 'Body Temp Score' },
+                    { key: 'hrv_balance', label: 'HRV Balance' },
+                    { key: 'previous_day_activity', label: 'Previous Activity' },
+                    { key: 'previous_night', label: 'Previous Night' },
+                    { key: 'recovery_index', label: 'Recovery Index' },
+                    { key: 'resting_heart_rate', label: 'RHR Score' },
+                    { key: 'sleep_balance', label: 'Sleep Balance' },
+                    { key: 'sleep_regularity', label: 'Sleep Regularity' },
+                ],
+            },
+            {
+                prefix: 'sleep_contributor',
+                source: sleepHistory.map((item) => ({ day: item.day, contributors: item.contributors as Record<string, number | null | undefined> })),
+                palette: recordColors.sleep,
+                contributors: [
+                    { key: 'deep_sleep', label: 'Deep Score' },
+                    { key: 'efficiency', label: 'Efficiency Score' },
+                    { key: 'latency', label: 'Latency Score' },
+                    { key: 'rem_sleep', label: 'REM Score' },
+                    { key: 'restfulness', label: 'Restfulness' },
+                    { key: 'timing', label: 'Timing Score' },
+                    { key: 'total_sleep', label: 'Total Sleep Score' },
+                ],
+            },
+            {
+                prefix: 'activity_contributor',
+                source: activityHistory.map((item) => ({ day: item.day, contributors: item.contributors as Record<string, number | null | undefined> })),
+                palette: recordColors.activity,
+                contributors: [
+                    { key: 'meet_daily_targets', label: 'Targets Score' },
+                    { key: 'move_every_hour', label: 'Move Hourly' },
+                    { key: 'recovery_time', label: 'Recovery Time Score' },
+                    { key: 'stay_active', label: 'Stay Active Score' },
+                    { key: 'training_frequency', label: 'Training Frequency' },
+                    { key: 'training_volume', label: 'Training Volume' },
+                ],
+            },
+            {
+                prefix: 'resilience_contributor',
+                source: resilienceHistory.map((item) => ({ day: item.day, contributors: item.contributors as Record<string, number | null | undefined> })),
+                palette: recordColors.recovery,
+                contributors: [
+                    { key: 'sleep_recovery', label: 'Sleep Recovery' },
+                    { key: 'daytime_recovery', label: 'Daytime Recovery' },
+                    { key: 'stress', label: 'Stress Resilience' },
+                ],
+            },
+        ];
+
+        contributorGroups.forEach((group) => {
+            group.contributors.forEach((contributor) => {
+                const items = createDailyItems(
+                    group.source,
+                    (item) => item.contributors?.[contributor.key],
+                    (value) => formatRecordScore(value),
+                    { positiveOnly: true }
+                );
+                const safeKey = contributor.key.replace(/_/g, '-');
+                pushRankedCategory(`${group.prefix}_${safeKey}_high`, `Best ${contributor.label}`, group.palette, items, 'desc', `Best ${contributor.label} days`);
+                pushRankedCategory(`${group.prefix}_${safeKey}_low`, `Lowest ${contributor.label}`, recordColors.low, items, 'asc', `Lowest ${contributor.label} days`);
+            });
+        });
+
+        const spo2AverageItems = createDailyItems(spo2History, (item) => item.spo2_percentage?.average, (value) => `${formatRecordDecimal(value)}%`, { positiveOnly: true });
+        const breathingDisturbanceItems = createDailyItems(spo2History, (item) => item.breathing_disturbance_index, (value) => formatRecordDecimal(value), { includeZero: true });
+        pushRankedCategory('highest_spo2', 'Highest SpO2', recordColors.sleep, spo2AverageItems, 'desc', 'Highest SpO2 days');
+        pushRankedCategory('lowest_spo2', 'Lowest SpO2', recordColors.low, spo2AverageItems, 'asc', 'Lowest SpO2 days');
+        pushRankedCategory('lowest_bdi', 'Lowest Breathing Dist', recordColors.sleep, breathingDisturbanceItems, 'asc', 'Lowest breathing-disturbance days');
+        pushRankedCategory('highest_bdi', 'Highest Breathing Dist', recordColors.low, breathingDisturbanceItems, 'desc', 'Highest breathing-disturbance days');
+        pushAverageCategory('average_spo2_ranges', 'SpO2 Avg', recordColors.sleep, toDailyValues(spo2AverageItems), (value) => `${formatRecordDecimal(value)}%`);
+
+        const stressHighItems = createDailyItems(stressHistory, (item) => item.stress_high, formatRecordDuration, { includeZero: true });
+        const recoveryHighItems = createDailyItems(stressHistory, (item) => item.recovery_high, formatRecordDuration, { includeZero: true });
+        const restoredDayValues = dedupeDailyValues(stressHistory
+            .filter((item) => isIsoDay(item.day))
+            .map((item) => ({ day: item.day, value: item.day_summary === 'restored' ? 1 : 0 })));
+        const stressfulDayValues = dedupeDailyValues(stressHistory
+            .filter((item) => isIsoDay(item.day))
+            .map((item) => ({ day: item.day, value: item.day_summary === 'stressful' ? 1 : 0 })));
+        pushRankedCategory('least_high_stress', 'Least High Stress', recordColors.recovery, stressHighItems, 'asc', 'Lowest high-stress time');
+        pushRankedCategory('most_high_stress', 'Most High Stress', recordColors.low, stressHighItems, 'desc', 'Highest high-stress time');
+        pushRankedCategory('most_recovery_time', 'Most Recovery Time', recordColors.recovery, recoveryHighItems, 'desc', 'Highest recovery time');
+        pushRankedCategory('least_recovery_time', 'Least Recovery Time', recordColors.low, recoveryHighItems, 'asc', 'Lowest recovery time');
+        pushAverageCategory('average_high_stress_ranges', 'High Stress Avg', recordColors.low, toDailyValues(stressHighItems), formatRecordDuration);
+        pushAverageCategory('average_recovery_ranges', 'Recovery Avg', recordColors.recovery, toDailyValues(recoveryHighItems), formatRecordDuration);
+        pushCountCategory('restored_day_counts', 'Restored Days', recordColors.recovery, restoredDayValues, (value) => value === 1);
+        pushCountCategory('stressful_day_counts', 'Stressful Days', recordColors.low, stressfulDayValues, (value) => value === 1);
+
+        const resilienceLevelItems = createDailyItems(
+            resilienceHistory,
+            (item) => getResilienceLevelScore(item.level),
+            (value, item) => item.level ? item.level.replace(/\b\w/g, (letter) => letter.toUpperCase()) : formatRecordScore(value),
+            { positiveOnly: true }
+        );
+        pushRankedCategory('best_resilience_level', 'Best Resilience', recordColors.recovery, resilienceLevelItems, 'desc', 'Top resilience days');
+        pushRankedCategory('lowest_resilience_level', 'Lowest Resilience', recordColors.low, resilienceLevelItems, 'asc', 'Lowest resilience days');
+
+        const workoutDays = groupWorkoutValuesByDay(workoutHistory);
+        const workoutCountItems = createDailyItems(workoutDays, (item) => item.count, (value) => `${Math.round(value)} workouts`, { positiveOnly: true });
+        const workoutCaloriesItems = createDailyItems(workoutDays, (item) => item.calories, formatRecordKcal, { positiveOnly: true });
+        const workoutDistanceItems = createDailyItems(workoutDays, (item) => item.distance, formatRecordMiles, { positiveOnly: true });
+        const workoutDurationItems = createDailyItems(workoutDays, (item) => item.duration, formatRecordDuration, { positiveOnly: true });
+        pushRankedCategory('most_workouts', 'Most Workouts', recordColors.activity, workoutCountItems, 'desc', 'Most workouts in a day');
+        pushRankedCategory('most_workout_calories', 'Most Workout kcal', recordColors.activity, workoutCaloriesItems, 'desc', 'Most workout calories');
+        pushRankedCategory('longest_workout_time', 'Longest Workout Time', recordColors.activity, workoutDurationItems, 'desc', 'Most workout time');
+        pushRankedCategory('longest_workout_distance', 'Longest Workout Dist', recordColors.activity, workoutDistanceItems, 'desc', 'Longest workout distance');
+
+        const vo2Items = createDailyItems(vo2MaxHistory as Array<{ day?: string } & Record<string, unknown>>, (item) => getNumberByKeys(item, ['vo2_max', 'vo2Max', 'value']), (value) => formatRecordDecimal(value), { positiveOnly: true });
+        const cardiovascularAgeItems = createDailyItems(cardiovascularAgeHistory as Array<{ day?: string } & Record<string, unknown>>, (item) => getNumberByKeys(item, ['vascular_age', 'cardiovascular_age', 'cardiovascularAge', 'value']), (value) => `${Math.round(value)} yrs`, { positiveOnly: true });
+        pushRankedCategory('highest_vo2_max', 'Highest VO2 Max', recordColors.activity, vo2Items, 'desc', 'Highest VO2 max days');
+        pushRankedCategory('lowest_vo2_max', 'Lowest VO2 Max', recordColors.low, vo2Items, 'asc', 'Lowest VO2 max days');
+        pushRankedCategory('lowest_cardio_age', 'Lowest Cardio Age', recordColors.recovery, cardiovascularAgeItems, 'asc', 'Lowest cardiovascular-age days');
+        pushRankedCategory('highest_cardio_age', 'Highest Cardio Age', recordColors.low, cardiovascularAgeItems, 'desc', 'Highest cardiovascular-age days');
+
+        [
+            { id: 'score', label: 'Score Avg', values: combinedScoreValues, palette: recordColors.balance, format: formatRecordScore },
+            { id: 'readiness', label: 'Readiness Avg', values: readinessValues, palette: recordColors.readiness, format: formatRecordScore },
+            { id: 'sleep', label: 'Sleep Avg', values: sleepScoreValues, palette: recordColors.sleep, format: formatRecordScore },
+            { id: 'activity', label: 'Activity Avg', values: activityScoreValues, palette: recordColors.activity, format: formatRecordScore },
+            { id: 'hrv', label: 'HRV Avg', values: hrvValues, palette: recordColors.recovery, format: formatRecordMs },
+            { id: 'steps', label: 'Steps Avg', values: stepsValues, palette: recordColors.activity, format: (value: number) => Math.round(value).toLocaleString() },
+            { id: 'sleep_duration', label: 'Sleep Time Avg', values: totalSleepValues, palette: recordColors.sleep, format: formatRecordDuration },
+        ].forEach((metric) => {
+            [7, 30].forEach((windowDays) => {
+                pushRollingCategory(`best_${windowDays}_${metric.id}`, `Best ${windowDays}-Day ${metric.label}`, metric.palette, metric.values, windowDays, 'desc', metric.format);
+                pushRollingCategory(`lowest_${windowDays}_${metric.id}`, `Lowest ${windowDays}-Day ${metric.label}`, recordColors.low, metric.values, windowDays, 'asc', metric.format);
+            });
+        });
+        [7, 30].forEach((windowDays) => {
+            pushRollingCategory(`lowest_${windowDays}_resting_hr`, `Lowest ${windowDays}-Day HR`, recordColors.low, restingHrValues, windowDays, 'asc', formatRecordBpm);
+            pushRollingCategory(`highest_${windowDays}_resting_hr`, `Highest ${windowDays}-Day HR`, recordColors.low, restingHrValues, windowDays, 'desc', formatRecordBpm);
+            pushCategory(`tightest_${windowDays}_score`, `Tightest ${windowDays}-Day Score`, recordColors.balance, buildRollingSpreadEntries(combinedScoreValues, windowDays, 'asc'), `Tightest ${windowDays}-day score ranges`);
+            pushCategory(`wildest_${windowDays}_score`, `Wildest ${windowDays}-Day Score`, recordColors.low, buildRollingSpreadEntries(combinedScoreValues, windowDays, 'desc'), `Wildest ${windowDays}-day score ranges`);
+        });
+
+        const hrvAverage = averageDailyValue(hrvValues);
+        const readinessValueByDay = new Map(readinessValues.map((value) => [value.day, value.value]));
+        const sleepValueByDay = new Map(sleepScoreValues.map((value) => [value.day, value.value]));
+        const activityValueByDay = new Map(activityScoreValues.map((value) => [value.day, value.value]));
+        const tripleGreenValues = dedupeDailyValues(combinedScoreItems
+            .filter((item) => {
+                const readiness = readinessValueByDay.get(item.day);
+                const sleep = sleepValueByDay.get(item.day);
+                const activity = activityValueByDay.get(item.day);
+                return readiness != null && sleep != null && activity != null;
+            })
+            .map((item) => {
+                const readiness = readinessValueByDay.get(item.day) || 0;
+                const sleep = sleepValueByDay.get(item.day) || 0;
+                const activity = activityValueByDay.get(item.day) || 0;
+                return { day: item.day, value: readiness >= 85 && sleep >= 85 && activity >= 85 ? 1 : 0 };
+            }));
+
+        pushStreakCategory('readiness_85_streak', '85+ Readiness Run', recordColors.readiness, readinessValues, (value) => value >= 85);
+        pushStreakCategory('sleep_85_streak', '85+ Sleep Run', recordColors.sleep, sleepScoreValues, (value) => value >= 85);
+        pushStreakCategory('activity_85_streak', '85+ Activity Run', recordColors.activity, activityScoreValues, (value) => value >= 85);
+        pushStreakCategory('score_85_streak', '85+ Avg Score Run', recordColors.balance, combinedScoreValues, (value) => value >= 85);
+        pushStreakCategory('triple_green_streak', 'Triple 85 Run', recordColors.balance, tripleGreenValues, (value) => value === 1);
+        pushStreakCategory('steps_10k_streak', '10k Step Run', recordColors.activity, stepsValues, (value) => value >= 10000);
+        pushStreakCategory('sleep_7h_streak', '7h Sleep Run', recordColors.sleep, totalSleepValues, (value) => value >= 7 * 3600);
+        pushStreakCategory('deep_sleep_90m_streak', '90m Deep Run', recordColors.sleep, deepSleepValues, (value) => value >= 90 * 60);
+        pushStreakCategory('low_stress_streak', 'Low Stress Run', recordColors.recovery, toDailyValues(stressHighItems), (value) => value <= 30 * 60);
+        pushStreakCategory('restored_streak', 'Restored Run', recordColors.recovery, restoredDayValues, (value) => value === 1);
+        if (hrvAverage != null) {
+            pushStreakCategory('above_average_hrv_streak', 'Above-Avg HRV Run', recordColors.recovery, hrvValues, (value) => value >= hrvAverage);
+            pushCountCategory('above_average_hrv_counts', 'Above-Avg HRV Days', recordColors.recovery, hrvValues, (value) => value >= hrvAverage);
+        }
+
+        pushCountCategory('readiness_90_counts', '90+ Readiness Days', recordColors.readiness, readinessValues, (value) => value >= 90);
+        pushCountCategory('sleep_90_counts', '90+ Sleep Days', recordColors.sleep, sleepScoreValues, (value) => value >= 90);
+        pushCountCategory('activity_90_counts', '90+ Activity Days', recordColors.activity, activityScoreValues, (value) => value >= 90);
+        pushCountCategory('score_85_counts', '85+ Avg Score Days', recordColors.balance, combinedScoreValues, (value) => value >= 85);
+        pushCountCategory('triple_green_counts', 'Triple 85 Days', recordColors.balance, tripleGreenValues, (value) => value === 1);
+        pushCountCategory('steps_10k_counts', '10k Step Days', recordColors.activity, stepsValues, (value) => value >= 10000);
+        pushCountCategory('sleep_7h_counts', '7h Sleep Days', recordColors.sleep, totalSleepValues, (value) => value >= 7 * 3600);
+        pushCountCategory('deep_sleep_90m_counts', '90m Deep Days', recordColors.sleep, deepSleepValues, (value) => value >= 90 * 60);
+        pushCountCategory('low_stress_counts', 'Low Stress Days', recordColors.recovery, toDailyValues(stressHighItems), (value) => value <= 30 * 60);
 
         return result;
-    }, [sessionHistory, activityHistory, readinessHistory, sleepHistory]);
+    }, [
+        sessionHistory,
+        activityHistory,
+        readinessHistory,
+        sleepHistory,
+        spo2History,
+        stressHistory,
+        resilienceHistory,
+        workoutHistory,
+        cardiovascularAgeHistory,
+        vo2MaxHistory,
+    ]);
 
     const expandedCategory = categories.find(c => c.id === expandedId) ?? null;
     if (categories.length === 0) return null;
 
+    const marqueeDurationSeconds = Math.min(260, Math.max(90, categories.length * 2.2));
+    const marqueeStyle = { '--records-marquee-duration': `${marqueeDurationSeconds}s` } as React.CSSProperties;
+
+    const renderRecordChip = (cat: RecordCategory, idx: number, duplicate: boolean) => {
+        const record = cat.entries[0];
+        const isExpanded = expandedId === cat.id;
+        return (
+            <button
+                key={`${duplicate ? 'loop' : 'main'}-${cat.id}`}
+                type="button"
+                className={`record-chip stagger-${Math.min(idx + 1, 6)} animate-fade-in-up`}
+                style={{ animationFillMode: 'both', outline: isExpanded ? `2px solid ${cat.color}` : undefined, outlineOffset: isExpanded ? '1px' : undefined }}
+                onClick={() => setExpandedId(isExpanded ? null : cat.id)}
+                tabIndex={duplicate ? -1 : 0}
+                aria-pressed={isExpanded}
+            >
+                <div className="record-icon" style={{ backgroundColor: cat.bg }}>
+                    <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+                </div>
+                <div className="record-info">
+                    <div className="record-label">{cat.label}</div>
+                    <div className="record-value" style={{ color: cat.color }}>{record.displayValue}</div>
+                    <div className="record-date">{getRecordContext(record)}</div>
+                </div>
+                <svg className="record-toggle" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', color: cat.color }} width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                    <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            </button>
+        );
+    };
+
     return (
         <section className="mb-10 animate-fade-in-up">
             <div className="flex items-center gap-2 mb-3">
-                <span className="inline-block w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: '#D4B87B' }} />
+                <span className="inline-block w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: '#B9944A' }} />
                 <h3 className="text-sm font-bold text-[#2D2A26]">Personal Records</h3>
-                <span className="text-[10px] text-[#A8A29E] bg-[#FAF7F4] px-2 py-0.5 rounded-full border border-[rgba(0,0,0,0.06)]">All time</span>
+                <span className="text-[10px] text-[#A8A29E] bg-[#FAF7F4] px-2 py-0.5 rounded border border-[rgba(0,0,0,0.06)]">
+                    Highs, lows, averages, streaks
+                </span>
             </div>
             <div className="relative">
-            <div className="records-strip mb-3">
-                {categories.map((cat, idx) => {
-                    const record = cat.entries[0];
-                    const isExpanded = expandedId === cat.id;
-                    return (
-                        <button
-                            key={cat.id}
-                            className={`record-chip stagger-${Math.min(idx + 1, 6)} animate-fade-in-up`}
-                            style={{ animationFillMode: 'both', outline: isExpanded ? `2px solid ${cat.color}` : undefined, outlineOffset: isExpanded ? '1px' : undefined }}
-                            onClick={() => setExpandedId(isExpanded ? null : cat.id)}
-                        >
-                            <div className="record-icon" style={{ backgroundColor: cat.bg }}>
-                                <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
-                            </div>
-                            <div className="record-info">
-                                <div className="record-label">{cat.label}</div>
-                                <div className="record-value" style={{ color: cat.color }}>{record.displayValue}</div>
-                                <div className="record-date">{formatRecordDate(record.day)}</div>
-                            </div>
-                            <svg className="flex-shrink-0 ml-1 transition-transform duration-200" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', color: cat.color, opacity: 0.6 }} width="12" height="12" viewBox="0 0 12 12" fill="none">
-                                <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                        </button>
-                    );
-                })}
-            </div>
-                <div className="pointer-events-none absolute right-0 top-0 bottom-3 w-10 bg-gradient-to-l from-[var(--bg-base)] to-transparent rounded-r" />
+                <div className="records-strip mb-3" style={marqueeStyle} aria-label="Personal record highlights">
+                    <div className="records-strip-track">
+                        <div className="records-strip-group">
+                            {categories.map((cat, idx) => renderRecordChip(cat, idx, false))}
+                        </div>
+                        <div className="records-strip-group" aria-hidden="true">
+                            {categories.map((cat, idx) => renderRecordChip(cat, idx, true))}
+                        </div>
+                    </div>
+                </div>
+                <div className="records-strip-fade records-strip-fade-left" />
+                <div className="records-strip-fade records-strip-fade-right" />
             </div>
             {expandedCategory && (
                 <div className="records-top10-drawer animate-fade-in-up" style={{ animationFillMode: 'both' }}>
                     <div className="records-top10-header">
                         <span className="inline-block w-2 h-2 rounded-full mr-1.5 flex-shrink-0" style={{ backgroundColor: expandedCategory.color }} />
-                        <span style={{ color: expandedCategory.color }}>Top {expandedCategory.entries.length} — {expandedCategory.label}</span>
+                        <span style={{ color: expandedCategory.color }}>
+                            {expandedCategory.drawerTitle || `Top ${expandedCategory.entries.length} - ${expandedCategory.label}`}
+                        </span>
                     </div>
                     <ol className="records-top10-list">
-                        {expandedCategory.entries.map((entry, rank) => (
-                            <li key={entry.day}>
-                                <button className="records-top10-row" onClick={() => onNavigateToDay(entry.day)}>
-                                    <span className="records-top10-rank" style={{ color: rank === 0 ? expandedCategory.color : undefined }}>{rank + 1}</span>
-                                    <span className="records-top10-value font-mono" style={{ color: expandedCategory.color }}>{entry.displayValue}</span>
-                                    <span className="records-top10-date">{formatRecordDate(entry.day)}</span>
-                                    <svg className="records-top10-arrow" width="10" height="10" viewBox="0 0 10 10" fill="none">
-                                        <path d="M2 5h6M5.5 2.5L8 5l-2.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                </button>
-                            </li>
-                        ))}
+                        {expandedCategory.entries.map((entry, rank) => {
+                            const targetDay = entry.day || entry.endDay;
+                            return (
+                                <li key={entry.id}>
+                                    <button
+                                        type="button"
+                                        className="records-top10-row"
+                                        onClick={() => targetDay && onNavigateToDay(targetDay)}
+                                        disabled={!targetDay}
+                                    >
+                                        <span className="records-top10-rank" style={{ color: rank === 0 ? expandedCategory.color : undefined }}>
+                                            {entry.rankLabel || rank + 1}
+                                        </span>
+                                        <span className="records-top10-value font-mono" style={{ color: expandedCategory.color }}>{entry.displayValue}</span>
+                                        <span className="records-top10-date">{getRecordContext(entry)}</span>
+                                        <svg className="records-top10-arrow" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                                            <path d="M2 5h6M5.5 2.5L8 5l-2.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                    </button>
+                                </li>
+                            );
+                        })}
                     </ol>
                 </div>
             )}
@@ -1327,6 +2062,12 @@ const Dashboard: React.FC = () => {
     const spo2History = activeData?.spo2 || [];
     const stressHistory = activeData?.stress || [];
     const resilienceHistory = activeData?.resilience || [];
+    const allTimeSpo2History = activeAllTimeData?.spo2 || spo2History;
+    const allTimeStressHistory = activeAllTimeData?.stress || stressHistory;
+    const allTimeResilienceHistory = activeAllTimeData?.resilience || resilienceHistory;
+    const allTimeWorkoutHistory = activeAllTimeData?.workout || activeData?.workout || [];
+    const allTimeCardiovascularAgeHistory = activeAllTimeData?.cardiovascularAge || activeData?.cardiovascularAge || [];
+    const allTimeVo2MaxHistory = activeAllTimeData?.vo2Max || activeData?.vo2Max || [];
     const resilienceDiagnostic = activeData?.resilienceDiagnostic ?? activeAllTimeData?.resilienceDiagnostic ?? null;
     const hrData = activeData?.heartrate || [];
 
@@ -2689,6 +3430,12 @@ const Dashboard: React.FC = () => {
                             activityHistory={allTimeActivityHistory}
                             readinessHistory={allTimeReadinessHistory}
                             sleepHistory={allTimeSleepHistory}
+                            spo2History={allTimeSpo2History}
+                            stressHistory={allTimeStressHistory}
+                            resilienceHistory={allTimeResilienceHistory}
+                            workoutHistory={allTimeWorkoutHistory}
+                            cardiovascularAgeHistory={allTimeCardiovascularAgeHistory}
+                            vo2MaxHistory={allTimeVo2MaxHistory}
                             onNavigateToDay={handleSelectReferenceDay}
                         />
 

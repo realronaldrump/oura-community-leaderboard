@@ -1563,31 +1563,58 @@ select {
    ======================================== */
 
 .records-strip {
-  display: flex;
-  gap: 0.75rem;
-  overflow-x: auto;
-  padding-bottom: 0.25rem;
+  overflow: hidden;
+  padding: 0.125rem 0 0.5rem;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  --records-marquee-duration: 120s;
+}
+
+.records-strip-track {
+  display: flex;
+  width: max-content;
+  animation: records-marquee var(--records-marquee-duration) linear infinite;
+  will-change: transform;
+}
+
+.records-strip:hover .records-strip-track,
+.records-strip:focus-within .records-strip-track {
+  animation-play-state: paused;
+}
+
+.records-strip-group {
+  display: flex;
+  gap: 0.75rem;
+  padding-right: 0.75rem;
 }
 
 .records-strip::-webkit-scrollbar {
   display: none;
 }
 
+@keyframes records-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
 .record-chip {
-  flex: 0 0 auto;
+  flex: 0 0 clamp(12rem, 68vw, 15.5rem);
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.625rem 0.875rem;
   background: var(--bg-raised);
   border: 1px solid var(--border-subtle);
-  border-radius: 14px;
+  border-radius: 8px;
   box-shadow: var(--shadow-clay-sm);
   cursor: pointer;
   transition: all 0.2s ease;
-  min-width: 0;
+  min-width: 12rem;
+  min-height: 4.25rem;
 }
 
 .record-chip:hover {
@@ -1603,7 +1630,7 @@ select {
 .record-chip .record-icon {
   width: 2rem;
   height: 2rem;
-  border-radius: 10px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1612,6 +1639,7 @@ select {
 
 .record-chip .record-info {
   min-width: 0;
+  flex: 1;
 }
 
 .record-chip .record-label {
@@ -1619,7 +1647,10 @@ select {
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .record-chip .record-value {
@@ -1628,6 +1659,9 @@ select {
   font-weight: 600;
   color: var(--text-primary);
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .record-chip .record-date {
@@ -1636,13 +1670,41 @@ select {
   line-height: 1.2;
   margin-top: 1px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.record-toggle {
+  flex-shrink: 0;
+  margin-left: 0.25rem;
+  opacity: 0.6;
+  transition: transform 0.2s ease;
+}
+
+.records-strip-fade {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  bottom: 0.75rem;
+  width: 2.75rem;
+  z-index: 1;
+}
+
+.records-strip-fade-left {
+  left: 0;
+  background: linear-gradient(to right, var(--bg-base), transparent);
+}
+
+.records-strip-fade-right {
+  right: 0;
+  background: linear-gradient(to left, var(--bg-base), transparent);
 }
 
 /* Top-10 expandable drawer */
 .records-top10-drawer {
   background: var(--bg-raised);
   border: 1px solid var(--border-subtle);
-  border-radius: 16px;
+  border-radius: 8px;
   box-shadow: var(--shadow-clay-sm);
   overflow: hidden;
 }
@@ -1654,10 +1716,11 @@ select {
   font-size: 0.6875rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
   color: var(--text-muted);
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-elevated);
+  min-height: 2.75rem;
 }
 
 .records-top10-list {
@@ -1671,6 +1734,7 @@ select {
   align-items: center;
   gap: 0.75rem;
   width: 100%;
+  min-height: 2.75rem;
   padding: 0.5rem 1rem;
   background: transparent;
   border: none;
@@ -1687,12 +1751,16 @@ select {
   background: var(--bg-hover);
 }
 
+.records-top10-row:disabled {
+  cursor: default;
+}
+
 .records-top10-rank {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 0.6875rem;
   font-weight: 600;
   color: var(--text-muted);
-  width: 1.25rem;
+  width: 2.25rem;
   flex-shrink: 0;
   text-align: right;
 }
@@ -1702,13 +1770,21 @@ select {
   font-size: 0.875rem;
   font-weight: 600;
   flex-shrink: 0;
-  min-width: 5rem;
+  min-width: 5.75rem;
+  max-width: 8.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .records-top10-date {
   font-size: 0.75rem;
   color: var(--text-secondary);
   flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .records-top10-arrow {
@@ -1721,6 +1797,20 @@ select {
 .records-top10-row:hover .records-top10-arrow {
   opacity: 1;
   transform: translateX(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .records-strip {
+    overflow-x: auto;
+  }
+
+  .records-strip-track {
+    animation: none;
+  }
+
+  .records-strip-group[aria-hidden="true"] {
+    display: none;
+  }
 }
 
 /* ========================================
