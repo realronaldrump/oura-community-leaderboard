@@ -804,6 +804,7 @@ const PersonalRecordsStrip: React.FC<{
     onNavigateToDay,
 }) => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [isDraggingRecords, setIsDraggingRecords] = useState(false);
 
     const categories = useMemo((): RecordCategory[] => {
         const result: RecordCategory[] = [];
@@ -1195,20 +1196,94 @@ const PersonalRecordsStrip: React.FC<{
     const speedLabel = speedMultiplier === 1 ? '1×' : `${speedMultiplier}×`;
 
     const trackRef = useRef<HTMLDivElement>(null);
-    const skipRecords = (direction: 'forward' | 'back') => {
+    const dragStateRef = useRef<{
+        pointerId: number;
+        startX: number;
+        startY: number;
+        startAnimationTime: number;
+        animationDuration: number;
+        groupWidth: number;
+        moved: boolean;
+    } | null>(null);
+    const getRecordsAnimation = () => {
         const track = trackRef.current;
-        if (!track) return;
+        if (!track) return null;
         const animations = track.getAnimations();
-        if (animations.length === 0) return;
-        const anim = animations[0];
-        const duration = (anim.effect?.getComputedTiming().duration as number) || 0;
-        if (!duration) return;
+        if (animations.length === 0) return null;
+        const animation = animations[0];
+        const duration = Number(animation.effect?.getComputedTiming().duration) || 0;
+        if (!duration) return null;
+        return { animation, duration };
+    };
+    const skipRecords = (direction: 'forward' | 'back') => {
+        const animationInfo = getRecordsAnimation();
+        if (!animationInfo) return;
+        const { animation: anim, duration } = animationInfo;
         const skipAmount = (duration / categories.length) * 3;
         const ct = (anim.currentTime as number) || 0;
         const next = direction === 'forward'
             ? (ct + skipAmount) % duration
             : ((ct - skipAmount) % duration + duration) % duration;
         anim.currentTime = next;
+    };
+    const handleRecordsPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        const track = trackRef.current;
+        if (!track) return;
+        const animationInfo = getRecordsAnimation();
+        if (!animationInfo) return;
+        const groupWidth = track.querySelector<HTMLElement>('.records-strip-group')?.offsetWidth || 0;
+        if (!groupWidth) return;
+        dragStateRef.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            startAnimationTime: (animationInfo.animation.currentTime as number) || 0,
+            animationDuration: animationInfo.duration,
+            groupWidth,
+            moved: false,
+        };
+        track.style.animationPlayState = 'paused';
+        setIsDraggingRecords(true);
+        event.currentTarget.setPointerCapture(event.pointerId);
+    };
+    const handleRecordsPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+        const dragState = dragStateRef.current;
+        if (!dragState || dragState.pointerId !== event.pointerId) return;
+        const deltaX = event.clientX - dragState.startX;
+        const deltaY = event.clientY - dragState.startY;
+        if (!dragState.moved && Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 8) {
+            return;
+        }
+        const animationInfo = getRecordsAnimation();
+        if (!animationInfo) return;
+        const progressDelta = (-deltaX / dragState.groupWidth) * dragState.animationDuration;
+        const nextTime = ((dragState.startAnimationTime + progressDelta) % dragState.animationDuration + dragState.animationDuration) % dragState.animationDuration;
+        animationInfo.animation.currentTime = nextTime;
+        if (Math.abs(deltaX) > 6) dragState.moved = true;
+    };
+    const endRecordDrag = () => {
+        const track = trackRef.current;
+        if (track) track.style.animationPlayState = '';
+        dragStateRef.current = null;
+        setIsDraggingRecords(false);
+    };
+    const handleRecordsPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+        const dragState = dragStateRef.current;
+        if (!dragState || dragState.pointerId !== event.pointerId) return;
+        if (dragState.moved) event.preventDefault();
+        endRecordDrag();
+    };
+    const handleRecordsPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+        const dragState = dragStateRef.current;
+        if (!dragState || dragState.pointerId !== event.pointerId) return;
+        endRecordDrag();
+    };
+    const handleRecordsClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+        if (dragStateRef.current?.moved) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
     };
 
     const renderRecordChip = (cat: RecordCategory, idx: number, duplicate: boolean) => {
@@ -1249,7 +1324,17 @@ const PersonalRecordsStrip: React.FC<{
                 </span>
             </div>
             <div className="relative records-strip-wrapper">
-                <div className="records-strip mb-3" style={marqueeStyle} aria-label="Personal record highlights">
+                <div
+                    className={`records-strip mb-3${isDraggingRecords ? ' dragging' : ''}`}
+                    style={marqueeStyle}
+                    aria-label="Personal record highlights"
+                    onPointerDown={handleRecordsPointerDown}
+                    onPointerMove={handleRecordsPointerMove}
+                    onPointerUp={handleRecordsPointerUp}
+                    onPointerCancel={handleRecordsPointerCancel}
+                    onPointerLeave={handleRecordsPointerCancel}
+                    onClickCapture={handleRecordsClickCapture}
+                >
                     <div className="records-strip-track" ref={trackRef}>
                         <div className="records-strip-group">
                             {categories.map((cat, idx) => renderRecordChip(cat, idx, false))}
