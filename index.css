@@ -1568,10 +1568,6 @@ select {
   scrollbar-width: none;
   -ms-overflow-style: none;
   --records-marquee-duration: 120s;
-  touch-action: pan-y;
-  cursor: grab;
-  user-select: none;
-  -webkit-user-select: none;
 }
 
 .records-strip-track {
@@ -1584,10 +1580,6 @@ select {
 .records-strip:hover .records-strip-track,
 .records-strip:focus-within .records-strip-track {
   animation-play-state: paused;
-}
-
-.records-strip.dragging {
-  cursor: grabbing;
 }
 
 .records-strip-group {
