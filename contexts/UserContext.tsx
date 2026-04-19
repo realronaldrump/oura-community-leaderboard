@@ -4,7 +4,7 @@ import { createOAuthState, getAuthUrl, OAUTH_STATE_KEY, POST_AUTH_DESTINATION_KE
 import { ouraService } from '../services/ouraService';
 import { firebaseService } from '../services/firebaseService';
 import { oauthService } from '../services/oauthService';
-import { deleteCachedDailyStats } from '../services/dailyStatsCache';
+import { deleteProfileStats } from '../services/firestoreStatsService';
 import { sanitizeGrantedOuraScopes } from '../utils/ouraScopes';
 
 interface AddProfileOptions {
@@ -190,7 +190,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             throw new Error('Cannot remove the only remaining profile.');
         }
         await firebaseService.deleteProfile(id);
-        deleteCachedDailyStats(id).catch(() => {});
+        deleteProfileStats(id).catch(() => {});
         if (activeProfileId === id) {
             setActiveProfileId(null);
         }

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Download, FileText, Database, TrendingUp, AlertCircle } from 'lucide-react';
 import Papa from 'papaparse';
 import { useUser } from '../contexts/UserContext';
-import { fetchDailyStats, FULL_HISTORY_START_DATE } from '../hooks/useOuraData';
+import { syncDailyStats } from '../hooks/useOuraData';
 import { getProfileFetchEndISODate } from '../utils/profileTemporal';
 
 const METERS_TO_MILES = 0.000621371;
@@ -33,10 +33,9 @@ const DataExport: React.FC = () => {
         try {
             const runFetch = async (forceRefresh: boolean = false) => {
                 const token = await getAccessTokenForProfile(activeProfile.id, { forceRefresh });
-                return fetchDailyStats(token, {
-                    start: FULL_HISTORY_START_DATE,
-                    end: getProfileFetchEndISODate(activeProfile)
-                }, {
+                return syncDailyStats(token, undefined, {
+                    mode: 'full',
+                    endDate: getProfileFetchEndISODate(activeProfile),
                     grantedScopes: activeProfile.grantedScopes,
                     availabilityKey: activeProfile.id,
                     profileId: activeProfile.id,

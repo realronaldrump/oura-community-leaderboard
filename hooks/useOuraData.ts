@@ -1,4 +1,4 @@
-import { getCachedDailyStats, setCachedDailyStats } from '../services/dailyStatsCache';
+import { getStoredDailyStats, saveProfileStats } from '../services/firestoreStatsService';
 import { firebaseService } from '../services/firebaseService';
 import { ouraService } from '../services/ouraService';
 import { DailyStats, OuraEndpointDiagnostic } from '../types';
@@ -389,16 +389,18 @@ export const syncDailyStats = async (
             profileId: options.profileId,
             profileOffsetMinutes: options.profileOffsetMinutes,
         });
-        if (profileId) setCachedDailyStats(profileId, fullData).catch(() => {});
+        if (profileId) {
+            await saveProfileStats(profileId, fullData, 'full');
+        }
         return fullData;
     }
 
-    // Hydrate from IndexedDB if no in-memory data was provided
+    // Hydrate from shared Firestore stats if no in-memory data was provided.
     let baseData = existingData;
     if (!baseData && profileId) {
-        const cached = await getCachedDailyStats(profileId);
-        if (cached?.data) {
-            baseData = cached.data;
+        const stored = await getStoredDailyStats(profileId);
+        if (stored) {
+            baseData = stored;
         }
     }
 
@@ -420,8 +422,10 @@ export const syncDailyStats = async (
 
     const result = baseData ? mergeDailyStats(baseData, delta) : delta;
 
-    // Persist merged result to IndexedDB
-    if (profileId) setCachedDailyStats(profileId, result).catch(() => {});
+    // Persist merged result to shared Firestore for web and iOS clients.
+    if (profileId) {
+        await saveProfileStats(profileId, result, 'incremental');
+    }
 
     return result;
 };

@@ -18,7 +18,7 @@ import {
     LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip
 } from 'recharts';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
-import { fetchDailyStats, FULL_HISTORY_START_DATE, syncDailyStats } from '../hooks/useOuraData';
+import { syncDailyStats } from '../hooks/useOuraData';
 import ComparisonHeartRateChart from '../components/charts/ComparisonHeartRateChart';
 import AllTimeHistory from '../components/AllTimeHistory';
 import SyncModal from '../components/SyncModal';
@@ -2552,7 +2552,8 @@ const Dashboard: React.FC = () => {
         queryClient.prefetchQuery({
             queryKey: allTimeQueryKey,
             queryFn: () => runWithAutoTokenRefresh(activeProfile.id, (token) =>
-                fetchDailyStats(token, { start: FULL_HISTORY_START_DATE }, {
+                syncDailyStats(token, undefined, {
+                    mode: 'full',
                     grantedScopes: activeProfile.grantedScopes,
                     availabilityKey: activeProfile.id,
                     profileId: activeProfile.id,
@@ -2590,7 +2591,8 @@ const Dashboard: React.FC = () => {
             void queryClient.fetchQuery({
                 queryKey: allTimeQueryKey,
                 queryFn: () => runWithAutoTokenRefresh(activeProfile.id, (token) =>
-                    fetchDailyStats(token, { start: FULL_HISTORY_START_DATE }, {
+                    syncDailyStats(token, undefined, {
+                        mode: 'full',
                         grantedScopes: activeProfile.grantedScopes,
                         availabilityKey: activeProfile.id,
                         profileId: activeProfile.id,

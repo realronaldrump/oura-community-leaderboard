@@ -1,0 +1,21 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "CZ3N26YJ75.davis.oura-leaderboard-iOS",
+        "paths": [
+          "/join",
+          "/join/*",
+          "/ios/oauth/callback",
+          "/ios/oauth/callback/*"
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "CZ3N26YJ75.davis.oura-leaderboard-iOS"
+    ]
+  }
+}
