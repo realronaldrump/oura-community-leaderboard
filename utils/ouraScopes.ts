@@ -4,8 +4,10 @@ const normalizeOuraScope = (scope: string): string =>
 export const OURA_SCOPE_CANDIDATES = {
   daily: ['daily', 'daily_sleep', 'daily_readiness', 'daily_activity'],
   spo2: ['spo2Daily', 'daily_spo2', 'spo2'],
-  stress: ['stress', 'daily_stress', 'daily'],
-  resilience: ['resilience', 'daily_resilience', 'daily'],
+  // Oura returns 401s for stress/resilience on some tokens that have
+  // generic `daily` access. Treat them as their own optional capabilities.
+  stress: ['stress', 'daily_stress'],
+  resilience: ['resilience', 'daily_resilience'],
   heartrate: ['heartrate', 'heart_rate'],
   workout: ['workout'],
   session: ['session'],

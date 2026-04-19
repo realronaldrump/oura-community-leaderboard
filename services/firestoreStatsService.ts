@@ -2,6 +2,7 @@ import {
     collection,
     deleteDoc,
     doc,
+    FirestoreError,
     getDocs,
     query,
     setDoc,
@@ -69,6 +70,25 @@ type FirestoreDocumentPath = [string, string, ...string[]];
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const isPermissionDeniedError = (error: unknown): boolean => {
+    const code = String((error as FirestoreError)?.code || '').toLowerCase();
+    const message = String((error as Error)?.message || '').toLowerCase();
+    return code === 'permission-denied' ||
+        code === 'permission_denied' ||
+        message.includes('permission') ||
+        message.includes('insufficient permissions');
+};
+
+const logSharedStatsWarning = (operation: string, profileId: string, error: unknown): void => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`Shared Firestore stats ${operation} failed for ${profileId}. Continuing with live Oura data.`, {
+        profileId,
+        operation,
+        permissionDenied: isPermissionDeniedError(error),
+        message,
+    });
+};
 
 const stripUndefinedDeep = <T>(value: T): T => {
     if (Array.isArray(value)) {
@@ -280,13 +300,17 @@ const deleteKnownStatsCollection = async (profileId: string, collectionName: str
 };
 
 export const clearProfileStats = async (profileId: string): Promise<void> => {
-    await Promise.all([
-        deleteKnownStatsCollection(profileId, DAYS_COLLECTION),
-        deleteKnownStatsCollection(profileId, HEART_RATE_DAYS_COLLECTION),
-        ...Object.values(RAW_COLLECTIONS).map((collectionName) =>
-            deleteKnownStatsCollection(profileId, collectionName)
-        ),
-    ]);
+    try {
+        await Promise.all([
+            deleteKnownStatsCollection(profileId, DAYS_COLLECTION),
+            deleteKnownStatsCollection(profileId, HEART_RATE_DAYS_COLLECTION),
+            ...Object.values(RAW_COLLECTIONS).map((collectionName) =>
+                deleteKnownStatsCollection(profileId, collectionName)
+            ),
+        ]);
+    } catch (error) {
+        logSharedStatsWarning('clear', profileId, error);
+    }
 };
 
 export const saveProfileStats = async (
@@ -294,38 +318,42 @@ export const saveProfileStats = async (
     data: DailyStats,
     mode: SyncMode = 'incremental'
 ): Promise<void> => {
-    if (mode === 'full') {
-        await clearProfileStats(profileId);
-    }
+    try {
+        if (mode === 'full') {
+            await clearProfileStats(profileId);
+        }
 
-    const built = buildProfileStatsDocuments(profileId, data, mode);
-    const operations: Array<{ path: FirestoreDocumentPath; data: unknown }> = [
-        {
-            path: [PROFILE_STATS_COLLECTION, profileId] as FirestoreDocumentPath,
-            data: built.metadata,
-        },
-        ...built.days.map((day) => ({
-            path: [PROFILE_STATS_COLLECTION, profileId, DAYS_COLLECTION, day.day] as FirestoreDocumentPath,
-            data: day,
-        })),
-        ...built.heartRateDays.map((heartRateDay) => ({
-            path: [PROFILE_STATS_COLLECTION, profileId, HEART_RATE_DAYS_COLLECTION, heartRateDay.day] as FirestoreDocumentPath,
-            data: heartRateDay,
-        })),
-    ];
+        const built = buildProfileStatsDocuments(profileId, data, mode);
+        const operations: Array<{ path: FirestoreDocumentPath; data: unknown }> = [
+            {
+                path: [PROFILE_STATS_COLLECTION, profileId] as FirestoreDocumentPath,
+                data: built.metadata,
+            },
+            ...built.days.map((day) => ({
+                path: [PROFILE_STATS_COLLECTION, profileId, DAYS_COLLECTION, day.day] as FirestoreDocumentPath,
+                data: day,
+            })),
+            ...built.heartRateDays.map((heartRateDay) => ({
+                path: [PROFILE_STATS_COLLECTION, profileId, HEART_RATE_DAYS_COLLECTION, heartRateDay.day] as FirestoreDocumentPath,
+                data: heartRateDay,
+            })),
+        ];
 
-    Object.entries(built.rawCollections).forEach(([collectionName, items]) => {
-        items.forEach((item, index) => {
-            operations.push({
-                path: [PROFILE_STATS_COLLECTION, profileId, collectionName, toDocumentId(item, index)] as FirestoreDocumentPath,
-                data: isRecord(item)
-                    ? { ...item, updatedAt: built.metadata.updatedAt }
-                    : { value: item, updatedAt: built.metadata.updatedAt },
+        Object.entries(built.rawCollections).forEach(([collectionName, items]) => {
+            items.forEach((item, index) => {
+                operations.push({
+                    path: [PROFILE_STATS_COLLECTION, profileId, collectionName, toDocumentId(item, index)] as FirestoreDocumentPath,
+                    data: isRecord(item)
+                        ? { ...item, updatedAt: built.metadata.updatedAt }
+                        : { value: item, updatedAt: built.metadata.updatedAt },
+                });
             });
         });
-    });
 
-    await commitSetOperations(operations);
+        await commitSetOperations(operations);
+    } catch (error) {
+        logSharedStatsWarning('save', profileId, error);
+    }
 };
 
 const readRawCollection = async <T = any>(profileId: string, collectionName: string): Promise<T[]> => {
@@ -334,53 +362,62 @@ const readRawCollection = async <T = any>(profileId: string, collectionName: str
 };
 
 export const getStoredDailyStats = async (profileId: string): Promise<DailyStats | null> => {
-    const daysSnapshot = await getDocs(query(collection(db, PROFILE_STATS_COLLECTION, profileId, DAYS_COLLECTION)));
-    if (daysSnapshot.empty) return null;
+    try {
+        const daysSnapshot = await getDocs(query(collection(db, PROFILE_STATS_COLLECTION, profileId, DAYS_COLLECTION)));
+        if (daysSnapshot.empty) return null;
 
-    const dayDocs = daysSnapshot.docs.map((document) => document.data() as ProfileStatsDayDocument);
-    const heartRateDays = await readRawCollection<{ items?: HeartRate[] }>(profileId, HEART_RATE_DAYS_COLLECTION);
-    const [
-        sleepSessions,
-        workouts,
-        tags,
-        enhancedTags,
-        guidedSessions,
-        sleepTime,
-        restModePeriods,
-        ringConfigurations,
-    ] = await Promise.all([
-        readRawCollection<SleepSession>(profileId, RAW_COLLECTIONS.sleepSessions),
-        readRawCollection<any>(profileId, RAW_COLLECTIONS.workouts),
-        readRawCollection<any>(profileId, RAW_COLLECTIONS.tags),
-        readRawCollection<any>(profileId, RAW_COLLECTIONS.enhancedTags),
-        readRawCollection<any>(profileId, RAW_COLLECTIONS.guidedSessions),
-        readRawCollection<any>(profileId, RAW_COLLECTIONS.sleepTime),
-        readRawCollection<any>(profileId, RAW_COLLECTIONS.restModePeriods),
-        readRawCollection<any>(profileId, RAW_COLLECTIONS.ringConfigurations),
-    ]);
+        const dayDocs = daysSnapshot.docs.map((document) => document.data() as ProfileStatsDayDocument);
+        const heartRateDays = await readRawCollection<{ items?: HeartRate[] }>(profileId, HEART_RATE_DAYS_COLLECTION);
+        const [
+            sleepSessions,
+            workouts,
+            tags,
+            enhancedTags,
+            guidedSessions,
+            sleepTime,
+            restModePeriods,
+            ringConfigurations,
+        ] = await Promise.all([
+            readRawCollection<SleepSession>(profileId, RAW_COLLECTIONS.sleepSessions),
+            readRawCollection<any>(profileId, RAW_COLLECTIONS.workouts),
+            readRawCollection<any>(profileId, RAW_COLLECTIONS.tags),
+            readRawCollection<any>(profileId, RAW_COLLECTIONS.enhancedTags),
+            readRawCollection<any>(profileId, RAW_COLLECTIONS.guidedSessions),
+            readRawCollection<any>(profileId, RAW_COLLECTIONS.sleepTime),
+            readRawCollection<any>(profileId, RAW_COLLECTIONS.restModePeriods),
+            readRawCollection<any>(profileId, RAW_COLLECTIONS.ringConfigurations),
+        ]);
 
-    return {
-        sleep: sortByDayDesc(dayDocs.map((day) => day.sleep).filter(Boolean) as any[]),
-        readiness: sortByDayDesc(dayDocs.map((day) => day.readiness).filter(Boolean) as any[]),
-        activity: sortByDayDesc(dayDocs.map((day) => day.activity).filter(Boolean) as any[]),
-        session: sortByDayDesc(sleepSessions || []),
-        spo2: sortByDayDesc(dayDocs.map((day) => day.spo2).filter(Boolean) as any[]),
-        stress: sortByDayDesc(dayDocs.map((day) => day.stress).filter(Boolean) as any[]),
-        resilience: sortByDayDesc(dayDocs.map((day) => day.resilience).filter(Boolean) as any[]),
-        heartrate: sortByTimestampDesc(heartRateDays.flatMap((entry) => entry.items || [])),
-        workout: sortByDayDesc(workouts || []),
-        guidedSession: sortByDayDesc(guidedSessions || []),
-        sleepTime: sortByDayDesc(sleepTime || []),
-        tag: sortByDayDesc(tags || []),
-        enhancedTag: sortByDayDesc(enhancedTags || []),
-        restModePeriod: sortByDayDesc(restModePeriods || []),
-        ringConfiguration: ringConfigurations || [],
-        cardiovascularAge: sortByDayDesc(dayDocs.map((day) => day.cardiovascularAge).filter(Boolean) as any[]),
-        vo2Max: sortByDayDesc(dayDocs.map((day) => day.vo2Max).filter(Boolean) as any[]),
-    };
+        return {
+            sleep: sortByDayDesc(dayDocs.map((day) => day.sleep).filter(Boolean) as any[]),
+            readiness: sortByDayDesc(dayDocs.map((day) => day.readiness).filter(Boolean) as any[]),
+            activity: sortByDayDesc(dayDocs.map((day) => day.activity).filter(Boolean) as any[]),
+            session: sortByDayDesc(sleepSessions || []),
+            spo2: sortByDayDesc(dayDocs.map((day) => day.spo2).filter(Boolean) as any[]),
+            stress: sortByDayDesc(dayDocs.map((day) => day.stress).filter(Boolean) as any[]),
+            resilience: sortByDayDesc(dayDocs.map((day) => day.resilience).filter(Boolean) as any[]),
+            heartrate: sortByTimestampDesc(heartRateDays.flatMap((entry) => entry.items || [])),
+            workout: sortByDayDesc(workouts || []),
+            guidedSession: sortByDayDesc(guidedSessions || []),
+            sleepTime: sortByDayDesc(sleepTime || []),
+            tag: sortByDayDesc(tags || []),
+            enhancedTag: sortByDayDesc(enhancedTags || []),
+            restModePeriod: sortByDayDesc(restModePeriods || []),
+            ringConfiguration: ringConfigurations || [],
+            cardiovascularAge: sortByDayDesc(dayDocs.map((day) => day.cardiovascularAge).filter(Boolean) as any[]),
+            vo2Max: sortByDayDesc(dayDocs.map((day) => day.vo2Max).filter(Boolean) as any[]),
+        };
+    } catch (error) {
+        logSharedStatsWarning('read', profileId, error);
+        return null;
+    }
 };
 
 export const deleteProfileStats = async (profileId: string): Promise<void> => {
-    await clearProfileStats(profileId);
-    await deleteDoc(doc(db, PROFILE_STATS_COLLECTION, profileId));
+    try {
+        await clearProfileStats(profileId);
+        await deleteDoc(doc(db, PROFILE_STATS_COLLECTION, profileId));
+    } catch (error) {
+        logSharedStatsWarning('delete', profileId, error);
+    }
 };

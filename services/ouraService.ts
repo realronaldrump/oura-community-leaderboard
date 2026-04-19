@@ -384,8 +384,31 @@ class OuraService {
     const normalizedDetail = detail.toLowerCase();
     return (
       (normalizedDetail.includes('not authorized access') && normalizedDetail.includes('scope')) ||
+      (normalizedDetail.includes('not authorized') && normalizedDetail.includes('scope')) ||
+      (normalizedDetail.includes('unauthorized') && normalizedDetail.includes('scope')) ||
       normalizedDetail.includes('missing scope')
     );
+  }
+
+  private optionalEndpointFailureCode(
+    status: number,
+    detail: string
+  ): OuraEndpointDiagnostic['code'] {
+    if (this.isMissingScopeError(status, detail)) return 'missing_scope';
+    switch (status) {
+      case 400:
+        return 'bad_request';
+      case 401:
+        return 'unauthorized';
+      case 403:
+        return 'forbidden';
+      case 404:
+        return 'not_found';
+      case 429:
+        return 'rate_limited';
+      default:
+        return 'request_failed';
+    }
   }
 
   private async fetchPaginated<T>(
@@ -464,13 +487,18 @@ class OuraService {
       if (!response.ok) {
         const detail = await this.readErrorDetail(response);
 
-        if (optional && this.isMissingScopeError(response.status, detail)) {
+        if (optional && [400, 401, 403, 404, 429].includes(response.status)) {
+          const code = this.optionalEndpointFailureCode(response.status, detail);
           this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
-          this.markEndpointUnavailable(availabilityKey, endpoint, 'missing_scope');
+          if (code === 'missing_scope') {
+            this.markEndpointUnavailable(availabilityKey, endpoint, 'missing_scope');
+          } else if (code === 'not_found') {
+            this.markEndpointUnavailable(availabilityKey, endpoint, 'not_found');
+          }
           this.setEndpointDiagnostic(
             availabilityKey,
             endpoint,
-            this.buildEndpointDiagnostic(endpoint, 'missing_scope', response.status, detail)
+            this.buildEndpointDiagnostic(endpoint, code, response.status, detail)
           );
           return results;
         }
@@ -485,49 +513,6 @@ class OuraService {
           }
           const suffix = detail ? `: ${detail}` : '';
           throw new Error(`Unauthorized while fetching ${endpoint}${suffix}`);
-        }
-
-        if (optional && response.status === 404) {
-          this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
-          this.markEndpointUnavailable(availabilityKey, endpoint, 'not_found');
-          this.setEndpointDiagnostic(
-            availabilityKey,
-            endpoint,
-            this.buildEndpointDiagnostic(endpoint, 'not_found', response.status, detail)
-          );
-          return results;
-        }
-
-        if (optional && response.status === 403) {
-          this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
-          // Don't blacklist 403s — they may be transient (subscription lapses, server-side
-          // permission propagation delays). Retrying on the next sync is cheap.
-          this.setEndpointDiagnostic(
-            availabilityKey,
-            endpoint,
-            this.buildEndpointDiagnostic(endpoint, 'forbidden', response.status, detail)
-          );
-          return results;
-        }
-
-        if (optional && response.status === 400) {
-          this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
-          this.setEndpointDiagnostic(
-            availabilityKey,
-            endpoint,
-            this.buildEndpointDiagnostic(endpoint, 'bad_request', response.status, detail)
-          );
-          return results;
-        }
-
-        if (optional && response.status === 429) {
-          this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
-          this.setEndpointDiagnostic(
-            availabilityKey,
-            endpoint,
-            this.buildEndpointDiagnostic(endpoint, 'rate_limited', response.status, detail)
-          );
-          return results;
         }
 
         const suffix = detail ? `: ${detail}` : '';

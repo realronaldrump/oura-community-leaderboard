@@ -3280,7 +3280,7 @@ const Dashboard: React.FC = () => {
     // ============================================
     const activeQueryError = userQueries.find((q, idx) => profiles[idx].id === activeProfile?.id && q.isError);
 
-    if (activeQueryError) {
+    if (!activeData && activeQueryError) {
         const errorState = getDashboardErrorState(activeQueryError.error);
         return (
             <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#F2EDE8]">
