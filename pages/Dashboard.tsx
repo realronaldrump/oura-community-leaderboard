@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     DailyActivity, DailyReadiness, DailySleep, SleepSession, HeartRate,
     DailySpO2, DailyStress, DailyResilience, LeaderboardEntry, UserProfile, formatDuration, formatTime, DailyStats
@@ -1195,6 +1195,44 @@ const PersonalRecordsStrip: React.FC<{
     const speedLabel = speedMultiplier === 1 ? '1×' : `${speedMultiplier}×`;
 
     const trackRef = useRef<HTMLDivElement>(null);
+    const dragRef = useRef<{ startX: number; startTime: number; dragging: boolean; moved: boolean }>({ startX: 0, startTime: 0, dragging: false, moved: false });
+
+    const handleTouchStart = useCallback((e: React.TouchEvent) => {
+        const track = trackRef.current;
+        if (!track) return;
+        const anim = track.getAnimations()[0];
+        if (!anim) return;
+        anim.pause();
+        dragRef.current = { startX: e.touches[0].clientX, startTime: (anim.currentTime as number) || 0, dragging: true, moved: false };
+    }, []);
+
+    const handleTouchMove = useCallback((e: React.TouchEvent) => {
+        const d = dragRef.current;
+        if (!d.dragging) return;
+        const track = trackRef.current;
+        if (!track) return;
+        const anim = track.getAnimations()[0];
+        if (!anim) return;
+        const duration = (anim.effect?.getComputedTiming().duration as number) || 0;
+        if (!duration) return;
+        const dx = e.touches[0].clientX - d.startX;
+        if (Math.abs(dx) > 5) d.moved = true;
+        // Map px drag to animation time: track is translateX(0) -> translateX(-50%), so full width = track.scrollWidth / 2
+        const halfWidth = track.scrollWidth / 2;
+        const timeDelta = (dx / halfWidth) * duration;
+        const next = ((d.startTime - timeDelta) % duration + duration) % duration;
+        anim.currentTime = next;
+    }, []);
+
+    const handleTouchEnd = useCallback(() => {
+        const d = dragRef.current;
+        d.dragging = false;
+        const track = trackRef.current;
+        if (!track) return;
+        const anim = track.getAnimations()[0];
+        if (anim) anim.play();
+    }, []);
+
     const skipRecords = (direction: 'forward' | 'back') => {
         const track = trackRef.current;
         if (!track) return;
@@ -1220,7 +1258,7 @@ const PersonalRecordsStrip: React.FC<{
                 type="button"
                 className={`record-chip stagger-${Math.min(idx + 1, 6)} animate-fade-in-up`}
                 style={{ animationFillMode: 'both', outline: isExpanded ? `2px solid ${cat.color}` : undefined, outlineOffset: isExpanded ? '1px' : undefined }}
-                onClick={() => setExpandedId(isExpanded ? null : cat.id)}
+                onClick={() => { if (dragRef.current.moved) return; setExpandedId(isExpanded ? null : cat.id); }}
                 tabIndex={duplicate ? -1 : 0}
                 aria-pressed={isExpanded}
             >
@@ -1249,7 +1287,14 @@ const PersonalRecordsStrip: React.FC<{
                 </span>
             </div>
             <div className="relative records-strip-wrapper">
-                <div className="records-strip mb-3" style={marqueeStyle} aria-label="Personal record highlights">
+                <div
+                    className="records-strip mb-3"
+                    style={marqueeStyle}
+                    aria-label="Personal record highlights"
+                    onTouchStart={handleTouchStart}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                >
                     <div className="records-strip-track" ref={trackRef}>
                         <div className="records-strip-group">
                             {categories.map((cat, idx) => renderRecordChip(cat, idx, false))}

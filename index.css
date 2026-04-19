@@ -1568,6 +1568,7 @@ select {
   scrollbar-width: none;
   -ms-overflow-style: none;
   --records-marquee-duration: 120s;
+  touch-action: pan-y;
 }
 
 .records-strip-track {
