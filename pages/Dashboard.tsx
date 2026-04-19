@@ -2059,6 +2059,11 @@ const Dashboard: React.FC = () => {
         })
     });
 
+    const shouldLoadAllTimeStats = viewMode === 'trends' ||
+        viewMode === 'insights' ||
+        viewMode === 'streaks' ||
+        viewMode === 'export';
+
     const allTimeQueries = useQueries({
         queries: profiles.map(p => ({
             queryKey: ['allTimeStats', p.id],
@@ -2088,7 +2093,7 @@ const Dashboard: React.FC = () => {
             placeholderData: (previousData) => previousData,
             staleTime: DEFAULT_DAILY_STATS_STALE_MS,
             refetchOnWindowFocus: true,
-            enabled: true,
+            enabled: shouldLoadAllTimeStats,
         }))
     });
 
