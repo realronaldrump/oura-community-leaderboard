@@ -304,6 +304,11 @@ const getResilienceScore = (resilience?: DailyResilience): number | null => {
     }
 };
 
+const getResilienceLevelScore = (level: DailyResilience['level'] | null | undefined): number | null => {
+    if (!level) return null;
+    return getResilienceScore({ id: `level-${level}`, day: '', level });
+};
+
 const getStressColor = (summary: DailyStress['day_summary'] | null | undefined): string => {
     switch (summary) {
         case 'restored':
@@ -474,12 +479,14 @@ const createDailyItems = <T extends { day?: string }>(
         if (value == null) return null;
         if (options.positiveOnly && value <= 0) return null;
         if (!options.includeZero && value === 0) return null;
-        return {
+        const recordItem: RawRecordItem = {
             day: item.day,
             raw: value,
             display: formatValue(value, item),
-            detail: options.detail?.(item, value),
         };
+        const detail = options.detail?.(item, value);
+        if (detail) recordItem.detail = detail;
+        return recordItem;
     })
     .filter((item): item is RawRecordItem => item !== null);
 
@@ -545,7 +552,7 @@ const buildRangeAverageEntries = (
     const oldestDay = sorted[0].day;
     const newestDay = sorted[sorted.length - 1].day;
     return RANGE_DEFINITIONS
-        .map((range) => {
+        .map<RecordEntry | null>((range) => {
             const startDay = getRangeStart(newestDay, range.days, oldestDay);
             const points = sorted.filter((item) => item.day >= startDay && item.day <= newestDay);
             const average = averageDailyValue(points);
@@ -573,7 +580,7 @@ const buildRangeCountEntries = (
     const oldestDay = sorted[0].day;
     const newestDay = sorted[sorted.length - 1].day;
     return RANGE_DEFINITIONS
-        .map((range) => {
+        .map<RecordEntry | null>((range) => {
             const startDay = getRangeStart(newestDay, range.days, oldestDay);
             const points = sorted.filter((item) => item.day >= startDay && item.day <= newestDay);
             if (points.length === 0) return null;
