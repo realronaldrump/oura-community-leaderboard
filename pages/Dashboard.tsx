@@ -3645,7 +3645,7 @@ const Dashboard: React.FC = () => {
                             </div>
 
                             {hrData && hrData.length > 0 && (
-                                <div className="chart-container mb-4">
+                                <div className="chart-container mb-4" style={{ height: 200 }}>
                                     <HeartRateChart data={hrData} showLabels />
                                 </div>
                             )}
