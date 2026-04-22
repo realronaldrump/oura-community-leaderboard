@@ -20,11 +20,8 @@ export const useAutoSync = (profileIds: string[], enabled: boolean = true) => {
     const refresh = useCallback(async () => {
         if (profileIds.length === 0) return;
 
-        // Invalidate all data queries so react-query refetches them
-        await Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['dailyStats'] }),
-            queryClient.invalidateQueries({ queryKey: ['allTimeStats'] }),
-        ]);
+        // Refresh the incremental daily stats path; all-time cache is merged from that data.
+        await queryClient.invalidateQueries({ queryKey: ['dailyStats'] });
         setLastSyncTime();
     }, [profileIds, queryClient, setLastSyncTime]);
 

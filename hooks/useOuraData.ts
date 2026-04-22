@@ -1,11 +1,10 @@
 import {
-    getProfileStatsMetadata,
     getStoredDailyStats,
+    saveIncrementalProfileStats,
     saveProfileStats,
 } from '../services/firestoreStatsService';
 import { firebaseService } from '../services/firebaseService';
 import { ouraService } from '../services/ouraService';
-import { shouldAutoPromoteIncrementalToFull } from '../services/syncReconciliation';
 import { DailyStats, OuraEndpointDiagnostic } from '../types';
 import { getOuraFetchEndISODate, shiftLocalISODate } from '../utils/date';
 import { hasAnyOuraScope, normalizeGrantedOuraScopes, OURA_SCOPE_CANDIDATES } from '../utils/ouraScopes';
@@ -351,7 +350,7 @@ export const fetchDailyStats = async (
     return stats;
 };
 
-const mergeDailyStats = (existingData: DailyStats, incomingData: DailyStats): DailyStats => {
+export const mergeDailyStats = (existingData: DailyStats, incomingData: DailyStats): DailyStats => {
     return {
         sleep: mergeCollectionByDay(existingData.sleep, incomingData.sleep),
         readiness: mergeCollectionByDay(existingData.readiness, incomingData.readiness),
@@ -404,41 +403,12 @@ export const syncDailyStats = async (
 
     // Hydrate from shared Firestore stats if no in-memory data was provided.
     let baseData = existingData;
-    let hydratedFromStoredStats = false;
-    let storedMetadata: Awaited<ReturnType<typeof getProfileStatsMetadata>> = null;
-
-    if (profileId) {
-        storedMetadata = await getProfileStatsMetadata(profileId);
-    }
 
     if (!baseData && profileId) {
         const stored = await getStoredDailyStats(profileId);
         if (stored) {
             baseData = stored;
-            hydratedFromStoredStats = true;
         }
-    }
-
-    if (shouldAutoPromoteIncrementalToFull({
-        baseDataPresent: Boolean(baseData),
-        hydratedFromStoredStats,
-        metadata: storedMetadata,
-    })) {
-        const fullData = await fetchDailyStats(token, {
-            start: FULL_HISTORY_START_DATE,
-            end: endDate,
-        }, {
-            includeStaticCollections: true,
-            fullHeartrate: true,
-            grantedScopes: options.grantedScopes,
-            availabilityKey: options.availabilityKey,
-            profileId: options.profileId,
-            profileOffsetMinutes: options.profileOffsetMinutes,
-        });
-        if (profileId) {
-            await saveProfileStats(profileId, fullData, 'full');
-        }
-        return fullData;
     }
 
     const lastDay = getMostRecentDay(baseData);
@@ -459,9 +429,9 @@ export const syncDailyStats = async (
 
     const result = baseData ? mergeDailyStats(baseData, delta) : delta;
 
-    // Persist merged result to shared Firestore for web and iOS clients.
+    // Persist only the changed slice so dashboard queries do not block on full-history rewrites.
     if (profileId) {
-        await saveProfileStats(profileId, result, 'incremental');
+        void saveIncrementalProfileStats(profileId, result, delta);
     }
 
     return result;

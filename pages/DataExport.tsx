@@ -52,6 +52,44 @@ const getBestSessionForDay = (data: DailyStats, day: string): SleepSession | und
     pickBestSession(getSessionsForDay(data.session, day))
 );
 
+const getSessionDays = (sessions: SleepSession[] | undefined): string[] => {
+    const days = new Set<string>();
+    sessions?.forEach((session) => {
+        if (session.type === 'deleted') return;
+        if (session.day) days.add(session.day);
+        const bedtimeDay = session.bedtime_start?.slice(0, 10);
+        const wakeDay = session.bedtime_end?.slice(0, 10);
+        if (bedtimeDay) days.add(bedtimeDay);
+        if (wakeDay) days.add(wakeDay);
+    });
+    return Array.from(days).sort();
+};
+
+const getNightlyVitalsRows = (data: DailyStats) => {
+    return getSessionDays(data.session).reduce<Array<Record<string, string | number>>>(
+        (rows, day) => {
+            const session = getBestSessionForDay(data, day);
+            if (!session) return rows;
+
+            rows.push({
+                date: day,
+                session_type: session.type ?? '',
+                bedtime_start: session.bedtime_start ?? '',
+                bedtime_end: session.bedtime_end ?? '',
+                total_sleep_duration_s: session.total_sleep_duration ?? '',
+                time_in_bed_s: session.time_in_bed ?? '',
+                average_heart_rate_bpm: session.average_heart_rate ?? '',
+                lowest_heart_rate_bpm: session.lowest_heart_rate ?? '',
+                average_hrv_ms: session.average_hrv ?? '',
+                average_breaths_per_min: session.average_breath ?? '',
+            });
+
+            return rows;
+        },
+        []
+    );
+};
+
 const DataExport: React.FC = () => {
     const { activeProfile } = useUser();
     const [isLoading, setIsLoading] = useState(true);
@@ -67,6 +105,8 @@ const DataExport: React.FC = () => {
             .catch(() => setError('Failed to load synced data. Try syncing again from the dashboard.'))
             .finally(() => setIsLoading(false));
     }, [activeProfile?.id]);
+
+            const nightlyVitalsRows = data ? getNightlyVitalsRows(data) : [];
 
     const generateSleepCSV = () => {
         if (!data?.sleep.length) return;
@@ -166,6 +206,11 @@ const DataExport: React.FC = () => {
         downloadCSV(Papa.unparse(csvData), 'sleep_sessions.csv');
     };
 
+    const generateNightlyVitalsCSV = () => {
+        if (!nightlyVitalsRows.length) return;
+        downloadCSV(Papa.unparse(nightlyVitalsRows), 'nightly_vitals.csv');
+    };
+
     const generateSpO2CSV = () => {
         if (!(data?.spo2 as any[])?.length) return;
         const csvData = (data!.spo2 as any[]).map((item) => ({
@@ -263,7 +308,7 @@ const DataExport: React.FC = () => {
             ...(data.sleep || []).map((s) => s.day),
             ...(data.readiness || []).map((r) => r.day),
             ...(data.activity || []).map((a) => a.day),
-            ...(data.session || []).map((s) => s.day),
+            ...getSessionDays(data.session),
             ...(data.spo2 as any[] || []).map((s: any) => s.day),
             ...(data.stress as any[] || []).map((s: any) => s.day),
             ...(data.resilience as any[] || []).map((r: any) => r.day),
@@ -346,7 +391,7 @@ const DataExport: React.FC = () => {
             ...(data.sleep || []).map((s) => s.day),
             ...(data.readiness || []).map((r) => r.day),
             ...(data.activity || []).map((a) => a.day),
-            ...(data.session || []).map((s) => s.day),
+            ...getSessionDays(data.session),
         ].filter(Boolean).sort();
         return allDays.length ? { start: allDays[0], end: allDays[allDays.length - 1] } : null;
     })() : null;
@@ -397,6 +442,15 @@ const DataExport: React.FC = () => {
             count: data.session?.length ?? 0,
             onClick: generateSleepSessionsCSV,
             filename: 'sleep_sessions.csv',
+        },
+        {
+            label: 'Nightly Vitals',
+            description: 'One row per day with resting HR, HRV, breathing',
+            icon: <Heart className="w-5 h-5 text-accent-rose" />,
+            color: 'bg-accent-rose/10',
+            count: nightlyVitalsRows.length,
+            onClick: generateNightlyVitalsCSV,
+            filename: 'nightly_vitals.csv',
         },
         {
             label: 'Heart Rate',

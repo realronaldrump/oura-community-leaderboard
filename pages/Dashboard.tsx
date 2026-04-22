@@ -18,7 +18,7 @@ import {
     LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip
 } from 'recharts';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
-import { syncDailyStats } from '../hooks/useOuraData';
+import { mergeDailyStats, syncDailyStats } from '../hooks/useOuraData';
 import ComparisonHeartRateChart from '../components/charts/ComparisonHeartRateChart';
 import AllTimeHistory from '../components/AllTimeHistory';
 import SyncModal from '../components/SyncModal';
@@ -28,6 +28,7 @@ import InviteLinkCard from '../components/InviteLinkCard';
 import InviteLinkModal from '../components/InviteLinkModal';
 import MultiProfileComparisonTable, { ComparisonRow } from '../components/MultiProfileComparisonTable';
 import CompeteView from '../components/compete/CompeteView';
+import { getStoredDailyStats } from '../services/firestoreStatsService';
 import { smartSync, SyncProgress } from '../services/syncService';
 import { ouraService } from '../services/ouraService';
 import {
@@ -1966,7 +1967,7 @@ const Dashboard: React.FC = () => {
         };
     };
 
-    const runWithAutoTokenRefresh = async <T,>(profileId: string, operation: (token: string) => Promise<T>): Promise<T> => {
+    const runWithAutoTokenRefresh = useCallback(async <T,>(profileId: string, operation: (token: string) => Promise<T>): Promise<T> => {
         const firstToken = await getAccessTokenForProfile(profileId);
         try {
             return await operation(firstToken);
@@ -1977,7 +1978,80 @@ const Dashboard: React.FC = () => {
             const refreshedToken = await getAccessTokenForProfile(profileId, { forceRefresh: true });
             return operation(refreshedToken);
         }
-    };
+    }, [getAccessTokenForProfile]);
+
+    const mergeIntoAllTimeCache = useCallback((profileId: string, data: DailyStats) => {
+        queryClient.setQueryData(['allTimeStats', profileId], (current: DailyStats | undefined) => (
+            current ? mergeDailyStats(current, data) : data
+        ));
+    }, [queryClient]);
+
+    const primeStoredStatsCache = useCallback((profileId: string, stored: DailyStats) => {
+        queryClient.setQueryData(['dailyStats', profileId], (current: DailyStats | undefined) => current ?? stored);
+        mergeIntoAllTimeCache(profileId, stored);
+    }, [mergeIntoAllTimeCache, queryClient]);
+
+    const loadProfileDailyStats = useCallback(async (profile: UserProfile): Promise<DailyStats> => {
+        try {
+            const cached = queryClient.getQueryData(['dailyStats', profile.id]) as DailyStats | undefined;
+            const synced = await runWithAutoTokenRefresh(profile.id, (token) =>
+                syncDailyStats(token, cached, {
+                    mode: 'incremental',
+                    grantedScopes: profile.grantedScopes,
+                    availabilityKey: profile.id,
+                    profileId: profile.id,
+                    profileOffsetMinutes: profile.lastKnownUtcOffsetMinutes,
+                })
+            );
+            queryClient.setQueryData(['dailyStats', profile.id], synced);
+            mergeIntoAllTimeCache(profile.id, synced);
+            await markProfileSyncSuccess(profile.id);
+            return synced;
+        } catch (error) {
+            await markProfileSyncError(profile.id, error);
+            throw error;
+        }
+    }, [markProfileSyncError, markProfileSyncSuccess, mergeIntoAllTimeCache, queryClient, runWithAutoTokenRefresh]);
+
+    const loadProfileAllTimeStats = useCallback(async (profile: UserProfile): Promise<DailyStats | undefined> => {
+        const cachedAllTime = queryClient.getQueryData(['allTimeStats', profile.id]) as DailyStats | undefined;
+        if (cachedAllTime) return cachedAllTime;
+
+        const cachedDaily = queryClient.getQueryData(['dailyStats', profile.id]) as DailyStats | undefined;
+        if (cachedDaily) {
+            mergeIntoAllTimeCache(profile.id, cachedDaily);
+            return cachedDaily;
+        }
+
+        const stored = await getStoredDailyStats(profile.id);
+        if (stored) {
+            primeStoredStatsCache(profile.id, stored);
+            return stored;
+        }
+
+        return loadProfileDailyStats(profile);
+    }, [loadProfileDailyStats, mergeIntoAllTimeCache, primeStoredStatsCache, queryClient]);
+
+    useEffect(() => {
+        if (!activeProfile?.id) return;
+        if (queryClient.getQueryData(['dailyStats', activeProfile.id])) return;
+
+        let cancelled = false;
+
+        getStoredDailyStats(activeProfile.id)
+            .then((stored) => {
+                if (cancelled || !stored) return;
+                primeStoredStatsCache(activeProfile.id, stored);
+            })
+            .catch((error) => {
+                if (cancelled) return;
+                console.warn('Failed to hydrate stored stats for active profile:', error);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeProfile?.id, primeStoredStatsCache, queryClient]);
 
     // Auto-sync every hour
     const profileIds = useMemo(() => profiles.map(p => p.id), [profiles]);
@@ -2015,6 +2089,7 @@ const Dashboard: React.FC = () => {
                 })
             );
             queryClient.setQueryData(['dailyStats', activeProfile.id], syncedData);
+            mergeIntoAllTimeCache(activeProfile.id, syncedData);
             await markProfileSyncSuccess(activeProfile.id);
         } catch (err) {
             console.error('Sync failed:', err);
@@ -2035,25 +2110,7 @@ const Dashboard: React.FC = () => {
             const isLiveProfile = viewMode === 'today' && p.id === activeProfile?.id;
             return ({
                 queryKey: ['dailyStats', p.id],
-                queryFn: async () => {
-                    try {
-                        const cached = queryClient.getQueryData(['dailyStats', p.id]) as DailyStats | undefined;
-                        const synced = await runWithAutoTokenRefresh(p.id, (token) =>
-                            syncDailyStats(token, cached, {
-                                mode: 'incremental',
-                                grantedScopes: p.grantedScopes,
-                                availabilityKey: p.id,
-                                profileId: p.id,
-                                profileOffsetMinutes: p.lastKnownUtcOffsetMinutes,
-                            })
-                        );
-                        await markProfileSyncSuccess(p.id);
-                        return synced;
-                    } catch (error) {
-                        await markProfileSyncError(p.id, error);
-                        throw error;
-                    }
-                },
+                queryFn: () => loadProfileDailyStats(p),
                 staleTime: viewMode === 'today' && p.id === activeProfile?.id
                     ? LIVE_DAILY_STATS_STALE_MS
                     : DEFAULT_DAILY_STATS_STALE_MS,
@@ -2074,19 +2131,7 @@ const Dashboard: React.FC = () => {
     const allTimeQueries = useQueries({
         queries: profiles.map(p => ({
             queryKey: ['allTimeStats', p.id],
-            queryFn: async () => {
-                const fullHistory = await runWithAutoTokenRefresh(p.id, (token) =>
-                    syncDailyStats(token, undefined, {
-                        mode: 'full',
-                        grantedScopes: p.grantedScopes,
-                        availabilityKey: p.id,
-                        profileId: p.id,
-                        profileOffsetMinutes: p.lastKnownUtcOffsetMinutes,
-                    })
-                );
-                await markProfileSyncSuccess(p.id);
-                return fullHistory;
-            },
+            queryFn: () => loadProfileAllTimeStats(p),
             initialData: () => {
                 const existingAllTime = queryClient.getQueryData(['allTimeStats', p.id]) as DailyStats | undefined;
                 if (existingAllTime) return existingAllTime;
@@ -2098,8 +2143,8 @@ const Dashboard: React.FC = () => {
                 return 0;
             },
             placeholderData: (previousData) => previousData,
-            staleTime: DEFAULT_DAILY_STATS_STALE_MS,
-            refetchOnWindowFocus: true,
+            staleTime: Number.POSITIVE_INFINITY,
+            refetchOnWindowFocus: false,
             enabled: shouldLoadAllTimeStats,
         }))
     });
@@ -2563,16 +2608,8 @@ const Dashboard: React.FC = () => {
 
         queryClient.prefetchQuery({
             queryKey: allTimeQueryKey,
-            queryFn: () => runWithAutoTokenRefresh(activeProfile.id, (token) =>
-                syncDailyStats(token, undefined, {
-                    mode: 'full',
-                    grantedScopes: activeProfile.grantedScopes,
-                    availabilityKey: activeProfile.id,
-                    profileId: activeProfile.id,
-                    profileOffsetMinutes: activeProfile.lastKnownUtcOffsetMinutes,
-                })
-            ),
-            staleTime: 1000 * 60 * 60 * 24,
+            queryFn: () => loadProfileAllTimeStats(activeProfile),
+            staleTime: Number.POSITIVE_INFINITY,
         });
     };
 
@@ -2602,17 +2639,10 @@ const Dashboard: React.FC = () => {
         if (!cachedAllTime) {
             void queryClient.fetchQuery({
                 queryKey: allTimeQueryKey,
-                queryFn: () => runWithAutoTokenRefresh(activeProfile.id, (token) =>
-                    syncDailyStats(token, undefined, {
-                        mode: 'full',
-                        grantedScopes: activeProfile.grantedScopes,
-                        availabilityKey: activeProfile.id,
-                        profileId: activeProfile.id,
-                        profileOffsetMinutes: activeProfile.lastKnownUtcOffsetMinutes,
-                    })
-                ),
-                staleTime: 1000 * 60 * 60 * 24,
+                queryFn: () => loadProfileAllTimeStats(activeProfile),
+                staleTime: Number.POSITIVE_INFINITY,
             }).then((fullHistory) => {
+                if (!fullHistory) return;
                 setMetricDetailModal((previous) => (
                     previous.isOpen && previous.metricType === metricType
                         ? {
@@ -2972,7 +3002,6 @@ const Dashboard: React.FC = () => {
         if (!activeProfile?.id || viewMode !== 'today') return;
         if (referenceDay !== todayIsoDay) return;
         queryClient.invalidateQueries({ queryKey: ['dailyStats', activeProfile.id], exact: true });
-        queryClient.invalidateQueries({ queryKey: ['allTimeStats', activeProfile.id], exact: true });
     }, [activeProfile?.id, queryClient, referenceDay, todayIsoDay, viewMode]);
 
     useEffect(() => {
@@ -2985,7 +3014,6 @@ const Dashboard: React.FC = () => {
 
             timer = window.setTimeout(() => {
                 queryClient.invalidateQueries({ queryKey: ['dailyStats'] });
-                queryClient.invalidateQueries({ queryKey: ['allTimeStats'] });
                 scheduleMidnightInvalidation();
             }, delayMs);
         };
