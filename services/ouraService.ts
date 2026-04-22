@@ -337,7 +337,7 @@ class OuraService {
 
   private async fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number = REQUEST_TIMEOUT_MS): Promise<Response> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), timeoutMs);
     try {
       return await fetch(url, { ...init, signal: controller.signal });
     } finally {
