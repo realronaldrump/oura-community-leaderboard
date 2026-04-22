@@ -50,15 +50,14 @@ const describeCoverage = (data: DailyStats): { start: string; end: string; days:
 };
 
 /**
- * Canonical sync path: always fetch complete Oura history.
- * This keeps regular flow, full sync, and export consistent.
+ * Default sync path: fetch only the recent delta and merge it into cached history.
  */
 export const smartSync = async (
     token: string,
     existingData: DailyStats | undefined,
     onProgress: SyncProgressCallback,
     authContext: SyncAuthContext = {}
-): Promise<Partial<DailyStats>> => {
+): Promise<DailyStats> => {
     const today = getToday(authContext.profileOffsetMinutes);
     const fetchEndDate = getFetchEndDate(authContext.profileOffsetMinutes);
 
@@ -79,7 +78,7 @@ export const smartSync = async (
         profileOffsetMinutes: authContext.profileOffsetMinutes,
     });
 
-    const coverage = describeCoverage(data as DailyStats);
+    const coverage = describeCoverage(data);
     const details = coverage
         ? `${coverage.start} → ${coverage.end} (${coverage.days} days loaded)`
         : `Updated through ${today}`;
