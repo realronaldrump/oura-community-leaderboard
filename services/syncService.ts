@@ -1,4 +1,5 @@
-import { FULL_HISTORY_START_DATE, syncDailyStats } from '../hooks/useOuraData';
+import { FULL_HISTORY_START_DATE, fetchDailyStats, mergeDailyStats, syncDailyStats } from '../hooks/useOuraData';
+import { clearProfileStats, saveIncrementalProfileStats } from './firestoreStatsService';
 import { DailyStats } from '../types';
 import { getOuraFetchEndISODate } from '../utils/date';
 import { getOffsetIsoDay } from '../utils/temporal';
@@ -19,6 +20,28 @@ type SyncAuthContext = {
     availabilityKey?: string;
     profileId?: string;
     profileOffsetMinutes?: number | null;
+};
+
+const generateYearChunks = (
+    startIso: string,
+    endIso: string
+): Array<{ start: string; end: string; label: string }> => {
+    const chunks: Array<{ start: string; end: string; label: string }> = [];
+    let currentStart = startIso;
+    const endYear = parseInt(endIso.slice(0, 4), 10);
+
+    while (currentStart <= endIso) {
+        const year = parseInt(currentStart.slice(0, 4), 10);
+        const yearEnd = `${year}-12-31`;
+        const chunkEnd = yearEnd <= endIso ? yearEnd : endIso;
+
+        chunks.push({ start: currentStart, end: chunkEnd, label: String(year) });
+
+        currentStart = `${year + 1}-01-01`;
+        if (year >= endYear) break;
+    }
+
+    return chunks;
 };
 
 const getToday = (offsetMinutes?: number | null) => (
@@ -95,7 +118,8 @@ export const smartSync = async (
 };
 
 /**
- * Full sync uses the same canonical history fetch path.
+ * Full sync processes history one year at a time to avoid request timeouts
+ * and to save incremental progress after each chunk.
  */
 export const fullSync = async (
     token: string,
@@ -104,25 +128,46 @@ export const fullSync = async (
 ): Promise<DailyStats> => {
     const today = getToday(authContext.profileOffsetMinutes);
     const fetchEndDate = getFetchEndDate(authContext.profileOffsetMinutes);
+    const chunks = generateYearChunks(FULL_HISTORY_START_DATE, fetchEndDate);
+    const totalSteps = chunks.length;
 
-    onProgress({
-        status: 'syncing',
-        currentStep: 'Syncing complete history...',
-        stepsCompleted: 0,
-        totalSteps: 1,
-        details: `${FULL_HISTORY_START_DATE} → ${today}`,
-    });
+    // Clear existing Firestore data first so stale records don't persist.
+    if (authContext.profileId) {
+        await clearProfileStats(authContext.profileId);
+    }
 
-    const data = await syncDailyStats(token, undefined, {
-        mode: 'full',
-        endDate: fetchEndDate,
-        grantedScopes: authContext.grantedScopes,
-        availabilityKey: authContext.availabilityKey,
-        profileId: authContext.profileId,
-        profileOffsetMinutes: authContext.profileOffsetMinutes,
-    });
+    let accumulated: DailyStats | undefined;
 
-    const coverage = describeCoverage(data);
+    for (let i = 0; i < chunks.length; i++) {
+        const { start, end, label } = chunks[i];
+        const isLast = i === chunks.length - 1;
+
+        onProgress({
+            status: 'syncing',
+            currentStep: `Syncing ${label}...`,
+            stepsCompleted: i,
+            totalSteps,
+            details: `${start} → ${end}`,
+        });
+
+        const chunkData = await fetchDailyStats(token, { start, end }, {
+            includeStaticCollections: isLast,
+            fullHeartrate: true,
+            grantedScopes: authContext.grantedScopes,
+            availabilityKey: authContext.availabilityKey,
+            profileId: authContext.profileId,
+            profileOffsetMinutes: authContext.profileOffsetMinutes,
+        });
+
+        accumulated = accumulated ? mergeDailyStats(accumulated, chunkData) : chunkData;
+
+        if (authContext.profileId) {
+            await saveIncrementalProfileStats(authContext.profileId, accumulated, chunkData);
+        }
+    }
+
+    const result = accumulated!;
+    const coverage = describeCoverage(result);
     const details = coverage
         ? `${coverage.start} → ${coverage.end} (${coverage.days} days loaded)`
         : `${FULL_HISTORY_START_DATE} → ${today}`;
@@ -130,10 +175,10 @@ export const fullSync = async (
     onProgress({
         status: 'complete',
         currentStep: 'Full sync complete!',
-        stepsCompleted: 1,
-        totalSteps: 1,
+        stepsCompleted: totalSteps,
+        totalSteps,
         details,
     });
 
-    return data;
+    return result;
 };
