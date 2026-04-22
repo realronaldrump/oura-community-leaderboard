@@ -6,7 +6,6 @@ import {
     getDoc,
     getDocs,
     query,
-    setDoc,
     writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
@@ -15,9 +14,9 @@ import {
     HeartRate,
     SleepSession,
 } from '../types';
+import { PROFILE_STATS_SCHEMA_VERSION } from './profileStatsConstants';
 
 export const PROFILE_STATS_COLLECTION = 'profileStats';
-export const PROFILE_STATS_SCHEMA_VERSION = 1;
 
 const DAYS_COLLECTION = 'days';
 const HEART_RATE_DAYS_COLLECTION = 'heartRateDays';
@@ -66,6 +65,8 @@ type BuiltProfileStatsDocuments = {
     heartRateDays: Array<{ day: string; items: HeartRate[]; updatedAt: string }>;
     rawCollections: Record<string, unknown[]>;
 };
+
+type BuiltProfileStatsSliceDocuments = Omit<BuiltProfileStatsDocuments, 'metadata'>;
 
 type FirestoreDocumentPath = [string, string, ...string[]];
 
@@ -209,6 +210,37 @@ const getAllDays = (data: DailyStats): string[] => {
     return Array.from(days).sort();
 };
 
+const buildProfileStatsMetadata = (
+    profileId: string,
+    data: DailyStats,
+    mode: SyncMode,
+    now: string
+): ProfileStatsMetadata => {
+    const { oldestDay, newestDay } = extractDayRange(data);
+
+    return stripUndefinedDeep({
+        profileId,
+        schemaVersion: PROFILE_STATS_SCHEMA_VERSION,
+        oldestDay,
+        newestDay,
+        lastFullSyncAt: mode === 'full' ? now : undefined,
+        lastIncrementalSyncAt: mode === 'incremental' ? now : undefined,
+        lastSyncError: null,
+        updatedAt: now,
+    });
+};
+
+const buildRawCollections = (data: DailyStats): Record<string, unknown[]> => ({
+    [RAW_COLLECTIONS.sleepSessions]: data.session || [],
+    [RAW_COLLECTIONS.workouts]: data.workout || [],
+    [RAW_COLLECTIONS.tags]: data.tag || [],
+    [RAW_COLLECTIONS.enhancedTags]: data.enhancedTag || [],
+    [RAW_COLLECTIONS.guidedSessions]: data.guidedSession || [],
+    [RAW_COLLECTIONS.sleepTime]: data.sleepTime || [],
+    [RAW_COLLECTIONS.restModePeriods]: data.restModePeriod || [],
+    [RAW_COLLECTIONS.ringConfigurations]: data.ringConfiguration || [],
+});
+
 const groupHeartRateByDay = (items: HeartRate[] | undefined, updatedAt: string) => {
     const grouped = new Map<string, HeartRate[]>();
     (items || []).forEach((item) => {
@@ -226,13 +258,10 @@ const groupHeartRateByDay = (items: HeartRate[] | undefined, updatedAt: string) 
     }));
 };
 
-export const buildProfileStatsDocuments = (
-    profileId: string,
+const buildProfileStatsSliceDocuments = (
     data: DailyStats,
-    mode: SyncMode,
     now: string = new Date().toISOString()
-): BuiltProfileStatsDocuments => {
-    const { oldestDay, newestDay } = extractDayRange(data);
+): BuiltProfileStatsSliceDocuments => {
     const sessions = data.session || [];
     const days = getAllDays(data).map((day) => {
         const daySessions = sessions.filter((session) => getSessionCandidateDays(session).has(day));
@@ -252,30 +281,33 @@ export const buildProfileStatsDocuments = (
     });
 
     return {
-        metadata: stripUndefinedDeep({
-            profileId,
-            schemaVersion: PROFILE_STATS_SCHEMA_VERSION,
-            oldestDay,
-            newestDay,
-            lastFullSyncAt: mode === 'full' ? now : undefined,
-            lastIncrementalSyncAt: mode === 'incremental' ? now : undefined,
-            lastSyncError: null,
-            updatedAt: now,
-        }),
         days,
         heartRateDays: groupHeartRateByDay(data.heartrate, now),
-        rawCollections: {
-            [RAW_COLLECTIONS.sleepSessions]: data.session || [],
-            [RAW_COLLECTIONS.workouts]: data.workout || [],
-            [RAW_COLLECTIONS.tags]: data.tag || [],
-            [RAW_COLLECTIONS.enhancedTags]: data.enhancedTag || [],
-            [RAW_COLLECTIONS.guidedSessions]: data.guidedSession || [],
-            [RAW_COLLECTIONS.sleepTime]: data.sleepTime || [],
-            [RAW_COLLECTIONS.restModePeriods]: data.restModePeriod || [],
-            [RAW_COLLECTIONS.ringConfigurations]: data.ringConfiguration || [],
-        },
+        rawCollections: buildRawCollections(data),
     };
 };
+
+export const buildProfileStatsDocuments = (
+    profileId: string,
+    data: DailyStats,
+    mode: SyncMode,
+    now: string = new Date().toISOString()
+): BuiltProfileStatsDocuments => {
+    return {
+        metadata: buildProfileStatsMetadata(profileId, data, mode, now),
+        ...buildProfileStatsSliceDocuments(data, now),
+    };
+};
+
+export const buildIncrementalProfileStatsDocuments = (
+    profileId: string,
+    mergedData: DailyStats,
+    deltaData: DailyStats,
+    now: string = new Date().toISOString()
+): BuiltProfileStatsDocuments => ({
+    metadata: buildProfileStatsMetadata(profileId, mergedData, 'incremental', now),
+    ...buildProfileStatsSliceDocuments(deltaData, now),
+});
 
 const commitSetOperations = async (
     operations: Array<{ path: FirestoreDocumentPath; data: unknown }>
@@ -354,6 +386,45 @@ export const saveProfileStats = async (
         await commitSetOperations(operations);
     } catch (error) {
         logSharedStatsWarning('save', profileId, error);
+    }
+};
+
+export const saveIncrementalProfileStats = async (
+    profileId: string,
+    mergedData: DailyStats,
+    deltaData: DailyStats
+): Promise<void> => {
+    try {
+        const built = buildIncrementalProfileStatsDocuments(profileId, mergedData, deltaData);
+        const operations: Array<{ path: FirestoreDocumentPath; data: unknown }> = [
+            {
+                path: [PROFILE_STATS_COLLECTION, profileId] as FirestoreDocumentPath,
+                data: built.metadata,
+            },
+            ...built.days.map((day) => ({
+                path: [PROFILE_STATS_COLLECTION, profileId, DAYS_COLLECTION, day.day] as FirestoreDocumentPath,
+                data: day,
+            })),
+            ...built.heartRateDays.map((heartRateDay) => ({
+                path: [PROFILE_STATS_COLLECTION, profileId, HEART_RATE_DAYS_COLLECTION, heartRateDay.day] as FirestoreDocumentPath,
+                data: heartRateDay,
+            })),
+        ];
+
+        Object.entries(built.rawCollections).forEach(([collectionName, items]) => {
+            items.forEach((item, index) => {
+                operations.push({
+                    path: [PROFILE_STATS_COLLECTION, profileId, collectionName, toDocumentId(item, index)] as FirestoreDocumentPath,
+                    data: isRecord(item)
+                        ? { ...item, updatedAt: built.metadata.updatedAt }
+                        : { value: item, updatedAt: built.metadata.updatedAt },
+                });
+            });
+        });
+
+        await commitSetOperations(operations);
+    } catch (error) {
+        logSharedStatsWarning('incremental save', profileId, error);
     }
 };
 

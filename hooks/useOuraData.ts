@@ -1,12 +1,11 @@
 import {
     getProfileStatsMetadata,
     getStoredDailyStats,
-    PROFILE_STATS_SCHEMA_VERSION,
     saveProfileStats,
-    type ProfileStatsMetadata,
 } from '../services/firestoreStatsService';
 import { firebaseService } from '../services/firebaseService';
 import { ouraService } from '../services/ouraService';
+import { shouldAutoPromoteIncrementalToFull } from '../services/syncReconciliation';
 import { DailyStats, OuraEndpointDiagnostic } from '../types';
 import { getOuraFetchEndISODate, shiftLocalISODate } from '../utils/date';
 import { hasAnyOuraScope, normalizeGrantedOuraScopes, OURA_SCOPE_CANDIDATES } from '../utils/ouraScopes';
@@ -15,7 +14,6 @@ import { deriveProfileTemporalMetadata } from '../utils/profileTemporal';
 export const FULL_HISTORY_START_DATE = '2016-01-01';
 const INITIAL_RECENT_DAYS = 28;
 const INCREMENTAL_OVERLAP_DAYS = 3;
-const AUTO_FULL_RECONCILIATION_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 type FetchConfig = {
     includeStaticCollections?: boolean;
@@ -39,37 +37,6 @@ type SyncDailyStatsOptions = {
 
 const getFetchEndDate = (offsetMinutes?: number | null): string => getOuraFetchEndISODate(new Date(), offsetMinutes);
 const shiftDate = (day: string, daysDelta: number): string => shiftLocalISODate(day, daysDelta);
-
-type FullReconciliationDecisionInput = {
-    baseDataPresent: boolean;
-    hydratedFromStoredStats: boolean;
-    metadata: Pick<ProfileStatsMetadata, 'lastFullSyncAt' | 'schemaVersion'> | null;
-    nowMs?: number;
-};
-
-export const shouldAutoPromoteIncrementalToFull = ({
-    baseDataPresent,
-    hydratedFromStoredStats,
-    metadata,
-    nowMs = Date.now(),
-}: FullReconciliationDecisionInput): boolean => {
-    if (!baseDataPresent) return false;
-
-    if (!metadata) {
-        return hydratedFromStoredStats;
-    }
-
-    if (metadata.schemaVersion !== PROFILE_STATS_SCHEMA_VERSION) {
-        return true;
-    }
-
-    const lastFullSyncMs = Date.parse(metadata.lastFullSyncAt || '');
-    if (!Number.isFinite(lastFullSyncMs)) {
-        return true;
-    }
-
-    return nowMs - lastFullSyncMs >= AUTO_FULL_RECONCILIATION_INTERVAL_MS;
-};
 
 const sortByDayDesc = (a: any, b: any): number => {
     const bDate = new Date(b?.day || b?.summary_date || 0).getTime();
@@ -438,7 +405,7 @@ export const syncDailyStats = async (
     // Hydrate from shared Firestore stats if no in-memory data was provided.
     let baseData = existingData;
     let hydratedFromStoredStats = false;
-    let storedMetadata: ProfileStatsMetadata | null = null;
+    let storedMetadata: Awaited<ReturnType<typeof getProfileStatsMetadata>> = null;
 
     if (profileId) {
         storedMetadata = await getProfileStatsMetadata(profileId);

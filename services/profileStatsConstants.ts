@@ -1,0 +1,1 @@
+export const PROFILE_STATS_SCHEMA_VERSION = 1;

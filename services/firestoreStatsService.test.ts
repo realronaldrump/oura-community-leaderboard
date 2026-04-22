@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildProfileStatsDocuments, PROFILE_STATS_SCHEMA_VERSION } from './firestoreStatsService';
+import { buildIncrementalProfileStatsDocuments, buildProfileStatsDocuments } from './firestoreStatsService';
+import { PROFILE_STATS_SCHEMA_VERSION } from './profileStatsConstants';
 import { DailyStats } from '../types';
 
 describe('buildProfileStatsDocuments', () => {
@@ -88,5 +89,103 @@ describe('buildProfileStatsDocuments', () => {
         expect(built.rawCollections.sleepSessions).toHaveLength(2);
         expect(built.rawCollections.workouts).toHaveLength(1);
         expect(built.rawCollections.ringConfigurations).toHaveLength(1);
+    });
+
+    it('builds incremental persistence docs from the delta while keeping merged coverage metadata', () => {
+        const merged: DailyStats = {
+            sleep: [
+                { id: 'sleep-old', day: '2026-04-10', score: 81, contributors: {} },
+                { id: 'sleep-new', day: '2026-04-18', score: 88, contributors: {} },
+            ],
+            readiness: [
+                { id: 'ready-old', day: '2026-04-10', score: 79, contributors: {} },
+                { id: 'ready-new', day: '2026-04-18', score: 84, contributors: {} },
+            ],
+            activity: [
+                {
+                    id: 'activity-old',
+                    day: '2026-04-10',
+                    score: 76,
+                    active_calories: 320,
+                    contributors: {},
+                    steps: 8000,
+                    target_calories: 450,
+                    total_calories: 2100,
+                },
+                {
+                    id: 'activity-new',
+                    day: '2026-04-18',
+                    score: 92,
+                    active_calories: 540,
+                    contributors: {},
+                    steps: 12800,
+                    target_calories: 450,
+                    total_calories: 2450,
+                },
+            ],
+            session: [
+                { id: 'session-old', day: '2026-04-10', total_sleep_duration: 25000 } as any,
+                { id: 'session-new', day: '2026-04-18', total_sleep_duration: 27000 } as any,
+            ],
+            spo2: [],
+            stress: [],
+            resilience: [],
+            heartrate: [
+                { bpm: 57, source: 'sleep', timestamp: '2026-04-10T01:00:00-06:00' },
+                { bpm: 61, source: 'sleep', timestamp: '2026-04-18T01:00:00-06:00' },
+            ],
+            workout: [
+                {
+                    id: 'workout-old',
+                    activity: 'running',
+                    day: '2026-04-10',
+                    end_datetime: '2026-04-10T17:30:00-06:00',
+                    start_datetime: '2026-04-10T17:00:00-06:00',
+                },
+                {
+                    id: 'workout-new',
+                    activity: 'walking',
+                    day: '2026-04-18',
+                    end_datetime: '2026-04-18T18:00:00-06:00',
+                    start_datetime: '2026-04-18T17:40:00-06:00',
+                },
+            ],
+            guidedSession: [],
+            sleepTime: [],
+            tag: [],
+            enhancedTag: [],
+            restModePeriod: [],
+            ringConfiguration: [{ id: 'ring-1', color: 'silver' }],
+            cardiovascularAge: [],
+            vo2Max: [],
+        };
+
+        const delta: DailyStats = {
+            ...merged,
+            sleep: [merged.sleep[1]],
+            readiness: [merged.readiness[1]],
+            activity: [merged.activity[1]],
+            session: [merged.session[1]],
+            heartrate: [merged.heartrate[1]],
+            workout: [merged.workout[1]],
+            ringConfiguration: [],
+        };
+
+        const built = buildIncrementalProfileStatsDocuments('profile-1', merged, delta, '2026-04-19T12:00:00.000Z');
+
+        expect(built.metadata).toMatchObject({
+            profileId: 'profile-1',
+            schemaVersion: PROFILE_STATS_SCHEMA_VERSION,
+            oldestDay: '2026-04-10',
+            newestDay: '2026-04-18',
+            lastIncrementalSyncAt: '2026-04-19T12:00:00.000Z',
+        });
+        expect(built.days).toHaveLength(1);
+        expect(built.days[0]).toMatchObject({ day: '2026-04-18' });
+        expect(built.heartRateDays).toHaveLength(1);
+        expect(built.heartRateDays[0]).toMatchObject({ day: '2026-04-18' });
+        expect(built.rawCollections.sleepSessions).toHaveLength(1);
+        expect(built.rawCollections.workouts).toHaveLength(1);
+        expect(built.rawCollections.ringConfigurations).toHaveLength(0);
     });
 });

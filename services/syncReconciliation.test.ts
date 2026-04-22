@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { PROFILE_STATS_SCHEMA_VERSION } from '../services/firestoreStatsService';
-import { shouldAutoPromoteIncrementalToFull } from './useOuraData';
+import { PROFILE_STATS_SCHEMA_VERSION } from './profileStatsConstants';
+import { shouldAutoPromoteIncrementalToFull } from './syncReconciliation';
 
 describe('shouldAutoPromoteIncrementalToFull', () => {
     const nowMs = Date.parse('2026-04-21T12:00:00.000Z');

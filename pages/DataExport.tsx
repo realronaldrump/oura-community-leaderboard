@@ -3,7 +3,7 @@ import { Download, FileText, Database, TrendingUp, AlertCircle, Heart, Activity,
 import Papa from 'papaparse';
 import { useUser } from '../contexts/UserContext';
 import { getStoredDailyStats } from '../services/firestoreStatsService';
-import { DailyStats } from '../types';
+import { DailyStats, SleepSession } from '../types';
 
 const METERS_TO_MILES = 0.000621371;
 const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
@@ -26,6 +26,31 @@ const downloadCSV = (csvContent: string, filename: string) => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 };
+
+const getSessionsForDay = (sessions: SleepSession[] | undefined, day: string): SleepSession[] => {
+    if (!sessions?.length) return [];
+    return sessions.filter((session) => {
+        if (session.type === 'deleted') return false;
+        if (session.day === day) return true;
+        const bedtimeDay = session.bedtime_start?.slice(0, 10);
+        const wakeDay = session.bedtime_end?.slice(0, 10);
+        return bedtimeDay === day || wakeDay === day;
+    });
+};
+
+const pickBestSession = (sessions: SleepSession[]): SleepSession | undefined => {
+    if (!sessions.length) return undefined;
+    return [...sessions].sort((left, right) => {
+        const rightDuration = right.total_sleep_duration ?? right.time_in_bed ?? 0;
+        const leftDuration = left.total_sleep_duration ?? left.time_in_bed ?? 0;
+        if (rightDuration !== leftDuration) return rightDuration - leftDuration;
+        return new Date(right.bedtime_end || 0).getTime() - new Date(left.bedtime_end || 0).getTime();
+    })[0];
+};
+
+const getBestSessionForDay = (data: DailyStats, day: string): SleepSession | undefined => (
+    pickBestSession(getSessionsForDay(data.session, day))
+);
 
 const DataExport: React.FC = () => {
     const { activeProfile } = useUser();
@@ -69,7 +94,7 @@ const DataExport: React.FC = () => {
             previous_night: item.contributors?.previous_night ?? '',
             sleep_balance: item.contributors?.sleep_balance ?? '',
             hrv_balance: item.contributors?.hrv_balance ?? '',
-            resting_heart_rate: item.contributors?.resting_heart_rate ?? '',
+            resting_heart_rate_contributor_score: item.contributors?.resting_heart_rate ?? '',
             recovery_index: item.contributors?.recovery_index ?? '',
             body_temperature: item.contributors?.body_temperature ?? '',
             activity_balance: item.contributors?.activity_balance ?? '',
@@ -238,6 +263,7 @@ const DataExport: React.FC = () => {
             ...(data.sleep || []).map((s) => s.day),
             ...(data.readiness || []).map((r) => r.day),
             ...(data.activity || []).map((a) => a.day),
+            ...(data.session || []).map((s) => s.day),
             ...(data.spo2 as any[] || []).map((s: any) => s.day),
             ...(data.stress as any[] || []).map((s: any) => s.day),
             ...(data.resilience as any[] || []).map((r: any) => r.day),
@@ -248,6 +274,7 @@ const DataExport: React.FC = () => {
             const sleep = data.sleep?.find((s) => s.day === date);
             const readiness = data.readiness?.find((r) => r.day === date);
             const activity = data.activity?.find((a) => a.day === date);
+            const session = getBestSessionForDay(data, date);
             const spo2 = (data.spo2 as any[])?.find((s) => s.day === date);
             const stress = (data.stress as any[])?.find((s) => s.day === date);
             const resilience = (data.resilience as any[])?.find((r) => r.day === date);
@@ -267,13 +294,14 @@ const DataExport: React.FC = () => {
                 readiness_previous_night: readiness?.contributors?.previous_night ?? '',
                 readiness_sleep_balance: readiness?.contributors?.sleep_balance ?? '',
                 readiness_hrv_balance: readiness?.contributors?.hrv_balance ?? '',
-                readiness_resting_heart_rate: readiness?.contributors?.resting_heart_rate ?? '',
+                readiness_resting_heart_rate_contributor_score: readiness?.contributors?.resting_heart_rate ?? '',
                 readiness_recovery_index: readiness?.contributors?.recovery_index ?? '',
                 readiness_body_temperature: readiness?.contributors?.body_temperature ?? '',
                 readiness_activity_balance: readiness?.contributors?.activity_balance ?? '',
                 readiness_previous_day_activity: readiness?.contributors?.previous_day_activity ?? '',
                 readiness_temperature_deviation_f: toFahrenheitDelta(readiness?.temperature_deviation),
                 readiness_temperature_trend_deviation_f: toFahrenheitDelta(readiness?.temperature_trend_deviation),
+                sleep_lowest_heart_rate_bpm: session?.lowest_heart_rate ?? '',
                 activity_score: activity?.score ?? '',
                 activity_meet_daily_targets: activity?.contributors?.meet_daily_targets ?? '',
                 activity_move_every_hour: activity?.contributors?.move_every_hour ?? '',
@@ -318,6 +346,7 @@ const DataExport: React.FC = () => {
             ...(data.sleep || []).map((s) => s.day),
             ...(data.readiness || []).map((r) => r.day),
             ...(data.activity || []).map((a) => a.day),
+            ...(data.session || []).map((s) => s.day),
         ].filter(Boolean).sort();
         return allDays.length ? { start: allDays[0], end: allDays[allDays.length - 1] } : null;
     })() : null;
@@ -344,7 +373,7 @@ const DataExport: React.FC = () => {
         },
         {
             label: 'Readiness Scores',
-            description: 'Daily score + contributors + temperature',
+            description: 'Daily score + contributor scores + temperature',
             icon: <TrendingUp className="w-5 h-5 text-accent-purple" />,
             color: 'bg-accent-purple/20',
             count: data.readiness?.length ?? 0,
@@ -362,7 +391,7 @@ const DataExport: React.FC = () => {
         },
         {
             label: 'Sleep Sessions',
-            description: 'Raw sleep periods with HR, HRV, stages',
+            description: 'Raw sleep periods with lowest HR, HRV, stages',
             icon: <Moon className="w-5 h-5 text-accent-cyan" />,
             color: 'bg-accent-cyan/10',
             count: data.session?.length ?? 0,
@@ -545,7 +574,7 @@ const DataExport: React.FC = () => {
                                 <div className="flex-1 text-left">
                                     <p className="font-medium text-text-primary">All Daily Data Combined</p>
                                     <p className="text-sm text-text-secondary">
-                                        Sleep + readiness + activity + SpO2 + stress + resilience + cardio age + VO2 max
+                                        Sleep + nightly resting HR + readiness + activity + SpO2 + stress + resilience + cardio age + VO2 max
                                     </p>
                                 </div>
                                 <Download className="w-4 h-4 text-text-muted flex-shrink-0" />
