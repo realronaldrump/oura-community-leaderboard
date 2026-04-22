@@ -3,6 +3,7 @@ import {
     deleteDoc,
     doc,
     FirestoreError,
+    getDoc,
     getDocs,
     query,
     setDoc,
@@ -353,6 +354,17 @@ export const saveProfileStats = async (
         await commitSetOperations(operations);
     } catch (error) {
         logSharedStatsWarning('save', profileId, error);
+    }
+};
+
+export const getProfileStatsMetadata = async (profileId: string): Promise<ProfileStatsMetadata | null> => {
+    try {
+        const snapshot = await getDoc(doc(db, PROFILE_STATS_COLLECTION, profileId));
+        if (!snapshot.exists()) return null;
+        return snapshot.data() as ProfileStatsMetadata;
+    } catch (error) {
+        logSharedStatsWarning('read metadata', profileId, error);
+        return null;
     }
 };
 
