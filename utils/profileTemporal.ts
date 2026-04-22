@@ -79,9 +79,8 @@ export const deriveProfileTemporalMetadata = (data: DailyStats): ProfileTemporal
         ...(data.session || []).map((session) => toCandidate(session.bedtime_start, 'session_bedtime_start')),
     ]);
 
-    const heartrateCandidate = chooseNewestCandidate(
-        (data.heartrate || []).map((item) => toCandidate(item.timestamp, 'heartrate'))
-    );
+    // Heartrate timestamps from Oura are always in UTC (Z suffix) and do not
+    // carry local timezone information, so they are not used as an offset source.
 
     const workoutCandidate = chooseNewestCandidate([
         ...(data.workout || []).map((item) => toCandidate(item.end_datetime, 'workout_end')),
@@ -94,7 +93,6 @@ export const deriveProfileTemporalMetadata = (data: DailyStats): ProfileTemporal
 
     const merged = chooseNewestCandidate([
         sessionCandidates,
-        heartrateCandidate,
         workoutCandidate,
         sleepTimeCandidate,
     ]);
