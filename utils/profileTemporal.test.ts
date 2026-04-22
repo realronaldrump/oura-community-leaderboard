@@ -12,13 +12,11 @@ describe('profile temporal metadata derivation', () => {
                     bedtime_end: '2026-03-30T07:00:00-05:00',
                 },
             ],
-            // heartrate timestamps from Oura are always UTC (Z suffix) and are
-            // not used as an offset source, so this should not influence the result.
             heartrate: [
                 {
                     bpm: 58,
                     source: 'rest',
-                    timestamp: '2026-03-31T21:00:00Z',
+                    timestamp: '2026-03-31T14:00:00-07:00',
                 },
             ],
             workout: [
@@ -33,9 +31,9 @@ describe('profile temporal metadata derivation', () => {
         });
 
         expect(deriveProfileTemporalMetadata(data)).toEqual({
-            lastKnownUtcOffsetMinutes: -360,
-            lastKnownOffsetObservedAt: '2026-03-31T09:00:00-06:00',
-            lastKnownOffsetSource: 'workout_end',
+            lastKnownUtcOffsetMinutes: -420,
+            lastKnownOffsetObservedAt: '2026-03-31T14:00:00-07:00',
+            lastKnownOffsetSource: 'heartrate',
         });
     });
 

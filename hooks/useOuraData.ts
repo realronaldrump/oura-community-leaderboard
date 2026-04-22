@@ -12,6 +12,7 @@ const INCREMENTAL_OVERLAP_DAYS = 3;
 
 type FetchConfig = {
     includeStaticCollections?: boolean;
+    fullHeartrate?: boolean;
     grantedScopes?: string[];
     availabilityKey?: string;
     profileId?: string;
@@ -277,8 +278,8 @@ export const fetchDailyStats = async (
     );
 
     // Phase 2: Supplementary endpoints — fetched after critical data is secured
-    // Limit heartrate to 2 days for the dashboard (the slowest, most paginated endpoint)
-    const hrStart = shiftDate(end, -2);
+    // Limit heartrate to 2 days for dashboard fetches; full syncs fetch the complete range.
+    const hrStart = config.fullHeartrate ? start : shiftDate(end, -2);
     const supplementaryRequests = [
         canFetchSpO2 ? ouraService.getDailySpO2(token, start, end, { availabilityKey }) : Promise.resolve([]),
         canFetchStress ? ouraService.getDailyStress(token, start, end, { availabilityKey }) : Promise.resolve([]),
@@ -384,6 +385,7 @@ export const syncDailyStats = async (
             end: endDate,
         }, {
             includeStaticCollections: true,
+            fullHeartrate: true,
             grantedScopes: options.grantedScopes,
             availabilityKey: options.availabilityKey,
             profileId: options.profileId,
