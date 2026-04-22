@@ -69,6 +69,16 @@ type BuiltProfileStatsDocuments = {
 type BuiltProfileStatsSliceDocuments = Omit<BuiltProfileStatsDocuments, 'metadata'>;
 
 type FirestoreDocumentPath = [string, string, ...string[]];
+type FirestoreSetOperation = { path: FirestoreDocumentPath; data: unknown };
+type PartitionOptions = {
+    maxOperations?: number;
+    maxBytes?: number;
+};
+
+const MAX_BATCH_OPERATIONS = 450;
+const TARGET_BATCH_BYTES = 7 * 1024 * 1024;
+const PAYLOAD_TOO_LARGE_ERROR_PATTERN = /payload size exceeds the limit|request payload size exceeds the limit/i;
+const textEncoder = new TextEncoder();
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -309,16 +319,93 @@ export const buildIncrementalProfileStatsDocuments = (
     ...buildProfileStatsSliceDocuments(deltaData, now),
 });
 
+const normalizeSetOperation = (operation: FirestoreSetOperation): FirestoreSetOperation => ({
+    path: operation.path,
+    data: stripUndefinedDeep(operation.data),
+});
+
+export const estimateSetOperationBytes = (operation: FirestoreSetOperation): number => {
+    try {
+        return textEncoder.encode(JSON.stringify(operation)).length;
+    } catch {
+        return TARGET_BATCH_BYTES;
+    }
+};
+
+export const partitionSetOperations = (
+    operations: FirestoreSetOperation[],
+    options: PartitionOptions = {}
+): FirestoreSetOperation[][] => {
+    const maxOperations = options.maxOperations ?? MAX_BATCH_OPERATIONS;
+    const maxBytes = options.maxBytes ?? TARGET_BATCH_BYTES;
+    const batches: FirestoreSetOperation[][] = [];
+    let currentBatch: FirestoreSetOperation[] = [];
+    let currentBatchBytes = 0;
+
+    const flush = () => {
+        if (!currentBatch.length) return;
+        batches.push(currentBatch);
+        currentBatch = [];
+        currentBatchBytes = 0;
+    };
+
+    operations.forEach((operation) => {
+        const normalized = normalizeSetOperation(operation);
+        const operationBytes = estimateSetOperationBytes(normalized);
+        const wouldExceedOperationLimit = currentBatch.length >= maxOperations;
+        const wouldExceedByteLimit = currentBatch.length > 0 && (currentBatchBytes + operationBytes) > maxBytes;
+
+        if (wouldExceedOperationLimit || wouldExceedByteLimit) {
+            flush();
+        }
+
+        currentBatch.push(normalized);
+        currentBatchBytes += operationBytes;
+
+        if (currentBatch.length >= maxOperations || currentBatchBytes >= maxBytes) {
+            flush();
+        }
+    });
+
+    flush();
+    return batches;
+};
+
+const isPayloadTooLargeError = (error: unknown): boolean => {
+    const message = error instanceof Error ? error.message : String(error);
+    return PAYLOAD_TOO_LARGE_ERROR_PATTERN.test(message);
+};
+
+const commitOperationBatch = async (operations: FirestoreSetOperation[]): Promise<void> => {
+    const batch = writeBatch(db);
+    operations.forEach((operation) => {
+        const [collectionPath, documentPath, ...pathSegments] = operation.path;
+        batch.set(doc(db, collectionPath, documentPath, ...pathSegments), operation.data, { merge: true });
+    });
+    await batch.commit();
+};
+
+const commitOperationBatchWithRetry = async (operations: FirestoreSetOperation[]): Promise<void> => {
+    try {
+        await commitOperationBatch(operations);
+    } catch (error) {
+        if (isPayloadTooLargeError(error) && operations.length > 1) {
+            const middle = Math.ceil(operations.length / 2);
+            await commitOperationBatchWithRetry(operations.slice(0, middle));
+            await commitOperationBatchWithRetry(operations.slice(middle));
+            return;
+        }
+
+        throw error;
+    }
+};
+
 const commitSetOperations = async (
-    operations: Array<{ path: FirestoreDocumentPath; data: unknown }>
+    operations: FirestoreSetOperation[]
 ): Promise<void> => {
-    for (let index = 0; index < operations.length; index += 450) {
-        const batch = writeBatch(db);
-        operations.slice(index, index + 450).forEach((operation) => {
-            const [collectionPath, documentPath, ...pathSegments] = operation.path;
-            batch.set(doc(db, collectionPath, documentPath, ...pathSegments), stripUndefinedDeep(operation.data), { merge: true });
-        });
-        await batch.commit();
+    const batches = partitionSetOperations(operations);
+    for (const batch of batches) {
+        await commitOperationBatchWithRetry(batch);
     }
 };
 

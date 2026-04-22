@@ -156,7 +156,6 @@ const Router = () => {
                 const nextPath = storedDestination.startsWith('/settings') ? '/settings' : '/';
                 window.history.replaceState(null, '', nextPath);
                 setPath(nextPath);
-                console.log("Profile added via OAuth");
             })
             .catch(err => {
                 console.error("Auth failed", err);

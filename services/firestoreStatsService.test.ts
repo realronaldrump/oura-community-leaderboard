@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildIncrementalProfileStatsDocuments, buildProfileStatsDocuments } from './firestoreStatsService';
+import {
+    buildIncrementalProfileStatsDocuments,
+    buildProfileStatsDocuments,
+    estimateSetOperationBytes,
+    partitionSetOperations,
+} from './firestoreStatsService';
 import { PROFILE_STATS_SCHEMA_VERSION } from './profileStatsConstants';
 import { DailyStats } from '../types';
 
@@ -187,5 +192,43 @@ describe('buildProfileStatsDocuments', () => {
         expect(built.rawCollections.sleepSessions).toHaveLength(1);
         expect(built.rawCollections.workouts).toHaveLength(1);
         expect(built.rawCollections.ringConfigurations).toHaveLength(0);
+    });
+
+    it('partitions set operations by payload size before Firestore rejects the commit', () => {
+        const operations = Array.from({ length: 5 }, (_, index) => ({
+            path: ['profileStats', 'profile-1', 'sleepSessions', `session-${index}`] as [string, string, ...string[]],
+            data: {
+                id: `session-${index}`,
+                blob: 'x'.repeat(420),
+            },
+        }));
+
+        const batches = partitionSetOperations(operations, {
+            maxOperations: 10,
+            maxBytes: 1200,
+        });
+
+        expect(batches.length).toBeGreaterThan(1);
+        batches.forEach((batch) => {
+            const bytes = batch.reduce((total, operation) => total + estimateSetOperationBytes(operation), 0);
+            expect(batch.length).toBeLessThanOrEqual(10);
+            expect(bytes).toBeLessThanOrEqual(1200);
+        });
+    });
+
+    it('still honors the operation-count limit even when payloads are small', () => {
+        const operations = Array.from({ length: 5 }, (_, index) => ({
+            path: ['profileStats', 'profile-1', 'days', `2026-04-${String(index + 1).padStart(2, '0')}`] as [string, string, ...string[]],
+            data: {
+                day: `2026-04-${String(index + 1).padStart(2, '0')}`,
+            },
+        }));
+
+        const batches = partitionSetOperations(operations, {
+            maxOperations: 2,
+            maxBytes: 10_000,
+        });
+
+        expect(batches.map((batch) => batch.length)).toEqual([2, 2, 1]);
     });
 });

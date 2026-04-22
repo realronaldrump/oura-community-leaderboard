@@ -1,9 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Download, FileText, Database, TrendingUp, AlertCircle, Heart, Activity, Moon, Zap, Wind, RefreshCw } from 'lucide-react';
 import Papa from 'papaparse';
 import { useUser } from '../contexts/UserContext';
 import { getStoredDailyStats } from '../services/firestoreStatsService';
-import { DailyStats, SleepSession } from '../types';
+import { DailyStats } from '../types';
+import { formatISODateForDisplay } from '../utils/date';
+import {
+    ExportDateRange,
+    filterByDayRange,
+    filterHeartRateByRange,
+    filterSleepSessionsByRange,
+    filterTagItemsByRange,
+    getAvailableExportRange,
+    getBestSessionForDay,
+    getNightlyRestingHeartRateRows,
+    getNightlyVitalsRows,
+    getSessionDays,
+} from '../utils/exportData';
 
 const METERS_TO_MILES = 0.000621371;
 const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
@@ -27,74 +40,12 @@ const downloadCSV = (csvContent: string, filename: string) => {
     URL.revokeObjectURL(url);
 };
 
-const getSessionsForDay = (sessions: SleepSession[] | undefined, day: string): SleepSession[] => {
-    if (!sessions?.length) return [];
-    return sessions.filter((session) => {
-        if (session.type === 'deleted') return false;
-        if (session.day === day) return true;
-        const bedtimeDay = session.bedtime_start?.slice(0, 10);
-        const wakeDay = session.bedtime_end?.slice(0, 10);
-        return bedtimeDay === day || wakeDay === day;
-    });
-};
-
-const pickBestSession = (sessions: SleepSession[]): SleepSession | undefined => {
-    if (!sessions.length) return undefined;
-    return [...sessions].sort((left, right) => {
-        const rightDuration = right.total_sleep_duration ?? right.time_in_bed ?? 0;
-        const leftDuration = left.total_sleep_duration ?? left.time_in_bed ?? 0;
-        if (rightDuration !== leftDuration) return rightDuration - leftDuration;
-        return new Date(right.bedtime_end || 0).getTime() - new Date(left.bedtime_end || 0).getTime();
-    })[0];
-};
-
-const getBestSessionForDay = (data: DailyStats, day: string): SleepSession | undefined => (
-    pickBestSession(getSessionsForDay(data.session, day))
-);
-
-const getSessionDays = (sessions: SleepSession[] | undefined): string[] => {
-    const days = new Set<string>();
-    sessions?.forEach((session) => {
-        if (session.type === 'deleted') return;
-        if (session.day) days.add(session.day);
-        const bedtimeDay = session.bedtime_start?.slice(0, 10);
-        const wakeDay = session.bedtime_end?.slice(0, 10);
-        if (bedtimeDay) days.add(bedtimeDay);
-        if (wakeDay) days.add(wakeDay);
-    });
-    return Array.from(days).sort();
-};
-
-const getNightlyVitalsRows = (data: DailyStats) => {
-    return getSessionDays(data.session).reduce<Array<Record<string, string | number>>>(
-        (rows, day) => {
-            const session = getBestSessionForDay(data, day);
-            if (!session) return rows;
-
-            rows.push({
-                date: day,
-                session_type: session.type ?? '',
-                bedtime_start: session.bedtime_start ?? '',
-                bedtime_end: session.bedtime_end ?? '',
-                total_sleep_duration_s: session.total_sleep_duration ?? '',
-                time_in_bed_s: session.time_in_bed ?? '',
-                average_heart_rate_bpm: session.average_heart_rate ?? '',
-                lowest_heart_rate_bpm: session.lowest_heart_rate ?? '',
-                average_hrv_ms: session.average_hrv ?? '',
-                average_breaths_per_min: session.average_breath ?? '',
-            });
-
-            return rows;
-        },
-        []
-    );
-};
-
 const DataExport: React.FC = () => {
     const { activeProfile } = useUser();
     const [isLoading, setIsLoading] = useState(true);
     const [data, setData] = useState<DailyStats | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [selectedRange, setSelectedRange] = useState<ExportDateRange | null>(null);
 
     useEffect(() => {
         if (!activeProfile) return;
@@ -106,11 +57,92 @@ const DataExport: React.FC = () => {
             .finally(() => setIsLoading(false));
     }, [activeProfile?.id]);
 
-            const nightlyVitalsRows = data ? getNightlyVitalsRows(data) : [];
+    const availableRange = useMemo(() => (data ? getAvailableExportRange(data) : null), [data]);
+
+    useEffect(() => {
+        if (!availableRange) {
+            setSelectedRange(null);
+            return;
+        }
+
+        setSelectedRange((current) => {
+            if (!current) return availableRange;
+
+            const nextStart = current.start < availableRange.start
+                ? availableRange.start
+                : current.start > availableRange.end
+                    ? availableRange.end
+                    : current.start;
+            const nextEnd = current.end > availableRange.end
+                ? availableRange.end
+                : current.end < availableRange.start
+                    ? availableRange.start
+                    : current.end;
+
+            if (nextStart > nextEnd) {
+                return availableRange;
+            }
+
+            if (current.start === nextStart && current.end === nextEnd) {
+                return current;
+            }
+
+            return { start: nextStart, end: nextEnd };
+        });
+    }, [availableRange?.end, availableRange?.start]);
+
+    const effectiveRange = selectedRange ?? availableRange;
+
+    const sleepRows = useMemo(() => filterByDayRange(data?.sleep, effectiveRange), [data?.sleep, effectiveRange]);
+    const readinessRows = useMemo(() => filterByDayRange(data?.readiness, effectiveRange), [data?.readiness, effectiveRange]);
+    const activityRows = useMemo(() => filterByDayRange(data?.activity, effectiveRange), [data?.activity, effectiveRange]);
+    const sleepSessionRows = useMemo(() => filterSleepSessionsByRange(data?.session, effectiveRange), [data?.session, effectiveRange]);
+    const nightlyVitalsRows = useMemo(() => (data ? getNightlyVitalsRows(data, effectiveRange) : []), [data, effectiveRange]);
+    const nightlyRestingHeartRateRows = useMemo(
+        () => (data ? getNightlyRestingHeartRateRows(data, effectiveRange) : []),
+        [data, effectiveRange],
+    );
+    const spo2Rows = useMemo(() => filterByDayRange(data?.spo2 as any[] | undefined, effectiveRange), [data?.spo2, effectiveRange]);
+    const stressRows = useMemo(() => filterByDayRange(data?.stress as any[] | undefined, effectiveRange), [data?.stress, effectiveRange]);
+    const resilienceRows = useMemo(() => filterByDayRange(data?.resilience as any[] | undefined, effectiveRange), [data?.resilience, effectiveRange]);
+    const cardiovascularAgeRows = useMemo(
+        () => filterByDayRange(data?.cardiovascularAge as any[] | undefined, effectiveRange),
+        [data?.cardiovascularAge, effectiveRange],
+    );
+    const vo2MaxRows = useMemo(() => filterByDayRange(data?.vo2Max as any[] | undefined, effectiveRange), [data?.vo2Max, effectiveRange]);
+    const heartrateRows = useMemo(() => filterHeartRateByRange(data?.heartrate, effectiveRange), [data?.heartrate, effectiveRange]);
+    const workoutRows = useMemo(() => filterByDayRange(data?.workout as any[] | undefined, effectiveRange), [data?.workout, effectiveRange]);
+    const tagRows = useMemo(() => filterTagItemsByRange(data?.tag as any[] | undefined, effectiveRange), [data?.tag, effectiveRange]);
+    const enhancedTagRows = useMemo(
+        () => filterTagItemsByRange(data?.enhancedTag as any[] | undefined, effectiveRange),
+        [data?.enhancedTag, effectiveRange],
+    );
+
+    const handleRangeChange = (field: 'start' | 'end', value: string) => {
+        if (!value || !availableRange) return;
+
+        setSelectedRange((current) => {
+            const baseRange = current ?? availableRange;
+            if (field === 'start') {
+                return value <= baseRange.end
+                    ? { start: value, end: baseRange.end }
+                    : { start: value, end: value };
+            }
+
+            return value >= baseRange.start
+                ? { start: baseRange.start, end: value }
+                : { start: value, end: value };
+        });
+    };
+
+    const resetRange = () => {
+        if (!availableRange) return;
+        setSelectedRange(availableRange);
+    };
 
     const generateSleepCSV = () => {
-        if (!data?.sleep.length) return;
-        const csvData = data.sleep.map((item) => ({
+        if (!sleepRows.length) return;
+        const csvData = sleepRows.map((item) => ({
             date: item.day,
             sleep_score: item.score ?? '',
             total_sleep_duration: item.contributors?.total_sleep ?? '',
@@ -127,8 +159,8 @@ const DataExport: React.FC = () => {
     };
 
     const generateReadinessCSV = () => {
-        if (!data?.readiness.length) return;
-        const csvData = data.readiness.map((item) => ({
+        if (!readinessRows.length) return;
+        const csvData = readinessRows.map((item) => ({
             date: item.day,
             readiness_score: item.score ?? '',
             previous_night: item.contributors?.previous_night ?? '',
@@ -147,8 +179,8 @@ const DataExport: React.FC = () => {
     };
 
     const generateActivityCSV = () => {
-        if (!data?.activity.length) return;
-        const csvData = data.activity.map((item) => ({
+        if (!activityRows.length) return;
+        const csvData = activityRows.map((item) => ({
             date: item.day,
             activity_score: item.score ?? '',
             meet_daily_targets: item.contributors?.meet_daily_targets ?? '',
@@ -181,8 +213,8 @@ const DataExport: React.FC = () => {
     };
 
     const generateSleepSessionsCSV = () => {
-        if (!data?.session?.length) return;
-        const csvData = data.session.map((item) => ({
+        if (!sleepSessionRows.length) return;
+        const csvData = sleepSessionRows.map((item) => ({
             date: item.day,
             type: item.type ?? '',
             bedtime_start: item.bedtime_start ?? '',
@@ -206,14 +238,19 @@ const DataExport: React.FC = () => {
         downloadCSV(Papa.unparse(csvData), 'sleep_sessions.csv');
     };
 
+    const generateNightlyRestingHeartRateCSV = () => {
+        if (!nightlyRestingHeartRateRows.length) return;
+        downloadCSV(Papa.unparse(nightlyRestingHeartRateRows), 'nightly_resting_heart_rate.csv');
+    };
+
     const generateNightlyVitalsCSV = () => {
         if (!nightlyVitalsRows.length) return;
         downloadCSV(Papa.unparse(nightlyVitalsRows), 'nightly_vitals.csv');
     };
 
     const generateSpO2CSV = () => {
-        if (!(data?.spo2 as any[])?.length) return;
-        const csvData = (data!.spo2 as any[]).map((item) => ({
+        if (!spo2Rows.length) return;
+        const csvData = spo2Rows.map((item) => ({
             date: item.day,
             spo2_average: item.spo2_percentage?.average ?? '',
             breathing_disturbance_index: item.breathing_disturbance_index ?? '',
@@ -222,8 +259,8 @@ const DataExport: React.FC = () => {
     };
 
     const generateStressCSV = () => {
-        if (!(data?.stress as any[])?.length) return;
-        const csvData = (data!.stress as any[]).map((item) => ({
+        if (!stressRows.length) return;
+        const csvData = stressRows.map((item) => ({
             date: item.day,
             stress_high_s: item.stress_high ?? '',
             recovery_high_s: item.recovery_high ?? '',
@@ -233,8 +270,8 @@ const DataExport: React.FC = () => {
     };
 
     const generateResilienceCSV = () => {
-        if (!(data?.resilience as any[])?.length) return;
-        const csvData = (data!.resilience as any[]).map((item) => ({
+        if (!resilienceRows.length) return;
+        const csvData = resilienceRows.map((item) => ({
             date: item.day,
             level: item.level ?? '',
             sleep_recovery: item.contributors?.sleep_recovery ?? '',
@@ -245,8 +282,8 @@ const DataExport: React.FC = () => {
     };
 
     const generateCardiovascularAgeCSV = () => {
-        if (!(data?.cardiovascularAge as any[])?.length) return;
-        const csvData = (data!.cardiovascularAge as any[]).map((item) => ({
+        if (!cardiovascularAgeRows.length) return;
+        const csvData = cardiovascularAgeRows.map((item) => ({
             date: item.day,
             vascular_age: item.vascular_age ?? '',
         }));
@@ -254,8 +291,8 @@ const DataExport: React.FC = () => {
     };
 
     const generateVO2MaxCSV = () => {
-        if (!(data?.vo2Max as any[])?.length) return;
-        const csvData = (data!.vo2Max as any[]).map((item) => ({
+        if (!vo2MaxRows.length) return;
+        const csvData = vo2MaxRows.map((item) => ({
             date: item.day,
             vo2_max: item.vo2_max ?? '',
             timestamp: item.timestamp ?? '',
@@ -264,8 +301,8 @@ const DataExport: React.FC = () => {
     };
 
     const generateHeartrateCSV = () => {
-        if (!data?.heartrate?.length) return;
-        const csvData = data.heartrate.map((item) => ({
+        if (!heartrateRows.length) return;
+        const csvData = heartrateRows.map((item) => ({
             timestamp: item.timestamp,
             bpm: item.bpm,
             source: item.source,
@@ -274,8 +311,8 @@ const DataExport: React.FC = () => {
     };
 
     const generateWorkoutsCSV = () => {
-        if (!(data?.workout as any[])?.length) return;
-        const csvData = (data!.workout as any[]).map((item) => ({
+        if (!workoutRows.length) return;
+        const csvData = workoutRows.map((item) => ({
             date: item.day,
             activity: item.activity ?? '',
             start_datetime: item.start_datetime ?? '',
@@ -290,7 +327,7 @@ const DataExport: React.FC = () => {
     };
 
     const generateTagsCSV = () => {
-        const tags = [...(data?.enhancedTag || []), ...(data?.tag || [])];
+        const tags = [...enhancedTagRows, ...tagRows];
         if (!tags.length) return;
         const csvData = tags.map((item: any) => ({
             date: item.day ?? item.start_day ?? '',
@@ -303,28 +340,28 @@ const DataExport: React.FC = () => {
     };
 
     const generateAllDailyCSV = () => {
-        if (!data) return;
+        if (!data || !effectiveRange) return;
         const allDates = new Set([
-            ...(data.sleep || []).map((s) => s.day),
-            ...(data.readiness || []).map((r) => r.day),
-            ...(data.activity || []).map((a) => a.day),
-            ...getSessionDays(data.session),
-            ...(data.spo2 as any[] || []).map((s: any) => s.day),
-            ...(data.stress as any[] || []).map((s: any) => s.day),
-            ...(data.resilience as any[] || []).map((r: any) => r.day),
-            ...(data.cardiovascularAge as any[] || []).map((c: any) => c.day),
-            ...(data.vo2Max as any[] || []).map((v: any) => v.day),
+            ...sleepRows.map((s) => s.day),
+            ...readinessRows.map((r) => r.day),
+            ...activityRows.map((a) => a.day),
+            ...getSessionDays(sleepSessionRows),
+            ...spo2Rows.map((s: any) => s.day),
+            ...stressRows.map((s: any) => s.day),
+            ...resilienceRows.map((r: any) => r.day),
+            ...cardiovascularAgeRows.map((c: any) => c.day),
+            ...vo2MaxRows.map((v: any) => v.day),
         ]);
         const csvData = Array.from(allDates).sort().map((date) => {
-            const sleep = data.sleep?.find((s) => s.day === date);
-            const readiness = data.readiness?.find((r) => r.day === date);
-            const activity = data.activity?.find((a) => a.day === date);
+            const sleep = sleepRows.find((s) => s.day === date);
+            const readiness = readinessRows.find((r) => r.day === date);
+            const activity = activityRows.find((a) => a.day === date);
             const session = getBestSessionForDay(data, date);
-            const spo2 = (data.spo2 as any[])?.find((s) => s.day === date);
-            const stress = (data.stress as any[])?.find((s) => s.day === date);
-            const resilience = (data.resilience as any[])?.find((r) => r.day === date);
-            const cardio = (data.cardiovascularAge as any[])?.find((c) => c.day === date);
-            const vo2 = (data.vo2Max as any[])?.find((v) => v.day === date);
+            const spo2 = spo2Rows.find((s: any) => s.day === date);
+            const stress = stressRows.find((s: any) => s.day === date);
+            const resilience = resilienceRows.find((r: any) => r.day === date);
+            const cardio = cardiovascularAgeRows.find((c: any) => c.day === date);
+            const vo2 = vo2MaxRows.find((v: any) => v.day === date);
             return {
                 date,
                 sleep_score: sleep?.score ?? '',
@@ -386,16 +423,6 @@ const DataExport: React.FC = () => {
         );
     }
 
-    const dateRange = data ? (() => {
-        const allDays = [
-            ...(data.sleep || []).map((s) => s.day),
-            ...(data.readiness || []).map((r) => r.day),
-            ...(data.activity || []).map((a) => a.day),
-            ...getSessionDays(data.session),
-        ].filter(Boolean).sort();
-        return allDays.length ? { start: allDays[0], end: allDays[allDays.length - 1] } : null;
-    })() : null;
-
     type ExportButton = {
         label: string;
         description: string;
@@ -412,7 +439,7 @@ const DataExport: React.FC = () => {
             description: 'Daily score + 7 contributing factors',
             icon: <Moon className="w-5 h-5 text-accent-cyan" />,
             color: 'bg-accent-cyan/20',
-            count: data.sleep?.length ?? 0,
+            count: sleepRows.length,
             onClick: generateSleepCSV,
             filename: 'sleep_scores.csv',
         },
@@ -421,7 +448,7 @@ const DataExport: React.FC = () => {
             description: 'Daily score + contributor scores + temperature',
             icon: <TrendingUp className="w-5 h-5 text-accent-purple" />,
             color: 'bg-accent-purple/20',
-            count: data.readiness?.length ?? 0,
+            count: readinessRows.length,
             onClick: generateReadinessCSV,
             filename: 'readiness_scores.csv',
         },
@@ -430,7 +457,7 @@ const DataExport: React.FC = () => {
             description: 'Daily score + contributors + steps/calories',
             icon: <Activity className="w-5 h-5 text-accent-orange" />,
             color: 'bg-accent-orange/20',
-            count: data.activity?.length ?? 0,
+            count: activityRows.length,
             onClick: generateActivityCSV,
             filename: 'activity_scores.csv',
         },
@@ -439,9 +466,18 @@ const DataExport: React.FC = () => {
             description: 'Raw sleep periods with lowest HR, HRV, stages',
             icon: <Moon className="w-5 h-5 text-accent-cyan" />,
             color: 'bg-accent-cyan/10',
-            count: data.session?.length ?? 0,
+            count: sleepSessionRows.length,
             onClick: generateSleepSessionsCSV,
             filename: 'sleep_sessions.csv',
+        },
+        {
+            label: 'Nightly Resting HR',
+            description: 'One row per night with resting heart rate only',
+            icon: <Heart className="w-5 h-5 text-accent-rose" />,
+            color: 'bg-accent-rose/20',
+            count: nightlyRestingHeartRateRows.length,
+            onClick: generateNightlyRestingHeartRateCSV,
+            filename: 'nightly_resting_heart_rate.csv',
         },
         {
             label: 'Nightly Vitals',
@@ -457,7 +493,7 @@ const DataExport: React.FC = () => {
             description: 'Time-series HR readings (5-min intervals)',
             icon: <Heart className="w-5 h-5 text-accent-rose" />,
             color: 'bg-accent-rose/20',
-            count: data.heartrate?.length ?? 0,
+            count: heartrateRows.length,
             onClick: generateHeartrateCSV,
             filename: 'heart_rate.csv',
         },
@@ -466,7 +502,7 @@ const DataExport: React.FC = () => {
             description: 'Daily blood oxygen average',
             icon: <Wind className="w-5 h-5 text-accent-cyan" />,
             color: 'bg-accent-cyan/10',
-            count: (data.spo2 as any[])?.length ?? 0,
+            count: spo2Rows.length,
             onClick: generateSpO2CSV,
             filename: 'spo2.csv',
         },
@@ -475,7 +511,7 @@ const DataExport: React.FC = () => {
             description: 'High stress and recovery minutes per day',
             icon: <Zap className="w-5 h-5 text-accent-orange" />,
             color: 'bg-accent-orange/10',
-            count: (data.stress as any[])?.length ?? 0,
+            count: stressRows.length,
             onClick: generateStressCSV,
             filename: 'daily_stress.csv',
         },
@@ -484,7 +520,7 @@ const DataExport: React.FC = () => {
             description: 'Resilience level + sleep/daytime contributors',
             icon: <TrendingUp className="w-5 h-5 text-accent-green" />,
             color: 'bg-accent-green/20',
-            count: (data.resilience as any[])?.length ?? 0,
+            count: resilienceRows.length,
             onClick: generateResilienceCSV,
             filename: 'resilience.csv',
         },
@@ -493,7 +529,7 @@ const DataExport: React.FC = () => {
             description: 'Estimated cardiovascular age per day',
             icon: <Heart className="w-5 h-5 text-accent-purple" />,
             color: 'bg-accent-purple/10',
-            count: (data.cardiovascularAge as any[])?.length ?? 0,
+            count: cardiovascularAgeRows.length,
             onClick: generateCardiovascularAgeCSV,
             filename: 'cardiovascular_age.csv',
         },
@@ -502,7 +538,7 @@ const DataExport: React.FC = () => {
             description: 'Cardio capacity estimates',
             icon: <Activity className="w-5 h-5 text-accent-green" />,
             color: 'bg-accent-green/10',
-            count: (data.vo2Max as any[])?.length ?? 0,
+            count: vo2MaxRows.length,
             onClick: generateVO2MaxCSV,
             filename: 'vo2_max.csv',
         },
@@ -511,7 +547,7 @@ const DataExport: React.FC = () => {
             description: 'Logged workouts with type, duration, distance',
             icon: <Activity className="w-5 h-5 text-accent-orange" />,
             color: 'bg-accent-orange/20',
-            count: (data.workout as any[])?.length ?? 0,
+            count: workoutRows.length,
             onClick: generateWorkoutsCSV,
             filename: 'workouts.csv',
         },
@@ -520,7 +556,7 @@ const DataExport: React.FC = () => {
             description: "Enhanced tags and notes you've logged",
             icon: <FileText className="w-5 h-5 text-text-secondary" />,
             color: 'bg-[var(--bg-card)]',
-            count: ((data.enhancedTag as any[])?.length ?? 0) + ((data.tag as any[])?.length ?? 0),
+            count: enhancedTagRows.length + tagRows.length,
             onClick: generateTagsCSV,
             filename: 'tags.csv',
         },
@@ -571,15 +607,59 @@ const DataExport: React.FC = () => {
 
                 {!isLoading && data && (
                     <>
-                        {/* Date range banner */}
-                        {dateRange && (
-                            <div className="glass-card p-4 mb-8 flex items-center gap-3">
-                                <div className="w-2 h-2 rounded-full bg-accent-green flex-shrink-0" />
-                                <p className="text-text-secondary text-sm">
-                                    Showing data from{' '}
-                                    <span className="text-text-primary font-medium">{dateRange.start}</span>
+                        {availableRange && selectedRange && (
+                            <div className="glass-card p-6 mb-8">
+                                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                    <div>
+                                        <h2 className="text-xl font-bold text-text-primary mb-1">Export Range</h2>
+                                        <p className="text-text-secondary text-sm">
+                                            Choose the start and end dates for every CSV export on this page.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={resetRange}
+                                        className="self-start rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:border-accent-cyan/40 hover:text-text-primary"
+                                    >
+                                        Use Full Synced Range
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                                    <label className="block">
+                                        <span className="block text-sm font-medium text-text-primary mb-2">Start date</span>
+                                        <input
+                                            type="date"
+                                            value={selectedRange.start}
+                                            min={availableRange.start}
+                                            max={selectedRange.end}
+                                            onChange={(event) => handleRangeChange('start', event.target.value)}
+                                            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-text-primary outline-none transition-colors focus:border-accent-cyan/50 focus:ring-2 focus:ring-accent-cyan/15"
+                                        />
+                                    </label>
+                                    <label className="block">
+                                        <span className="block text-sm font-medium text-text-primary mb-2">End date</span>
+                                        <input
+                                            type="date"
+                                            value={selectedRange.end}
+                                            min={selectedRange.start}
+                                            max={availableRange.end}
+                                            onChange={(event) => handleRangeChange('end', event.target.value)}
+                                            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-text-primary outline-none transition-colors focus:border-accent-cyan/50 focus:ring-2 focus:ring-accent-cyan/15"
+                                        />
+                                    </label>
+                                </div>
+
+                                <p className="mt-4 text-sm text-text-secondary">
+                                    Exporting data from{' '}
+                                    <span className="text-text-primary font-medium">
+                                        {formatISODateForDisplay(selectedRange.start, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                    </span>
                                     {' '}to{' '}
-                                    <span className="text-text-primary font-medium">{dateRange.end}</span>
+                                    <span className="text-text-primary font-medium">
+                                        {formatISODateForDisplay(selectedRange.end, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                    </span>
+                                    . Synced data is available from {availableRange.start} to {availableRange.end}.
                                 </p>
                             </div>
                         )}
