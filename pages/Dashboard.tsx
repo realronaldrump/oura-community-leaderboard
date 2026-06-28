@@ -433,15 +433,29 @@ const formatRecordDate = (isoDay: string): string =>
 const formatCompactRecordDate = (isoDay: string): string =>
     formatISODateForDisplay(isoDay, undefined, { month: 'short', day: 'numeric' });
 
-const getRecordContext = (entry: RecordEntry): string => {
-    if (entry.detail) return entry.detail;
+const getISOYear = (isoDay: string): string => isoDay.slice(0, 4);
+
+const formatRecordDateRange = (startDay: string, endDay: string): string => {
+    if (startDay === endDay) return formatRecordDate(startDay);
+    const start = getISOYear(startDay) === getISOYear(endDay)
+        ? formatCompactRecordDate(startDay)
+        : formatRecordDate(startDay);
+    return `${start} to ${formatRecordDate(endDay)}`;
+};
+
+const getRecordDateContext = (entry: RecordEntry): string | null => {
     if (entry.day) return formatRecordDate(entry.day);
     if (entry.startDay && entry.endDay) {
-        return entry.startDay === entry.endDay
-            ? formatRecordDate(entry.startDay)
-            : `${formatCompactRecordDate(entry.startDay)} to ${formatCompactRecordDate(entry.endDay)}`;
+        return formatRecordDateRange(entry.startDay, entry.endDay);
     }
-    return 'All time';
+    return null;
+};
+
+const getRecordContext = (entry: RecordEntry): string => {
+    const dateContext = getRecordDateContext(entry);
+    if (!dateContext) return entry.detail || 'All time';
+    if (!entry.detail || entry.detail === dateContext) return dateContext;
+    return `${dateContext} - ${entry.detail}`;
 };
 
 const toRecordNumber = (value: unknown): number | null => {
@@ -629,7 +643,7 @@ const buildRollingAverageEntries = (
             displayValue: formatValue(average),
             startDay: windowStart,
             endDay: item.day,
-            detail: `${windowDays} days - ${count} logged days`,
+            detail: `${count} logged days`,
         });
     });
 
@@ -668,7 +682,7 @@ const buildRollingSpreadEntries = (
             displayValue: `${Math.round(spread)} pt spread`,
             startDay: windowStart,
             endDay: item.day,
-            detail: `${windowDays} days - ${points.length} logged days`,
+            detail: `${points.length} logged days`,
         });
     });
 
@@ -700,7 +714,6 @@ const buildStreakEntries = (
             displayValue: `${currentLength} days`,
             startDay: currentStart,
             endDay: currentEnd,
-            detail: `${formatCompactRecordDate(currentStart)} to ${formatCompactRecordDate(currentEnd)}`,
         });
     };
 
@@ -1260,6 +1273,7 @@ const PersonalRecordsStrip: React.FC<{
     const renderRecordChip = (cat: RecordCategory, idx: number, duplicate: boolean) => {
         const record = cat.entries[0];
         const isExpanded = expandedId === cat.id;
+        const context = getRecordContext(record);
         return (
             <button
                 key={`${duplicate ? 'loop' : 'main'}-${cat.id}`}
@@ -1276,7 +1290,7 @@ const PersonalRecordsStrip: React.FC<{
                 <div className="record-info">
                     <div className="record-label">{cat.label}</div>
                     <div className="record-value" style={{ color: cat.color }}>{record.displayValue}</div>
-                    <div className="record-date">{getRecordContext(record)}</div>
+                    <div className="record-date" title={context}>{context}</div>
                 </div>
                 <svg className="record-toggle" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', color: cat.color }} width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
                     <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
@@ -1361,6 +1375,7 @@ const PersonalRecordsStrip: React.FC<{
                     <ol className="records-top10-list">
                         {expandedCategory.entries.map((entry, rank) => {
                             const targetDay = entry.day || entry.endDay;
+                            const context = getRecordContext(entry);
                             return (
                                 <li key={entry.id}>
                                     <button
@@ -1373,7 +1388,7 @@ const PersonalRecordsStrip: React.FC<{
                                             {entry.rankLabel || rank + 1}
                                         </span>
                                         <span className="records-top10-value font-mono" style={{ color: expandedCategory.color }}>{entry.displayValue}</span>
-                                        <span className="records-top10-date">{getRecordContext(entry)}</span>
+                                        <span className="records-top10-date" title={context}>{context}</span>
                                         <svg className="records-top10-arrow" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
                                             <path d="M2 5h6M5.5 2.5L8 5l-2.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                                         </svg>
