@@ -5,5 +5,6 @@ export { default as CorrelationExplorer } from './CorrelationExplorer';
 export { default as WhatIfSimulator } from './WhatIfSimulator';
 export { default as MilestoneTracker } from './MilestoneTracker';
 export { default as DailySnapshot } from './DailySnapshot';
+export { default as SleepRhythm } from './SleepRhythm';
 export { default as ChallengeManager } from './ChallengeManager';
 export { default as InfoTooltip } from './InfoTooltip';

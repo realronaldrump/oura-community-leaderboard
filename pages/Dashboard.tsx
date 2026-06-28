@@ -39,6 +39,7 @@ import {
     WhatIfSimulator,
     MilestoneTracker,
     DailySnapshot,
+    SleepRhythm,
     ChallengeManager
 } from '../components/analytics';
 import { useAutoSync, formatLastSync } from '../hooks/useAutoSync';
@@ -3983,7 +3984,7 @@ const Dashboard: React.FC = () => {
 
 // Insights sub-view
 const InsightsView: React.FC<{ profiles: any[]; userQueries: any[]; allTimeQueries: any[] }> = ({ profiles, userQueries, allTimeQueries }) => {
-    const [tab, setTab] = useState<'timeline' | 'correlation' | 'whatif' | 'streaks' | 'patterns' | 'milestones' | 'snapshot'>('timeline');
+    const [tab, setTab] = useState<'rhythm' | 'timeline' | 'correlation' | 'whatif' | 'streaks' | 'patterns' | 'milestones' | 'snapshot'>('rhythm');
     const recentUsersData = userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }));
     const historicalUsersData = profiles.map((_: any, idx: number) => ({
         data: (allTimeQueries[idx]?.data as DailyStats | undefined) ?? (userQueries[idx]?.data as DailyStats | undefined)
@@ -3994,6 +3995,7 @@ const InsightsView: React.FC<{ profiles: any[]; userQueries: any[]; allTimeQueri
             <div className="relative">
                 <div className="flex gap-1.5 overflow-x-auto pb-1 hide-scrollbar">
                     {([
+                        { key: 'rhythm', label: 'Sleep Rhythm' },
                         { key: 'timeline', label: '24h Timeline' }, { key: 'correlation', label: 'Correlations' },
                         { key: 'whatif', label: 'What-If' },
                         { key: 'streaks', label: 'Streaks' }, { key: 'patterns', label: 'Patterns' },
@@ -4004,6 +4006,7 @@ const InsightsView: React.FC<{ profiles: any[]; userQueries: any[]; allTimeQueri
                 </div>
                 <div className="pointer-events-none absolute right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-[var(--bg-base)] to-transparent rounded-r" />
             </div>
+            {tab === 'rhythm' && <SleepRhythm profiles={profiles} usersData={historicalUsersData} />}
             {tab === 'timeline' && <TimelineView profiles={profiles} usersData={recentUsersData} />}
             {tab === 'correlation' && <CorrelationExplorer profiles={profiles} usersData={recentUsersData} />}
             {tab === 'whatif' && <WhatIfSimulator profiles={profiles} usersData={historicalUsersData} />}
