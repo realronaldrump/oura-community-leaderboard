@@ -64,6 +64,7 @@ import {
     getProfileCurrentHour,
     getProfileLocalISODate,
 } from '../utils/profileTemporal';
+import { filterDailyStatsForProfile, isDayExcludedByRanges } from '../utils/dataExclusions';
 
 const METERS_TO_MILES = 0.000621371;
 const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
@@ -2164,18 +2165,34 @@ const Dashboard: React.FC = () => {
         }))
     });
 
-    const activeUserQuery = userQueries.find((_, idx) => profiles[idx].id === activeProfile?.id);
+    const analysisUserQueries = useMemo(
+        () => userQueries.map((query, idx) => ({
+            ...query,
+            data: filterDailyStatsForProfile(query.data as DailyStats | undefined, profiles[idx]),
+        })),
+        [profiles, userQueries]
+    );
+
+    const analysisAllTimeQueries = useMemo(
+        () => allTimeQueries.map((query, idx) => ({
+            ...query,
+            data: filterDailyStatsForProfile(query.data as DailyStats | undefined, profiles[idx]),
+        })),
+        [allTimeQueries, profiles]
+    );
+
+    const activeUserQuery = analysisUserQueries.find((_, idx) => profiles[idx].id === activeProfile?.id);
     const activeData = activeUserQuery?.data as DailyStats | undefined;
-    const activeAllTimeQuery = allTimeQueries.find((_, idx) => profiles[idx]?.id === activeProfile?.id);
+    const activeAllTimeQuery = analysisAllTimeQueries.find((_, idx) => profiles[idx]?.id === activeProfile?.id);
     const activeAllTimeData = activeAllTimeQuery?.data as DailyStats | undefined;
     const competitionProfileData = useMemo(() => (
         profiles.map((profile, index) => ({
             profile,
-            data: userQueries[index]?.data as DailyStats | undefined,
-            isLoading: Boolean(userQueries[index]?.isLoading),
-            isError: Boolean(userQueries[index]?.isError),
+            data: analysisUserQueries[index]?.data as DailyStats | undefined,
+            isLoading: Boolean(analysisUserQueries[index]?.isLoading),
+            isError: Boolean(analysisUserQueries[index]?.isError),
         }))
-    ), [profiles, userQueries]);
+    ), [analysisUserQueries, profiles]);
 
     const profileHealthById = useMemo(() => {
         const staleThresholdMs = 18 * 60 * 60 * 1000;
@@ -2280,26 +2297,28 @@ const Dashboard: React.FC = () => {
     }, [activityScoreDays, availableDays, readinessScoreDays, sleepScoreDays, sleepSessionDays]);
 
     const todayPickerDays = useMemo(() => {
+        if (isDayExcludedByRanges(todayIsoDay, activeProfile?.dataExclusionRanges)) return todayReferenceDays;
         if (todayReferenceDays.includes(todayIsoDay)) return todayReferenceDays;
         return [todayIsoDay, ...todayReferenceDays];
-    }, [todayIsoDay, todayReferenceDays]);
+    }, [activeProfile?.dataExclusionRanges, todayIsoDay, todayReferenceDays]);
 
     const hasIncompleteTodayCoverage = useMemo(() => {
+        if (isDayExcludedByRanges(todayIsoDay, activeProfile?.dataExclusionRanges)) return false;
         return !todayReferenceDays.includes(todayIsoDay);
-    }, [todayIsoDay, todayReferenceDays]);
+    }, [activeProfile?.dataExclusionRanges, todayIsoDay, todayReferenceDays]);
 
     // All days across all profiles from full-history queries, falling back to incremental data
     const trendsAvailableDays = useMemo(() => {
         const daySet = new Set<string>();
-        allTimeQueries.forEach((query, idx) => {
-            const data = (query.data as DailyStats | undefined) ?? (userQueries[idx]?.data as DailyStats | undefined);
+        analysisAllTimeQueries.forEach((query, idx) => {
+            const data = (query.data as DailyStats | undefined) ?? (analysisUserQueries[idx]?.data as DailyStats | undefined);
             if (!data) return;
             data.sleep?.forEach((item) => item.day && daySet.add(item.day));
             data.readiness?.forEach((item) => item.day && daySet.add(item.day));
             data.activity?.forEach((item) => item.day && daySet.add(item.day));
         });
         return Array.from(daySet).sort((a, b) => b.localeCompare(a));
-    }, [allTimeQueries, userQueries]);
+    }, [analysisAllTimeQueries, analysisUserQueries]);
 
     const effectiveTrendsRange = useMemo<DayRange | null>(() => {
         if (!trendsAvailableDays.length) return null;
@@ -2645,7 +2664,8 @@ const Dashboard: React.FC = () => {
         // Show modal immediately with currently available data
         const allTimeQueryKey = ['allTimeStats', activeProfile.id] as const;
         const cachedAllTime = queryClient.getQueryData(allTimeQueryKey) as DailyStats | undefined;
-        const bestAvailable = cachedAllTime || activeData;
+        const analysisCachedAllTime = filterDailyStatsForProfile(cachedAllTime, activeProfile);
+        const bestAvailable = analysisCachedAllTime || activeData;
         const historyData = bestAvailable
             ? getMetricHistoryData(metricType, bestAvailable)
             : [];
@@ -2658,11 +2678,12 @@ const Dashboard: React.FC = () => {
                 staleTime: Number.POSITIVE_INFINITY,
             }).then((fullHistory) => {
                 if (!fullHistory) return;
+                const analysisFullHistory = filterDailyStatsForProfile(fullHistory, activeProfile);
                 setMetricDetailModal((previous) => (
                     previous.isOpen && previous.metricType === metricType
                         ? {
                             ...previous,
-                            historyData: getMetricHistoryData(metricType, fullHistory),
+                            historyData: getMetricHistoryData(metricType, analysisFullHistory),
                         }
                         : previous
                 ));
@@ -2676,7 +2697,10 @@ const Dashboard: React.FC = () => {
     };
 
     const scoreHistorySource = activeProfile?.id
-        ? ((queryClient.getQueryData(['allTimeStats', activeProfile.id]) as DailyStats | undefined) || activeData)
+        ? (filterDailyStatsForProfile(
+            queryClient.getQueryData(['allTimeStats', activeProfile.id]) as DailyStats | undefined,
+            activeProfile
+        ) || activeData)
         : activeData;
 
     const scoreHistoryData = useMemo(() => {
@@ -2685,22 +2709,22 @@ const Dashboard: React.FC = () => {
     }, [scoreBreakdownModal.scoreType, scoreHistorySource]);
 
     const scopedAllTimeData = useMemo(
-        () => allTimeQueries.map((query) => filterDailyStatsByDayRange(query.data as DailyStats | undefined, effectiveTrendsRange)),
-        [allTimeQueries, effectiveTrendsRange]
+        () => analysisAllTimeQueries.map((query) => filterDailyStatsByDayRange(query.data as DailyStats | undefined, effectiveTrendsRange)),
+        [analysisAllTimeQueries, effectiveTrendsRange]
     );
 
     const scopedAllTimeQueriesForHistory = useMemo(
-        () => allTimeQueries.map((query, idx) => ({
+        () => analysisAllTimeQueries.map((query, idx) => ({
             data: scopedAllTimeData[idx],
             isFetching: query.isFetching,
             isPending: query.isPending,
         })),
-        [allTimeQueries, scopedAllTimeData]
+        [analysisAllTimeQueries, scopedAllTimeData]
     );
 
     const leaderboardData = useMemo(() => {
         return profiles.map((p, idx) => {
-            const query = userQueries[idx];
+            const query = analysisUserQueries[idx];
             const data = query.data;
             if (!data) return null;
             const { sleep, readiness, activity, session } = data;
@@ -2725,7 +2749,7 @@ const Dashboard: React.FC = () => {
                 isCurrentUser: p.id === activeProfile?.id
             } as LeaderboardEntry;
         }).filter((e): e is LeaderboardEntry => e !== null).sort((a, b) => b.average - a.average);
-    }, [profiles, userQueries, activeProfile?.id]);
+    }, [profiles, analysisUserQueries, activeProfile?.id]);
 
     const completeDaySetFromStats = (data?: DailyStats): Set<string> => {
         if (!data) return new Set<string>();
@@ -2744,7 +2768,7 @@ const Dashboard: React.FC = () => {
             .map((entry) => {
                 const profile = profiles.find((candidate) => candidate.id === entry.id);
                 const profileIndex = profiles.findIndex((candidate) => candidate.id === entry.id);
-                const data = profileIndex >= 0 ? (userQueries[profileIndex]?.data as DailyStats | undefined) : undefined;
+                const data = profileIndex >= 0 ? (analysisUserQueries[profileIndex]?.data as DailyStats | undefined) : undefined;
 
                 if (!profile || !data) return null;
 
@@ -2756,7 +2780,7 @@ const Dashboard: React.FC = () => {
                 } satisfies CompareParticipant;
             })
             .filter((participant): participant is CompareParticipant => participant !== null);
-    }, [leaderboardData, profiles, userQueries]);
+    }, [analysisUserQueries, leaderboardData, profiles]);
 
     const availableCompareIds = useMemo(
         () => compareParticipantPool.map((participant) => participant.id),
@@ -3604,7 +3628,7 @@ const Dashboard: React.FC = () => {
                             <FriendTrendsStrip
                                 leaderboardData={leaderboardData}
                                 profiles={profiles}
-                                userQueries={userQueries}
+                                userQueries={analysisUserQueries}
                                 onViewCompare={() => setViewMode('compare')}
                                 onViewTrends={() => setViewMode('trends')}
                             />
@@ -3981,13 +4005,13 @@ const Dashboard: React.FC = () => {
                     <div className="pt-6">
                         <StreakTracker
                             profiles={profiles.map(p => ({ id: p.id, firstName: p.firstName, lastName: p.lastName, email: p.email }))}
-                            usersData={userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))}
+                            usersData={analysisUserQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))}
                         />
                     </div>
                 )}
 
                 {/* ======== INSIGHTS VIEW ======== */}
-                {viewMode === 'insights' && <InsightsView profiles={profiles} userQueries={userQueries} allTimeQueries={allTimeQueries} />}
+                {viewMode === 'insights' && <InsightsView profiles={profiles} userQueries={analysisUserQueries} allTimeQueries={analysisAllTimeQueries} />}
 
                 {/* ======== EXPORT VIEW ======== */}
                 {viewMode === 'export' && <div className="pt-6"><DataExport /></div>}

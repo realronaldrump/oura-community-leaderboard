@@ -7,10 +7,15 @@ import PrimaryProfileSwitcher from '../components/PrimaryProfileSwitcher';
 import InviteLinkCard from '../components/InviteLinkCard';
 import { ouraService } from '../services/ouraService';
 import { webhookService } from '../services/webhookService';
-import { DailyStats } from '../types';
+import { DailyStats, DataExclusionRange } from '../types';
 import { getProfileDisplayName } from '../utils/profileName';
-import { shiftLocalISODate } from '../utils/date';
+import { formatISODateForDisplay, isISODateString, shiftLocalISODate } from '../utils/date';
 import { getProfileLocalISODate } from '../utils/profileTemporal';
+import {
+    getDataExclusionRangeDayCount,
+    getTotalExcludedDayCount,
+    normalizeDataExclusionRanges,
+} from '../utils/dataExclusions';
 
 type QuickCheckStatus = 'idle' | 'running' | 'ok' | 'warning' | 'error';
 
@@ -93,6 +98,11 @@ const Settings: React.FC = () => {
     const [lastName, setLastName] = useState(activeProfile?.lastName || '');
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState('');
+    const [exclusionStartDay, setExclusionStartDay] = useState(activeProfile ? getProfileLocalISODate(activeProfile) : '');
+    const [exclusionEndDay, setExclusionEndDay] = useState(activeProfile ? getProfileLocalISODate(activeProfile) : '');
+    const [exclusionLabel, setExclusionLabel] = useState('');
+    const [isSavingExclusion, setIsSavingExclusion] = useState(false);
+    const [exclusionMessage, setExclusionMessage] = useState('');
     const [quickCheck, setQuickCheck] = useState<QuickCheckState>({
         status: 'idle',
         message: '',
@@ -124,6 +134,24 @@ const Settings: React.FC = () => {
             checkedAt: null,
         });
     }, [activeProfile]);
+
+    React.useEffect(() => {
+        if (!activeProfile) return;
+        const profileToday = getProfileLocalISODate(activeProfile);
+        setExclusionStartDay(profileToday);
+        setExclusionEndDay(profileToday);
+        setExclusionLabel('');
+        setExclusionMessage('');
+    }, [activeProfile?.id]);
+
+    const dataExclusionRanges = React.useMemo(
+        () => normalizeDataExclusionRanges(activeProfile?.dataExclusionRanges),
+        [activeProfile?.dataExclusionRanges]
+    );
+    const excludedDayCount = React.useMemo(
+        () => getTotalExcludedDayCount(dataExclusionRanges),
+        [dataExclusionRanges]
+    );
 
     React.useEffect(() => {
         if (!activeProfile) return;
@@ -182,6 +210,56 @@ const Settings: React.FC = () => {
         } finally {
             setIsSaving(false);
         }
+    };
+
+    const persistDataExclusionRanges = async (ranges: DataExclusionRange[], successMessage: string) => {
+        if (!activeProfile) return;
+        setIsSavingExclusion(true);
+        setExclusionMessage('');
+        try {
+            await updateProfile({ dataExclusionRanges: normalizeDataExclusionRanges(ranges) });
+            setExclusionMessage(successMessage);
+            setTimeout(() => setExclusionMessage(''), 3000);
+        } catch (error) {
+            console.error('Failed to update data exclusions:', error);
+            setExclusionMessage('Failed to save exclusions.');
+        } finally {
+            setIsSavingExclusion(false);
+        }
+    };
+
+    const handleAddDataExclusion = async () => {
+        if (!activeProfile) return;
+        if (!isISODateString(exclusionStartDay) || !isISODateString(exclusionEndDay)) {
+            setExclusionMessage('Choose a valid start and end date.');
+            return;
+        }
+
+        const [startDay, endDay] = exclusionStartDay <= exclusionEndDay
+            ? [exclusionStartDay, exclusionEndDay]
+            : [exclusionEndDay, exclusionStartDay];
+        const now = new Date().toISOString();
+        const newRange: DataExclusionRange = {
+            id: crypto.randomUUID(),
+            startDay,
+            endDay,
+            label: exclusionLabel.trim() || null,
+            createdAt: now,
+            updatedAt: now,
+        };
+
+        await persistDataExclusionRanges(
+            [...dataExclusionRanges, newRange],
+            startDay === endDay ? 'Excluded day saved.' : 'Excluded range saved.'
+        );
+        setExclusionLabel('');
+    };
+
+    const handleRemoveDataExclusion = async (id: string) => {
+        await persistDataExclusionRanges(
+            dataExclusionRanges.filter((range) => range.id !== id),
+            'Excluded range removed.'
+        );
     };
 
     const handleFullSync = async () => {
@@ -533,6 +611,108 @@ const Settings: React.FC = () => {
                                 </div>
                             ) : (
                                 <p className="text-[#A8A29E] text-xs">Add another profile to enable switching.</p>
+                            )}
+                        </div>
+                    </div>
+                </section>
+
+                {/* Data Quality */}
+                <section className="mb-8">
+                    <h2 className="text-sm font-medium text-[#7A756E] uppercase tracking-wider mb-4">Data Quality</h2>
+                    <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-[18px] p-5 space-y-5">
+                        <div>
+                            <div className="flex items-start justify-between gap-4">
+                                <div>
+                                    <p className="text-[#2D2A26] font-medium text-sm">Ring Breaks & Excluded Days</p>
+                                    <p className="text-[#A8A29E] text-xs mt-1 leading-relaxed">
+                                        Save days when the ring was not worn. These days stay on this profile and are omitted from dashboard scores, analytics, comparisons, competitions, and CSV exports.
+                                    </p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="font-mono text-lg font-semibold text-[#2D2A26]">{excludedDayCount}</p>
+                                    <p className="text-[11px] uppercase tracking-wide text-[#A8A29E]">days excluded</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <label className="block">
+                                <span className="block text-xs text-[#A8A29E] mb-1.5 uppercase tracking-wide">Start Date</span>
+                                <input
+                                    type="date"
+                                    value={exclusionStartDay}
+                                    onChange={(event) => setExclusionStartDay(event.target.value)}
+                                    className="w-full bg-[#F2EDE8] border border-[rgba(0,0,0,0.10)] rounded-[12px] px-3 py-2.5 text-[#2D2A26] text-sm focus:border-[#6B9E8A] outline-none transition-colors"
+                                />
+                            </label>
+                            <label className="block">
+                                <span className="block text-xs text-[#A8A29E] mb-1.5 uppercase tracking-wide">End Date</span>
+                                <input
+                                    type="date"
+                                    value={exclusionEndDay}
+                                    onChange={(event) => setExclusionEndDay(event.target.value)}
+                                    className="w-full bg-[#F2EDE8] border border-[rgba(0,0,0,0.10)] rounded-[12px] px-3 py-2.5 text-[#2D2A26] text-sm focus:border-[#6B9E8A] outline-none transition-colors"
+                                />
+                            </label>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
+                            <label className="block min-w-0">
+                                <span className="block text-xs text-[#A8A29E] mb-1.5 uppercase tracking-wide">Label</span>
+                                <input
+                                    type="text"
+                                    value={exclusionLabel}
+                                    onChange={(event) => setExclusionLabel(event.target.value)}
+                                    className="w-full bg-[#F2EDE8] border border-[rgba(0,0,0,0.10)] rounded-[12px] px-3 py-2.5 text-[#2D2A26] text-sm focus:border-[#6B9E8A] outline-none transition-colors"
+                                    placeholder="Travel, charging break, illness..."
+                                />
+                            </label>
+                            <button
+                                onClick={handleAddDataExclusion}
+                                disabled={isSavingExclusion}
+                                className="px-5 py-2.5 bg-[#6B9E8A] text-white font-medium rounded-[12px] text-sm disabled:opacity-50 hover:opacity-90 transition-opacity whitespace-nowrap"
+                            >
+                                {isSavingExclusion ? 'Saving...' : 'Add Exclusion'}
+                            </button>
+                        </div>
+
+                        {exclusionMessage && (
+                            <p className={`text-xs ${exclusionMessage.includes('Failed') || exclusionMessage.includes('valid') ? 'text-[#D4897B]' : 'text-[#6B9E8A]'}`}>
+                                {exclusionMessage}
+                            </p>
+                        )}
+
+                        <div className="border-t border-[rgba(0,0,0,0.06)] pt-4">
+                            {dataExclusionRanges.length === 0 ? (
+                                <div className="rounded-[14px] border border-[rgba(0,0,0,0.06)] bg-[#F2EDE8] px-4 py-3">
+                                    <p className="text-sm text-[#7A756E]">No ring breaks are excluded for this profile.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {dataExclusionRanges.map((range) => {
+                                        const isSingleDay = range.startDay === range.endDay;
+                                        const dateLabel = isSingleDay
+                                            ? formatISODateForDisplay(range.startDay, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                            : `${formatISODateForDisplay(range.startDay, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })} to ${formatISODateForDisplay(range.endDay, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                                        const dayCount = getDataExclusionRangeDayCount(range);
+
+                                        return (
+                                            <div key={range.id} className="flex items-center justify-between gap-3 rounded-[14px] border border-[rgba(0,0,0,0.06)] bg-[#F2EDE8] px-4 py-3">
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium text-[#2D2A26] truncate">{range.label || (isSingleDay ? 'Excluded day' : 'Ring break')}</p>
+                                                    <p className="text-xs text-[#A8A29E] mt-1">{dateLabel} - {dayCount} {dayCount === 1 ? 'day' : 'days'}</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleRemoveDataExclusion(range.id)}
+                                                    disabled={isSavingExclusion}
+                                                    className="px-3 py-1.5 border border-[rgba(0,0,0,0.10)] text-[#7A756E] font-medium rounded-[10px] text-xs hover:bg-[#FAF7F4] transition-colors disabled:opacity-50"
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             )}
                         </div>
                     </div>

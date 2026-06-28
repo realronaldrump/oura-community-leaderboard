@@ -22,6 +22,7 @@ export interface UserProfile {
   lastKnownUtcOffsetMinutes?: number | null;
   lastKnownOffsetObservedAt?: string | null;
   lastKnownOffsetSource?: ProfileOffsetSource | null;
+  dataExclusionRanges?: DataExclusionRange[];
   activeChallenges?: any[]; // using any[] temporarilly to avoid circular dependency, or better yet, define a minimal type here or import if possible.
   // Actually, let's keep it simple and just use an array of objects that match the structure we know, 
   // or define the structure here if we can't import `UserChallenge` easily without cycles.
@@ -40,6 +41,15 @@ export interface UserProfile {
     progress: number;
     history: Record<string, boolean>;
   }>;
+}
+
+export interface DataExclusionRange {
+  id: string;
+  startDay: string;
+  endDay: string;
+  label?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface WebhookSignal {

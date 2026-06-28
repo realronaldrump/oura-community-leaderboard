@@ -5,6 +5,7 @@ import { useUser } from '../contexts/UserContext';
 import { getStoredDailyStats } from '../services/firestoreStatsService';
 import { DailyStats } from '../types';
 import { formatISODateForDisplay } from '../utils/date';
+import { filterDailyStatsForProfile, getTotalExcludedDayCount } from '../utils/dataExclusions';
 import {
     ExportDateRange,
     filterByDayRange,
@@ -57,7 +58,15 @@ const DataExport: React.FC = () => {
             .finally(() => setIsLoading(false));
     }, [activeProfile?.id]);
 
-    const availableRange = useMemo(() => (data ? getAvailableExportRange(data) : null), [data]);
+    const analysisData = useMemo(
+        () => filterDailyStatsForProfile(data ?? undefined, activeProfile) ?? null,
+        [activeProfile, data]
+    );
+    const excludedDayCount = useMemo(
+        () => getTotalExcludedDayCount(activeProfile?.dataExclusionRanges),
+        [activeProfile?.dataExclusionRanges]
+    );
+    const availableRange = useMemo(() => (analysisData ? getAvailableExportRange(analysisData) : null), [analysisData]);
 
     useEffect(() => {
         if (!availableRange) {
@@ -93,29 +102,29 @@ const DataExport: React.FC = () => {
 
     const effectiveRange = selectedRange ?? availableRange;
 
-    const sleepRows = useMemo(() => filterByDayRange(data?.sleep, effectiveRange), [data?.sleep, effectiveRange]);
-    const readinessRows = useMemo(() => filterByDayRange(data?.readiness, effectiveRange), [data?.readiness, effectiveRange]);
-    const activityRows = useMemo(() => filterByDayRange(data?.activity, effectiveRange), [data?.activity, effectiveRange]);
-    const sleepSessionRows = useMemo(() => filterSleepSessionsByRange(data?.session, effectiveRange), [data?.session, effectiveRange]);
-    const nightlyVitalsRows = useMemo(() => (data ? getNightlyVitalsRows(data, effectiveRange) : []), [data, effectiveRange]);
+    const sleepRows = useMemo(() => filterByDayRange(analysisData?.sleep, effectiveRange), [analysisData?.sleep, effectiveRange]);
+    const readinessRows = useMemo(() => filterByDayRange(analysisData?.readiness, effectiveRange), [analysisData?.readiness, effectiveRange]);
+    const activityRows = useMemo(() => filterByDayRange(analysisData?.activity, effectiveRange), [analysisData?.activity, effectiveRange]);
+    const sleepSessionRows = useMemo(() => filterSleepSessionsByRange(analysisData?.session, effectiveRange), [analysisData?.session, effectiveRange]);
+    const nightlyVitalsRows = useMemo(() => (analysisData ? getNightlyVitalsRows(analysisData, effectiveRange) : []), [analysisData, effectiveRange]);
     const nightlyRestingHeartRateRows = useMemo(
-        () => (data ? getNightlyRestingHeartRateRows(data, effectiveRange) : []),
-        [data, effectiveRange],
+        () => (analysisData ? getNightlyRestingHeartRateRows(analysisData, effectiveRange) : []),
+        [analysisData, effectiveRange],
     );
-    const spo2Rows = useMemo(() => filterByDayRange(data?.spo2 as any[] | undefined, effectiveRange), [data?.spo2, effectiveRange]);
-    const stressRows = useMemo(() => filterByDayRange(data?.stress as any[] | undefined, effectiveRange), [data?.stress, effectiveRange]);
-    const resilienceRows = useMemo(() => filterByDayRange(data?.resilience as any[] | undefined, effectiveRange), [data?.resilience, effectiveRange]);
+    const spo2Rows = useMemo(() => filterByDayRange(analysisData?.spo2 as any[] | undefined, effectiveRange), [analysisData?.spo2, effectiveRange]);
+    const stressRows = useMemo(() => filterByDayRange(analysisData?.stress as any[] | undefined, effectiveRange), [analysisData?.stress, effectiveRange]);
+    const resilienceRows = useMemo(() => filterByDayRange(analysisData?.resilience as any[] | undefined, effectiveRange), [analysisData?.resilience, effectiveRange]);
     const cardiovascularAgeRows = useMemo(
-        () => filterByDayRange(data?.cardiovascularAge as any[] | undefined, effectiveRange),
-        [data?.cardiovascularAge, effectiveRange],
+        () => filterByDayRange(analysisData?.cardiovascularAge as any[] | undefined, effectiveRange),
+        [analysisData?.cardiovascularAge, effectiveRange],
     );
-    const vo2MaxRows = useMemo(() => filterByDayRange(data?.vo2Max as any[] | undefined, effectiveRange), [data?.vo2Max, effectiveRange]);
-    const heartrateRows = useMemo(() => filterHeartRateByRange(data?.heartrate, effectiveRange), [data?.heartrate, effectiveRange]);
-    const workoutRows = useMemo(() => filterByDayRange(data?.workout as any[] | undefined, effectiveRange), [data?.workout, effectiveRange]);
-    const tagRows = useMemo(() => filterTagItemsByRange(data?.tag as any[] | undefined, effectiveRange), [data?.tag, effectiveRange]);
+    const vo2MaxRows = useMemo(() => filterByDayRange(analysisData?.vo2Max as any[] | undefined, effectiveRange), [analysisData?.vo2Max, effectiveRange]);
+    const heartrateRows = useMemo(() => filterHeartRateByRange(analysisData?.heartrate, effectiveRange), [analysisData?.heartrate, effectiveRange]);
+    const workoutRows = useMemo(() => filterByDayRange(analysisData?.workout as any[] | undefined, effectiveRange), [analysisData?.workout, effectiveRange]);
+    const tagRows = useMemo(() => filterTagItemsByRange(analysisData?.tag as any[] | undefined, effectiveRange), [analysisData?.tag, effectiveRange]);
     const enhancedTagRows = useMemo(
-        () => filterTagItemsByRange(data?.enhancedTag as any[] | undefined, effectiveRange),
-        [data?.enhancedTag, effectiveRange],
+        () => filterTagItemsByRange(analysisData?.enhancedTag as any[] | undefined, effectiveRange),
+        [analysisData?.enhancedTag, effectiveRange],
     );
 
     const handleRangeChange = (field: 'start' | 'end', value: string) => {
@@ -340,7 +349,7 @@ const DataExport: React.FC = () => {
     };
 
     const generateAllDailyCSV = () => {
-        if (!data || !effectiveRange) return;
+        if (!analysisData || !effectiveRange) return;
         const allDates = new Set([
             ...sleepRows.map((s) => s.day),
             ...readinessRows.map((r) => r.day),
@@ -356,7 +365,7 @@ const DataExport: React.FC = () => {
             const sleep = sleepRows.find((s) => s.day === date);
             const readiness = readinessRows.find((r) => r.day === date);
             const activity = activityRows.find((a) => a.day === date);
-            const session = getBestSessionForDay(data, date);
+            const session = getBestSessionForDay(analysisData, date);
             const spo2 = spo2Rows.find((s: any) => s.day === date);
             const stress = stressRows.find((s: any) => s.day === date);
             const resilience = resilienceRows.find((r: any) => r.day === date);
@@ -433,7 +442,7 @@ const DataExport: React.FC = () => {
         filename: string;
     };
 
-    const exportButtons: ExportButton[] = data ? [
+    const exportButtons: ExportButton[] = analysisData ? [
         {
             label: 'Sleep Scores',
             description: 'Daily score + 7 contributing factors',
@@ -572,7 +581,7 @@ const DataExport: React.FC = () => {
                         Data Export
                     </h1>
                     <p className="text-text-secondary">
-                        Download your synced Oura data as CSV files. Data comes directly from your local cache — no additional API calls needed.
+                        Download your synced Oura data as CSV files. Profile ring breaks are excluded from these exports, and no additional API calls are needed.
                     </p>
                 </div>
 
@@ -660,6 +669,7 @@ const DataExport: React.FC = () => {
                                         {formatISODateForDisplay(selectedRange.end, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                     </span>
                                     . Synced data is available from {availableRange.start} to {availableRange.end}.
+                                    {excludedDayCount > 0 ? ` ${excludedDayCount} profile-excluded ${excludedDayCount === 1 ? 'day is' : 'days are'} omitted.` : ''}
                                 </p>
                             </div>
                         )}
