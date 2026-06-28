@@ -754,7 +754,6 @@ const buildCombinedScoreItems = (
                 day,
                 raw: average,
                 display: formatRecordScore(average),
-                detail: '3-score average',
             };
         });
 };
