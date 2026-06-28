@@ -3558,7 +3558,7 @@ const Dashboard: React.FC = () => {
                                                 <circle cx="38" cy="38" r={radius} fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="3" />
                                                 <circle cx="38" cy="38" r={radius} fill="none" stroke={color} strokeWidth="3" strokeDasharray={circumference} strokeDashoffset={circumference - progress} strokeLinecap="round" className="transition-all duration-1000 ease-out" style={{ filter: `drop-shadow(0 0 4px ${color}22)` }} />
                                             </svg>
-                                            <span className="absolute inset-0 flex items-center justify-center text-xl sm:text-2xl font-bold font-mono tabular-nums" style={{ color }}>
+                                            <span className="absolute inset-0 flex items-center justify-center text-base sm:text-2xl font-bold font-mono tabular-nums" style={{ color }}>
                                                 {score ?? '—'}
                                             </span>
                                         </div>
