@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DailyStats, formatDuration } from '../../types';
 import { DailySnapshotData } from '../../types/analyticsTypes';
 import { generateDailySnapshot, CHALLENGE_DEFINITIONS } from '../../services/analyticsService';
-import html2canvas from 'html2canvas';
 import { Camera, Image, Pin, BedDouble, Zap, Flame, Footprints, Clock, Trophy, Crown } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
 import DateRangePicker from '../DateRangePicker';
@@ -79,6 +78,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
 
         setIsExporting(true);
         try {
+            const { default: html2canvas } = await import('html2canvas');
             const exportScale = Math.min(3, Math.max(2, window.devicePixelRatio || 1));
             const canvas = await html2canvas(cardRef.current, {
                 backgroundColor: '#F2EDE8',

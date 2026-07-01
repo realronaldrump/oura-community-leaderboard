@@ -3,7 +3,6 @@ import { DailyStats } from '../../types';
 import { CorrelationResult, MetricOption } from '../../types/analyticsTypes';
 import { calculateCorrelation } from '../../services/analyticsService';
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import html2canvas from 'html2canvas';
 import { BarChart3, Image, Lightbulb, Sparkles, Filter } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
 import InsightCard from './InsightCard';
@@ -62,6 +61,7 @@ const CorrelationExplorer: React.FC<CorrelationExplorerProps> = ({ profiles, use
 
         setIsExporting(true);
         try {
+            const { default: html2canvas } = await import('html2canvas');
             const canvas = await html2canvas(element, {
                 backgroundColor: '#F2EDE8',
                 scale: 2

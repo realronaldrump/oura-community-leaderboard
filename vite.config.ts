@@ -204,6 +204,22 @@ export default defineConfig(({ mode }) => {
       react(),
       createDevOAuthPlugin(env),
     ],
+    build: {
+      // Split the big vendor libraries into their own cacheable chunks so a
+      // release of app code does not force mobile clients to redownload them.
+      rollupOptions: {
+        output: {
+          manualChunks: (id: string) => {
+            if (!id.includes('node_modules')) return undefined;
+            // Firebase has no React dependency, so it can be split without
+            // creating circular chunk-initialization issues. The React/recharts
+            // graph must stay together with its CJS interop helpers.
+            if (id.includes('firebase')) return 'vendor-firebase';
+            return undefined;
+          },
+        },
+      },
+    },
     define: {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)

@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap');
+/* Fonts are loaded once from index.html with preconnect hints; a CSS @import
+   here would duplicate the request and block first paint. */
 
 @tailwind base;
 @tailwind components;
@@ -1488,17 +1489,26 @@ select {
 
 .mobile-bottom-tab {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 0.25rem;
-  padding: 0.625rem 0.25rem;
+  padding: 0.625rem 0.125rem;
   font-size: 0.625rem;
   font-weight: 600;
   color: var(--text-muted);
   transition: all 0.15s ease;
   min-height: 56px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-bottom-tab span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mobile-bottom-tab:active {

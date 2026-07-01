@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     DailyActivity, DailyReadiness, DailySleep, SleepSession, HeartRate,
     DailySpO2, DailyStress, DailyResilience, LeaderboardEntry, UserProfile, formatDuration, formatTime, DailyStats
@@ -12,7 +12,6 @@ import ScoreBreakdownModal from '../components/ScoreBreakdownModal';
 import MetricDetailModal, { MetricDetailType } from '../components/MetricDetailModal';
 import LeaderboardUserDetailModal from '../components/LeaderboardUserDetailModal';
 import AppDialog from '../components/AppDialog';
-import DataExport from './DataExport';
 import { CLAY_TOOLTIP_STYLE } from '../utils/chartStyles';
 import {
     LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip
@@ -20,28 +19,36 @@ import {
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { mergeDailyStats, syncDailyStats } from '../hooks/useOuraData';
 import ComparisonHeartRateChart from '../components/charts/ComparisonHeartRateChart';
-import AllTimeHistory from '../components/AllTimeHistory';
 import SyncModal from '../components/SyncModal';
 import PrimaryProfileSwitcher from '../components/PrimaryProfileSwitcher';
 import DateRangePicker from '../components/DateRangePicker';
 import InviteLinkCard from '../components/InviteLinkCard';
 import InviteLinkModal from '../components/InviteLinkModal';
 import MultiProfileComparisonTable, { ComparisonRow } from '../components/MultiProfileComparisonTable';
-import CompeteView from '../components/compete/CompeteView';
 import { getStoredDailyStats } from '../services/firestoreStatsService';
 import { smartSync, SyncProgress } from '../services/syncService';
 import { ouraService } from '../services/ouraService';
-import {
-    StreakTracker,
-    PatternDetector,
-    TimelineView,
-    CorrelationExplorer,
-    WhatIfSimulator,
-    MilestoneTracker,
-    DailySnapshot,
-    SleepRhythm,
-    ChallengeManager
-} from '../components/analytics';
+
+// Lazily load the heavier secondary views so the Today view (the mobile
+// landing screen) ships in a much smaller initial bundle.
+const DataExport = lazy(() => import('./DataExport'));
+const CompeteView = lazy(() => import('../components/compete/CompeteView'));
+const StreakTracker = lazy(() => import('../components/analytics/StreakTracker'));
+const PatternDetector = lazy(() => import('../components/analytics/PatternDetector'));
+const TimelineView = lazy(() => import('../components/analytics/TimelineView'));
+const CorrelationExplorer = lazy(() => import('../components/analytics/CorrelationExplorer'));
+const WhatIfSimulator = lazy(() => import('../components/analytics/WhatIfSimulator'));
+const MilestoneTracker = lazy(() => import('../components/analytics/MilestoneTracker'));
+const DailySnapshot = lazy(() => import('../components/analytics/DailySnapshot'));
+const SleepRhythm = lazy(() => import('../components/analytics/SleepRhythm'));
+const AllTimeHistory = lazy(() => import('../components/AllTimeHistory'));
+
+const ViewLoadingFallback: React.FC = () => (
+    <div className="flex items-center justify-center gap-3 py-16 animate-fade-in">
+        <div className="h-4 w-4 rounded-full border-2 border-[rgba(0,0,0,0.10)] border-t-[#6B9E8A] animate-spin" />
+        <span className="text-sm text-[#7A756E]">Loading view...</span>
+    </div>
+);
 import { useAutoSync, formatLastSync } from '../hooks/useAutoSync';
 import { useWebhookRefresh } from '../hooks/useWebhookRefresh';
 import { useCompetitionInvitePreview } from '../hooks/useCompetitions';
@@ -1207,7 +1214,6 @@ const PersonalRecordsStrip: React.FC<{
     ]);
 
     const expandedCategory = categories.find(c => c.id === expandedId) ?? null;
-    if (categories.length === 0) return null;
 
     const [speedMultiplier, setSpeedMultiplier] = useState(1);
     const baseDuration = Math.min(1200, Math.max(500, categories.length * 14));
@@ -1255,6 +1261,8 @@ const PersonalRecordsStrip: React.FC<{
         if (anim) anim.play();
     }, []);
 
+    if (categories.length === 0) return null;
+
     const skipRecords = (direction: 'forward' | 'back') => {
         const track = trackRef.current;
         if (!track) return;
@@ -1279,8 +1287,8 @@ const PersonalRecordsStrip: React.FC<{
             <button
                 key={`${duplicate ? 'loop' : 'main'}-${cat.id}`}
                 type="button"
-                className={`record-chip stagger-${Math.min(idx + 1, 6)} animate-fade-in-up`}
-                style={{ animationFillMode: 'both', outline: isExpanded ? `2px solid ${cat.color}` : undefined, outlineOffset: isExpanded ? '1px' : undefined }}
+                className="record-chip"
+                style={{ outline: isExpanded ? `2px solid ${cat.color}` : undefined, outlineOffset: isExpanded ? '1px' : undefined }}
                 onClick={() => { if (dragRef.current.moved) return; setExpandedId(isExpanded ? null : cat.id); }}
                 tabIndex={duplicate ? -1 : 0}
                 aria-pressed={isExpanded}
@@ -2134,7 +2142,10 @@ const Dashboard: React.FC = () => {
                     ? LIVE_DAILY_STATS_REFETCH_MS
                     : (false as const),
                 refetchIntervalInBackground: false,
-                refetchOnWindowFocus: isLiveProfile ? ('always' as const) : true,
+                // Respect staleTime on focus: webhook signals and the 5-minute
+                // interval already keep the live profile fresh, so an app switch
+                // should not force a full Oura re-sync every time.
+                refetchOnWindowFocus: true,
             });
         })
     });
@@ -3498,6 +3509,7 @@ const Dashboard: React.FC = () => {
             <nav className="mobile-bottom-nav sm:hidden">
                 {[
                     { key: 'today', label: 'Today', icon: <CalendarDays className="w-5 h-5" /> },
+                    ...(profiles.length > 1 ? [{ key: 'compare', label: 'Compare', icon: <GitCompareArrows className="w-5 h-5" /> }] : []),
                     { key: 'compete', label: 'Compete', icon: <Swords className="w-5 h-5" /> },
                     { key: 'trends', label: 'Trends', icon: <BarChart3 className="w-5 h-5" /> },
                     { key: 'streaks', label: 'Streaks', icon: <Flame className="w-5 h-5" /> },
@@ -3508,6 +3520,7 @@ const Dashboard: React.FC = () => {
                         key={tab.key}
                         onClick={() => setViewMode(tab.key as any)}
                         className={`mobile-bottom-tab ${viewMode === tab.key ? 'active' : ''}`}
+                        aria-current={viewMode === tab.key ? 'page' : undefined}
                     >
                         {tab.icon}
                         <span>{tab.label}</span>
@@ -3968,13 +3981,15 @@ const Dashboard: React.FC = () => {
 
                 {/* ======== COMPETE VIEW ======== */}
                 {viewMode === 'compete' && (
-                    <CompeteView
-                        activeProfile={activeProfile}
-                        profiles={profiles}
-                        profileData={competitionProfileData}
-                        competitionInviteToken={competitionInviteToken}
-                        onClearCompetitionInviteToken={clearCompetitionInviteToken}
-                    />
+                    <Suspense fallback={<ViewLoadingFallback />}>
+                        <CompeteView
+                            activeProfile={activeProfile}
+                            profiles={profiles}
+                            profileData={competitionProfileData}
+                            competitionInviteToken={competitionInviteToken}
+                            onClearCompetitionInviteToken={clearCompetitionInviteToken}
+                        />
+                    </Suspense>
                 )}
 
                 {/* ======== TRENDS VIEW ======== */}
@@ -3996,17 +4011,21 @@ const Dashboard: React.FC = () => {
                             />
                         </div>
                         <TrendInsightsPanel profiles={profiles} userQueries={scopedAllTimeQueriesForHistory} />
-                        <AllTimeHistory profiles={profiles} userQueries={scopedAllTimeQueriesForHistory} />
+                        <Suspense fallback={<ViewLoadingFallback />}>
+                            <AllTimeHistory profiles={profiles} userQueries={scopedAllTimeQueriesForHistory} />
+                        </Suspense>
                     </div>
                 )}
 
                 {/* ======== STREAKS VIEW ======== */}
                 {viewMode === 'streaks' && (
                     <div className="pt-6">
-                        <StreakTracker
-                            profiles={profiles.map(p => ({ id: p.id, firstName: p.firstName, lastName: p.lastName, email: p.email }))}
-                            usersData={analysisUserQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))}
-                        />
+                        <Suspense fallback={<ViewLoadingFallback />}>
+                            <StreakTracker
+                                profiles={profiles.map(p => ({ id: p.id, firstName: p.firstName, lastName: p.lastName, email: p.email }))}
+                                usersData={analysisUserQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }))}
+                            />
+                        </Suspense>
                     </div>
                 )}
 
@@ -4014,7 +4033,13 @@ const Dashboard: React.FC = () => {
                 {viewMode === 'insights' && <InsightsView profiles={profiles} userQueries={analysisUserQueries} allTimeQueries={analysisAllTimeQueries} />}
 
                 {/* ======== EXPORT VIEW ======== */}
-                {viewMode === 'export' && <div className="pt-6"><DataExport /></div>}
+                {viewMode === 'export' && (
+                    <div className="pt-6">
+                        <Suspense fallback={<ViewLoadingFallback />}>
+                            <DataExport />
+                        </Suspense>
+                    </div>
+                )}
             </main>
         </div>
     );
@@ -4044,14 +4069,16 @@ const InsightsView: React.FC<{ profiles: any[]; userQueries: any[]; allTimeQueri
                 </div>
                 <div className="pointer-events-none absolute right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-[var(--bg-base)] to-transparent rounded-r" />
             </div>
-            {tab === 'rhythm' && <SleepRhythm profiles={profiles} usersData={historicalUsersData} />}
-            {tab === 'timeline' && <TimelineView profiles={profiles} usersData={recentUsersData} />}
-            {tab === 'correlation' && <CorrelationExplorer profiles={profiles} usersData={recentUsersData} />}
-            {tab === 'whatif' && <WhatIfSimulator profiles={profiles} usersData={historicalUsersData} />}
-            {tab === 'streaks' && <StreakTracker profiles={profiles} usersData={recentUsersData} />}
-            {tab === 'patterns' && <PatternDetector profiles={profiles} usersData={recentUsersData} />}
-            {tab === 'milestones' && <MilestoneTracker profiles={profiles} usersData={historicalUsersData} />}
-            {tab === 'snapshot' && <DailySnapshot profiles={profiles} usersData={recentUsersData} />}
+            <Suspense fallback={<ViewLoadingFallback />}>
+                {tab === 'rhythm' && <SleepRhythm profiles={profiles} usersData={historicalUsersData} />}
+                {tab === 'timeline' && <TimelineView profiles={profiles} usersData={recentUsersData} />}
+                {tab === 'correlation' && <CorrelationExplorer profiles={profiles} usersData={recentUsersData} />}
+                {tab === 'whatif' && <WhatIfSimulator profiles={profiles} usersData={historicalUsersData} />}
+                {tab === 'streaks' && <StreakTracker profiles={profiles} usersData={recentUsersData} />}
+                {tab === 'patterns' && <PatternDetector profiles={profiles} usersData={recentUsersData} />}
+                {tab === 'milestones' && <MilestoneTracker profiles={profiles} usersData={historicalUsersData} />}
+                {tab === 'snapshot' && <DailySnapshot profiles={profiles} usersData={recentUsersData} />}
+            </Suspense>
         </div>
     );
 };

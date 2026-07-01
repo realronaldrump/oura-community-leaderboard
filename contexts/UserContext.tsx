@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { UserProfile, AuthStatus } from '../types';
 import { createOAuthState, getAuthUrl, OAUTH_STATE_KEY, POST_AUTH_DESTINATION_KEY } from '../constants';
 import { ouraService } from '../services/ouraService';
@@ -99,7 +99,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const activeProfile = profiles.find(p => p.id === activeProfileId) || null;
 
-    const login = () => {
+    const login = useCallback(() => {
         setAuthStatus(AuthStatus.LOADING);
         const state = createOAuthState();
         localStorage.setItem(OAUTH_STATE_KEY, state);
@@ -108,9 +108,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             localStorage.setItem(POST_AUTH_DESTINATION_KEY, destination);
         }
         window.location.href = getAuthUrl(state);
-    };
+    }, []);
 
-    const addProfile = async (options: AddProfileOptions): Promise<UserProfile> => {
+    const addProfile = useCallback(async (options: AddProfileOptions): Promise<UserProfile> => {
         setAuthStatus(AuthStatus.LOADING);
         try {
             const { accessToken, refreshToken = null } = options;
@@ -183,21 +183,19 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setAuthStatus(AuthStatus.UNAUTHENTICATED);
             throw error;
         }
-    };
+    }, [setActiveProfileId]);
 
-    const removeProfile = async (id: string) => {
-        if (profiles.length <= 1) {
+    const removeProfile = useCallback(async (id: string) => {
+        if (profilesRef.current.length <= 1) {
             throw new Error('Cannot remove the only remaining profile.');
         }
         await firebaseService.deleteProfile(id);
         deleteProfileStats(id).catch(() => {});
-        if (activeProfileId === id) {
-            setActiveProfileId(null);
-        }
-    };
+        setActiveProfileIdState((current) => (current === id ? null : current));
+    }, []);
 
-    const updateProfileById = async (id: string, profileData: Partial<UserProfile>) => {
-        const profileToUpdate = profiles.find(p => p.id === id);
+    const updateProfileById = useCallback(async (id: string, profileData: Partial<UserProfile>) => {
+        const profileToUpdate = profilesRef.current.find(p => p.id === id);
         if (!profileToUpdate) return;
 
         const updatedProfile = {
@@ -207,12 +205,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         await firebaseService.saveProfile(updatedProfile);
-    };
+    }, []);
 
-    const updateProfile = async (profileData: Partial<UserProfile>) => {
+    const updateProfile = useCallback(async (profileData: Partial<UserProfile>) => {
         if (!activeProfileId) return;
         await updateProfileById(activeProfileId, profileData);
-    };
+    }, [activeProfileId, updateProfileById]);
 
     const isTokenExpiringSoon = (tokenExpiresAt?: string | null): boolean => {
         if (!tokenExpiresAt) return false;
@@ -253,7 +251,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, []);
 
     const markProfileSyncError = useCallback(async (profileId: string, error: unknown) => {
-        const profile = profiles.find((p) => p.id === profileId);
+        const profile = profilesRef.current.find((p) => p.id === profileId);
         if (!profile) return;
 
         const message = error instanceof Error ? error.message : 'Sync failed';
@@ -263,10 +261,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             lastSyncErrorAt: now,
             lastUpdated: now,
         });
-    }, [profiles]);
+    }, []);
 
     const markProfileSyncSuccess = useCallback(async (profileId: string) => {
-        const profile = profiles.find((p) => p.id === profileId);
+        const profile = profilesRef.current.find((p) => p.id === profileId);
         if (!profile) return;
 
         const nowMs = Date.now();
@@ -282,13 +280,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             lastSyncErrorAt: null,
             lastUpdated: now,
         });
-    }, [profiles]);
+    }, []);
 
     const getAccessTokenForProfile = useCallback(async (
         profileId: string,
         options?: { forceRefresh?: boolean }
     ): Promise<string> => {
-        const profile = profiles.find((p) => p.id === profileId);
+        const profile = profilesRef.current.find((p) => p.id === profileId);
         if (!profile) {
             throw new Error(`Profile not found: ${profileId}`);
         }
@@ -314,28 +312,48 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         refreshInFlightRef.current.set(profileId, refreshPromise);
         return refreshPromise;
-    }, [profiles, refreshProfileAccessToken, markProfileSyncError]);
+    }, [refreshProfileAccessToken, markProfileSyncError]);
+
+    const contextValue = useMemo<UserContextType>(() => ({
+        profiles,
+        activeProfileId,
+        activeProfile,
+        setActiveProfileId,
+        clearActiveProfileSelection,
+        addProfile,
+        removeProfile,
+        updateProfile,
+        updateProfileById,
+        getAccessTokenForProfile,
+        markProfileSyncSuccess,
+        markProfileSyncError,
+        authStatus,
+        login,
+        firebaseError,
+        isLoadingProfiles,
+        retryFirebaseConnection
+    }), [
+        profiles,
+        activeProfileId,
+        activeProfile,
+        setActiveProfileId,
+        clearActiveProfileSelection,
+        addProfile,
+        removeProfile,
+        updateProfile,
+        updateProfileById,
+        getAccessTokenForProfile,
+        markProfileSyncSuccess,
+        markProfileSyncError,
+        authStatus,
+        login,
+        firebaseError,
+        isLoadingProfiles,
+        retryFirebaseConnection
+    ]);
 
     return (
-        <UserContext.Provider value={{
-            profiles,
-            activeProfileId,
-            activeProfile,
-            setActiveProfileId,
-            clearActiveProfileSelection,
-            addProfile,
-            removeProfile,
-            updateProfile,
-            updateProfileById,
-            getAccessTokenForProfile,
-            markProfileSyncSuccess,
-            markProfileSyncError,
-            authStatus,
-            login,
-            firebaseError,
-            isLoadingProfiles,
-            retryFirebaseConnection
-        }}>
+        <UserContext.Provider value={contextValue}>
             {children}
         </UserContext.Provider>
     );

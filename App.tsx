@@ -1,9 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { UserProvider, useUser } from './contexts/UserContext';
 import Dashboard from './pages/Dashboard';
-import Settings from './pages/Settings';
 import AppDialog from './components/AppDialog';
+
+const Settings = lazy(() => import('./pages/Settings'));
+
+const PageLoadingFallback = () => (
+    <div className="min-h-screen flex items-center justify-center bg-[#F2EDE8]">
+        <div className="h-6 w-6 rounded-full border-2 border-[rgba(0,0,0,0.10)] border-t-[#6B9E8A] animate-spin" />
+    </div>
+);
 import { OAUTH_STATE_KEY, POST_AUTH_DESTINATION_KEY, REDIRECT_URI } from './constants';
 import { oauthService, OAuthRequestError } from './services/oauthService';
 import { competitionService } from './services/competitionService';
@@ -80,8 +87,12 @@ const Router = () => {
         return () => window.removeEventListener('popstate', handlePopState);
     }, []);
 
-    // Handle OAuth callback (authorization code flow)
+    // Handle OAuth callback (authorization code flow).
+    // The exchange must run exactly once: authorization codes are single-use,
+    // so re-running this effect would surface an invalid_grant error.
+    const oauthHandledRef = useRef(false);
     useEffect(() => {
+        if (oauthHandledRef.current) return;
         const params = new URLSearchParams(window.location.search);
         const oauthError = params.get('error');
         const oauthErrorDescription = params.get('error_description');
@@ -98,6 +109,7 @@ const Router = () => {
 
         const code = params.get('code');
         if (!code) return;
+        oauthHandledRef.current = true;
 
         const state = params.get('state');
         const redirectScopes = params.get('scope');
@@ -166,7 +178,9 @@ const Router = () => {
             });
     }, [addProfile]);
 
-    const routedPage = path === '/settings' ? <Settings /> : <Dashboard />;
+    const routedPage = path === '/settings'
+        ? <Suspense fallback={<PageLoadingFallback />}><Settings /></Suspense>
+        : <Dashboard />;
 
     return (
         <>

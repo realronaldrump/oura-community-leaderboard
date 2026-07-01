@@ -291,16 +291,16 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
 
     useEffect(() => {
         if (!isOpen) return;
-        const onPointer = (e: MouseEvent) => {
+        const onPointer = (e: PointerEvent) => {
             if (!rootRef.current?.contains(e.target as Node)) setIsOpen(false);
         };
         const onKey = (e: KeyboardEvent) => {
             if (e.key === 'Escape') setIsOpen(false);
         };
-        document.addEventListener('mousedown', onPointer);
+        document.addEventListener('pointerdown', onPointer);
         document.addEventListener('keydown', onKey);
         return () => {
-            document.removeEventListener('mousedown', onPointer);
+            document.removeEventListener('pointerdown', onPointer);
             document.removeEventListener('keydown', onKey);
         };
     }, [isOpen]);

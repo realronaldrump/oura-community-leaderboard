@@ -1,5 +1,4 @@
-import React, { useRef, useState } from 'react';
-import { useTilt } from '../hooks/useMousePosition';
+import React, { useState } from 'react';
 import { useHapticFeedback } from './ios';
 import { Info } from 'lucide-react';
 
@@ -15,7 +14,6 @@ interface MetricCardProps {
   color?: string;
   icon?: React.ReactNode;
   glowColor?: string;
-  tiltEnabled?: boolean;
   onClick?: () => void;
   metricType?: MetricType;
   showDrillDownIndicator?: boolean;
@@ -29,13 +27,10 @@ const MetricCard: React.FC<MetricCardProps> = ({
   color = '#2D2A26',
   icon,
   glowColor,
-  tiltEnabled = true,
   onClick,
   metricType,
   showDrillDownIndicator = false,
 }) => {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const { style: tiltStyle } = useTilt(cardRef as React.RefObject<HTMLElement>, 8);
   const { triggerHaptic } = useHapticFeedback();
   const [isPressed, setIsPressed] = useState(false);
 
@@ -52,11 +47,18 @@ const MetricCard: React.FC<MetricCardProps> = ({
 
   return (
     <div
-      ref={cardRef}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick();
+        }
+      } : undefined}
       className={`bg-white rounded-2xl border border-[rgba(0,0,0,0.06)] p-4 flex flex-col justify-between min-h-[96px] ${isPressed ? 'shadow-clay-inset' : 'shadow-clay-sm'} ${onClick ? 'cursor-pointer ios-card hover:shadow-clay hover:-translate-y-0.5' : ''} relative group/card transition-all duration-200`}
-      style={tiltEnabled ? tiltStyle : undefined}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
       onClick={onClick}
     >
       {/* Drill Down Indicator */}
@@ -108,4 +110,4 @@ const MetricCard: React.FC<MetricCardProps> = ({
   );
 };
 
-export default MetricCard;
+export default React.memo(MetricCard);

@@ -24,8 +24,8 @@ const PrimaryProfileSwitcher: React.FC<PrimaryProfileSwitcherProps> = ({
 
     const selectedProfile = profiles.find((p) => p.id === selectedProfileId);
 
-    // Close on outside click
-    const handleClickOutside = useCallback((event: MouseEvent) => {
+    // Close on outside interaction (pointerdown covers both mouse and touch)
+    const handleClickOutside = useCallback((event: PointerEvent) => {
         if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
             setIsOpen(false);
         }
@@ -38,11 +38,11 @@ const PrimaryProfileSwitcher: React.FC<PrimaryProfileSwitcherProps> = ({
 
     useEffect(() => {
         if (isOpen) {
-            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('pointerdown', handleClickOutside);
             document.addEventListener('keydown', handleKeyDown);
         }
         return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('pointerdown', handleClickOutside);
             document.removeEventListener('keydown', handleKeyDown);
         };
     }, [isOpen, handleClickOutside, handleKeyDown]);

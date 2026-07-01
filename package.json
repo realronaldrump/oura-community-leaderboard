@@ -15,7 +15,6 @@
     "@types/papaparse": "^5.5.2",
     "firebase": "^12.6.0",
     "firebase-admin": "^13.7.0",
-    "framer-motion": "^12.23.26",
     "html2canvas": "^1.4.1",
     "lucide-react": "^0.561.0",
     "papaparse": "^5.5.3",
