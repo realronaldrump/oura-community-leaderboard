@@ -5,11 +5,15 @@ import { Select } from './ui';
 
 interface PrimaryProfileSwitcherProps {
     className?: string;
+    label?: string;
+    labelClassName?: string;
     selectClassName?: string;
 }
 
 const PrimaryProfileSwitcher: React.FC<PrimaryProfileSwitcherProps> = ({
     className = '',
+    label = 'Active profile',
+    labelClassName = 'sr-only',
     selectClassName = '',
 }) => {
     const { profiles, activeProfileId, setActiveProfileId } = useUser();
@@ -23,12 +27,12 @@ const PrimaryProfileSwitcher: React.FC<PrimaryProfileSwitcherProps> = ({
 
     return (
         <label className={`profile-switcher ${className}`}>
-            <span className="sr-only">Active profile</span>
+            <span className={labelClassName}>{label}</span>
             <Select
                 value={selectedProfileId}
                 onChange={(event) => setActiveProfileId(event.target.value || null)}
                 className={`profile-switcher__select ${selectClassName}`}
-                aria-label="Active profile"
+                aria-label={label}
                 title="Switch active profile"
             >
                 {profiles.map((profile) => (

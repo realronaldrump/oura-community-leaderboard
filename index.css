@@ -2089,16 +2089,19 @@ select {
 
 .app-header__bar {
   display: flex;
+  flex-wrap: wrap;
   width: min(100%, var(--content-width));
   min-height: 3.75rem;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
+  column-gap: var(--space-3);
+  row-gap: var(--space-1);
   margin: 0 auto;
   padding: var(--space-2) var(--space-4);
 }
 
 .app-brand {
+  order: 1;
   display: inline-flex;
   min-width: 0;
   min-height: var(--touch-target);
@@ -2141,6 +2144,7 @@ select {
 .app-brand small { margin-top: 0.15rem; color: var(--color-ink-muted); font-size: 0.6875rem; line-height: 1.2; }
 
 .app-header__actions {
+  order: 2;
   display: flex;
   min-width: 0;
   align-items: center;
@@ -2148,7 +2152,25 @@ select {
   gap: var(--space-1);
 }
 
-.app-header__profile { display: none; }
+.app-header__profile {
+  order: 3;
+  display: grid;
+  flex: 0 0 100%;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.app-header__profile-label {
+  color: var(--color-ink-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.app-header__profile .profile-switcher__select {
+  width: 100%;
+  max-width: none;
+}
 
 .primary-nav {
   display: none;
@@ -2203,7 +2225,16 @@ select {
 .section-switcher .ui-segmented { max-width: 32rem; margin: 0 auto; }
 
 @media (min-width: 40rem) {
-  .app-header__profile { display: block; }
+  .app-header__bar { flex-wrap: nowrap; }
+  .app-header__profile {
+    order: 2;
+    display: inline-flex;
+    flex: 0 1 auto;
+    margin-left: auto;
+  }
+  .app-header__profile-label { display: none; }
+  .app-header__profile .profile-switcher__select { max-width: min(12rem, 42vw); }
+  .app-header__actions { order: 3; }
   .primary-nav { display: flex; }
   .section-switcher { top: calc(6.5rem + env(safe-area-inset-top)); margin: 0; border-bottom: 0; background: transparent; }
 }

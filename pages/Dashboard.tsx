@@ -3261,8 +3261,12 @@ const Dashboard: React.FC = () => {
                             <small>{formatLastSync(activeProfileLastSuccessfulSyncAt)}</small>
                         </span>
                     </button>
+                    <PrimaryProfileSwitcher
+                        className="app-header__profile"
+                        label="Viewing"
+                        labelClassName="app-header__profile-label"
+                    />
                     <div className="app-header__actions">
-                        <PrimaryProfileSwitcher className="app-header__profile" />
                         <Button
                             variant="quiet"
                             size="icon"
