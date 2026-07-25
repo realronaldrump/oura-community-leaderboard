@@ -1,5 +1,5 @@
 import { FULL_HISTORY_START_DATE, fetchDailyStats, mergeDailyStats, syncDailyStats } from '../hooks/useOuraData';
-import { clearProfileStats, saveIncrementalProfileStats } from './firestoreStatsService';
+import { saveProfileStats } from './firestoreStatsService';
 import { DailyStats } from '../types';
 import { getOuraFetchEndISODate } from '../utils/date';
 import { getOffsetIsoDay } from '../utils/temporal';
@@ -131,11 +131,6 @@ export const fullSync = async (
     const chunks = generateYearChunks(FULL_HISTORY_START_DATE, fetchEndDate);
     const totalSteps = chunks.length;
 
-    // Clear existing Firestore data first so stale records don't persist.
-    if (authContext.profileId) {
-        await clearProfileStats(authContext.profileId);
-    }
-
     let accumulated: DailyStats | undefined;
 
     for (let i = 0; i < chunks.length; i++) {
@@ -153,6 +148,7 @@ export const fullSync = async (
         const chunkData = await fetchDailyStats(token, { start, end }, {
             includeStaticCollections: isLast,
             fullHeartrate: true,
+            requireCompleteData: true,
             grantedScopes: authContext.grantedScopes,
             availabilityKey: authContext.availabilityKey,
             profileId: authContext.profileId,
@@ -160,13 +156,12 @@ export const fullSync = async (
         });
 
         accumulated = accumulated ? mergeDailyStats(accumulated, chunkData) : chunkData;
-
-        if (authContext.profileId) {
-            await saveIncrementalProfileStats(authContext.profileId, accumulated, chunkData);
-        }
     }
 
     const result = accumulated!;
+    if (authContext.profileId) {
+        await saveProfileStats(authContext.profileId, result, 'full');
+    }
     const coverage = describeCoverage(result);
     const details = coverage
         ? `${coverage.start} → ${coverage.end} (${coverage.days} days loaded)`

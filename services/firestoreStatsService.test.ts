@@ -4,6 +4,7 @@ import {
     buildProfileStatsDocuments,
     estimateSetOperationBytes,
     partitionSetOperations,
+    saveProfileStats,
 } from './firestoreStatsService';
 import { PROFILE_STATS_SCHEMA_VERSION } from './profileStatsConstants';
 import { DailyStats } from '../types';
@@ -230,5 +231,57 @@ describe('buildProfileStatsDocuments', () => {
         });
 
         expect(batches.map((batch) => batch.length)).toEqual([2, 2, 1]);
+    });
+
+    it('does not publish freshness metadata when a later replacement-data batch fails', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const commitOperations = vi.fn(async () => {
+            throw new Error('later data batch failed');
+        });
+        const pruneFullSnapshot = vi.fn(async () => {});
+        const stats: DailyStats = {
+            sleep: [{ id: 'sleep-1', day: '2026-04-18', score: 88, contributors: {} }],
+            readiness: [], activity: [], session: [], spo2: [], stress: [], resilience: [],
+            heartrate: [], workout: [], guidedSession: [], sleepTime: [], tag: [],
+            enhancedTag: [], restModePeriod: [], ringConfiguration: [],
+        };
+
+        await expect(saveProfileStats('profile-1', stats, 'full', {
+            commitOperations,
+            pruneFullSnapshot,
+        })).rejects.toThrow('later data batch failed');
+
+        expect(commitOperations).toHaveBeenCalledTimes(1);
+        expect(pruneFullSnapshot).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalled();
+        warn.mockRestore();
+    });
+
+    it('reconciles a successful full snapshot before publishing metadata', async () => {
+        const events: string[] = [];
+        const commitOperations = vi.fn(async (operations: Array<{ path: string[]; merge?: boolean }>) => {
+            const isMetadata = operations.length === 1 && operations[0].path.length === 2;
+            events.push(isMetadata ? 'metadata' : 'data');
+            if (!isMetadata) {
+                expect(operations.every((operation) => operation.merge === false)).toBe(true);
+            }
+        });
+        const pruneFullSnapshot = vi.fn(async () => {
+            events.push('prune');
+        });
+        const stats: DailyStats = {
+            sleep: [{ id: 'sleep-1', day: '2026-04-18', score: 88, contributors: {} }],
+            readiness: [], activity: [], session: [], spo2: [], stress: [], resilience: [],
+            heartrate: [], workout: [], guidedSession: [], sleepTime: [], tag: [],
+            enhancedTag: [], restModePeriod: [], ringConfiguration: [],
+        };
+
+        await saveProfileStats('profile-1', stats, 'full', {
+            commitOperations: commitOperations as any,
+            pruneFullSnapshot,
+        });
+
+        expect(events).toEqual(['data', 'prune', 'metadata']);
+        expect(pruneFullSnapshot).toHaveBeenCalledTimes(1);
     });
 });

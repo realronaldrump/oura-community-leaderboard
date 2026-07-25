@@ -22,8 +22,42 @@ type UnavailableReason = 'missing_scope' | 'not_found';
 
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_RETRIES = 2;
-const RETRY_BACKOFF_MS = [1_000, 3_000];
+const RETRY_BACKOFF_BASE_MS = 750;
+const MAX_RETRY_DELAY_MS = 30_000;
 const UNAVAILABLE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+export const getOuraRetryDelayMs = (
+  attempt: number,
+  retryAfter: string | null,
+  now: number = Date.now(),
+  random: () => number = Math.random
+): number => {
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    const retryAt = Date.parse(retryAfter);
+    const retryAfterMs = Number.isFinite(seconds) && seconds >= 0
+      ? seconds * 1000
+      : Number.isNaN(retryAt)
+        ? null
+        : Math.max(0, retryAt - now);
+    if (retryAfterMs != null) {
+      return Math.min(retryAfterMs, MAX_RETRY_DELAY_MS) + Math.floor(random() * 250);
+    }
+  }
+
+  const exponentialDelay = Math.min(
+    RETRY_BACKOFF_BASE_MS * (2 ** attempt),
+    MAX_RETRY_DELAY_MS
+  );
+  return exponentialDelay + Math.floor(random() * exponentialDelay);
+};
+
+export const sanitizeOuraErrorDetail = (detail: string): string => detail
+  .replace(/bearer\s+[^\s,}"']+/gi, 'Bearer [redacted]')
+  .replace(/((?:access|refresh)[_-]?token)["'=:\s]+[^\s,}"']+/gi, '$1=[redacted]')
+  .replace(/[A-Za-z0-9_-]{32,}/g, '[redacted]')
+  .trim()
+  .slice(0, 240);
 
 interface UnavailableEndpointState {
   reason: UnavailableReason;
@@ -37,6 +71,8 @@ interface UnavailableEntry {
 class OuraService {
   private unavailableEndpointsByAvailability = new Map<string, Map<string, UnavailableEndpointState>>();
   private endpointDiagnosticsByAvailability = new Map<string, Map<string, OuraEndpointDiagnostic>>();
+  private anonymousAvailabilityKeysByToken = new Map<string, string>();
+  private nextAnonymousAvailabilityKey = 1;
   private readonly unavailableCacheKey = 'oura_unavailable_endpoints_v5';
   private readonly maxWindowDays = 90;
   private readonly maxConcurrentWindowRequests = 2;
@@ -86,7 +122,15 @@ class OuraService {
     if (scopedKey) {
       return `profile:${scopedKey}`;
     }
-    return `token:${token.slice(0, 20)}`;
+
+    const existingKey = this.anonymousAvailabilityKeysByToken.get(token);
+    if (existingKey) return existingKey;
+
+    // Keep token-derived lookup state in memory only. Persisted and logged
+    // availability keys must never contain access-token material.
+    const anonymousKey = `anonymous:${this.nextAnonymousAvailabilityKey++}`;
+    this.anonymousAvailabilityKeysByToken.set(token, anonymousKey);
+    return anonymousKey;
   }
 
   private getEndpointLabel(endpoint: string): string {
@@ -201,7 +245,12 @@ class OuraService {
       if (!raw) return;
       const parsed = JSON.parse(raw) as Record<string, UnavailableEntry>;
       const now = Date.now();
+      let removedLegacyKey = false;
       Object.entries(parsed).forEach(([availabilityKey, entry]) => {
+        if (!availabilityKey.startsWith('profile:')) {
+          removedLegacyKey = true;
+          return;
+        }
         const endpoints = new Map<string, UnavailableEndpointState>();
         Object.entries(entry.endpoints || {}).forEach(([endpoint, state]) => {
           if (!state || typeof state !== 'object') return;
@@ -214,6 +263,7 @@ class OuraService {
           this.unavailableEndpointsByAvailability.set(availabilityKey, endpoints);
         }
       });
+      if (removedLegacyKey) this.persistUnavailableCache();
     } catch {
       // Ignore malformed cache.
     }
@@ -224,6 +274,7 @@ class OuraService {
     try {
       const payload: Record<string, UnavailableEntry> = {};
       this.unavailableEndpointsByAvailability.forEach((endpoints, availabilityKey) => {
+        if (!availabilityKey.startsWith('profile:')) return;
         payload[availabilityKey] = {
           endpoints: Object.fromEntries(endpoints.entries()),
         };
@@ -345,6 +396,32 @@ class OuraService {
     }
   }
 
+  private async fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+      try {
+        const response = await this.fetchWithTimeout(url, init);
+        const retryable =
+          response.status === 408 ||
+          response.status === 425 ||
+          response.status === 429 ||
+          response.status >= 500;
+        if (!retryable || attempt >= MAX_RETRIES) return response;
+
+        await new Promise((resolve) => setTimeout(
+          resolve,
+          getOuraRetryDelayMs(attempt, response.headers.get('Retry-After'))
+        ));
+      } catch (error) {
+        lastError = error;
+        if (attempt >= MAX_RETRIES) break;
+        await new Promise((resolve) => setTimeout(resolve, getOuraRetryDelayMs(attempt, null)));
+      }
+    }
+
+    throw lastError ?? new Error('Oura request failed');
+  }
+
   private async readErrorDetail(response: Response): Promise<string> {
     try {
       const raw = await response.text();
@@ -354,12 +431,13 @@ class OuraService {
         const parsed = JSON.parse(raw) as Record<string, unknown>;
         const detail = [parsed.detail, parsed.error, parsed.message]
           .find((value): value is string => typeof value === 'string' && value.trim().length > 0);
-        if (detail) return detail;
+        if (detail) return sanitizeOuraErrorDetail(detail);
       } catch {
-        // Fall back to the raw body below.
+        // Unstructured bodies are intentionally discarded: proxies can echo
+        // credentials, and this detail is later used in logs and errors.
       }
 
-      return raw;
+      return '';
     } catch {
       return '';
     }
@@ -450,14 +528,17 @@ class OuraService {
             { headers: this.getHeaders(token) },
           );
 
-          if (response.status === 429 && attempt < MAX_RETRIES) {
-            await new Promise(r => setTimeout(r, RETRY_BACKOFF_MS[attempt]));
-            response = undefined;
-            continue;
-          }
-
-          if (response.status >= 500 && attempt < MAX_RETRIES) {
-            await new Promise(r => setTimeout(r, RETRY_BACKOFF_MS[attempt]));
+          const shouldRetryResponse =
+            response.status === 408 ||
+            response.status === 425 ||
+            response.status === 429 ||
+            response.status >= 500;
+          if (shouldRetryResponse && attempt < MAX_RETRIES) {
+            const retryDelay = getOuraRetryDelayMs(
+              attempt,
+              response.headers.get('Retry-After')
+            );
+            await new Promise(r => setTimeout(r, retryDelay));
             response = undefined;
             continue;
           }
@@ -466,28 +547,30 @@ class OuraService {
         } catch (err) {
           lastError = err;
           if (attempt < MAX_RETRIES) {
-            await new Promise(r => setTimeout(r, RETRY_BACKOFF_MS[attempt]));
+            await new Promise(r => setTimeout(r, getOuraRetryDelayMs(attempt, null)));
             continue;
           }
         }
       }
 
       if (!response) {
+        const safeMessage = lastError instanceof Error
+          ? sanitizeOuraErrorDetail(lastError.message)
+          : 'Request timed out';
         if (optional) {
           this.setEndpointDiagnostic(
             availabilityKey,
             endpoint,
-            this.buildEndpointDiagnostic(endpoint, 'network', null, lastError instanceof Error ? lastError.message : String(lastError ?? 'Request timed out'))
+            this.buildEndpointDiagnostic(endpoint, 'network', null, safeMessage)
           );
-          return results;
         }
-        throw lastError ?? new Error(`Failed to fetch ${endpoint} data`);
+        throw new Error(`Failed to fetch ${endpoint} data: ${safeMessage || 'temporary network failure'}`);
       }
 
       if (!response.ok) {
         const detail = await this.readErrorDetail(response);
 
-        if (optional && [400, 401, 403, 404, 429].includes(response.status)) {
+        if (optional && [403, 404].includes(response.status)) {
           const code = this.optionalEndpointFailureCode(response.status, detail);
           this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
           if (code === 'missing_scope') {
@@ -567,12 +650,18 @@ class OuraService {
   }
 
   async getPersonalInfo(token: string): Promise<UserProfile> {
-    const response = await fetch(`${API_BASE_URL}/personal_info`, {
-      headers: this.getHeaders(token),
-    });
+    let response: Response;
+    try {
+      response = await this.fetchWithRetry(`${API_BASE_URL}/personal_info`, {
+        headers: this.getHeaders(token),
+      });
+    } catch {
+      throw new Error('Failed to fetch personal info: temporary Oura network failure');
+    }
     if (!response.ok) {
       if (response.status === 401) throw new Error('Unauthorized');
-      throw new Error('Failed to fetch personal info');
+      const detail = await this.readErrorDetail(response);
+      throw new Error(`Failed to fetch personal info${detail ? `: ${detail}` : ''}`);
     }
     return response.json();
   }

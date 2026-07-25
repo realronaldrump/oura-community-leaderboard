@@ -187,7 +187,7 @@ const handleEvent = async (req: any, res: any) => {
         return;
     }
 
-    let rawBody = '';
+    let rawBody: string;
     try {
         rawBody = await readRawBody(req);
     } catch (error) {

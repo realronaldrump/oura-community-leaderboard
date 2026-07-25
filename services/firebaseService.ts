@@ -4,13 +4,16 @@ import {
     doc,
     setDoc,
     deleteDoc,
+    getDoc,
     getDocs,
     onSnapshot,
     QuerySnapshot,
-    DocumentData
+    DocumentData,
+    runTransaction,
 } from "firebase/firestore";
 import { db } from "./firebaseConfig";
 import { UserProfile, WebhookSignal } from "../types";
+import type { TokenRotationPatch, TokenRotationResult } from "./ouraTokenLifecycle";
 
 const PROFILES_COLLECTION = "profiles";
 const WEBHOOK_SIGNALS_COLLECTION = "webhookSignals";
@@ -56,6 +59,14 @@ export const firebaseService = {
     },
 
     /**
+     * Read the latest profile document before a single-use token refresh.
+     */
+    getProfile: async (id: string): Promise<UserProfile | null> => {
+        const snapshot = await getDoc(doc(db, PROFILES_COLLECTION, id));
+        return snapshot.exists() ? snapshot.data() as UserProfile : null;
+    },
+
+    /**
      * Save or update a profile
      */
     saveProfile: async (profile: UserProfile): Promise<void> => {
@@ -77,6 +88,36 @@ export const firebaseService = {
             console.error("Error patching profile in Firebase:", error);
             throw error;
         }
+    },
+
+    /**
+     * Persist rotated credentials only if the refresh token used to obtain them
+     * is still current. This prevents a delayed tab from overwriting a newer
+     * rotation without adding fields to the profile document contract.
+     */
+    persistRotatedProfileTokens: async (
+        id: string,
+        expectedRefreshToken: string,
+        patch: TokenRotationPatch
+    ): Promise<TokenRotationResult> => {
+        return runTransaction(db, async (transaction) => {
+            const profileRef = doc(db, PROFILES_COLLECTION, id);
+            const snapshot = await transaction.get(profileRef);
+            if (!snapshot.exists()) {
+                throw new Error('profile_not_found');
+            }
+
+            const current = snapshot.data() as UserProfile;
+            if (current.refreshToken !== expectedRefreshToken) {
+                return { status: 'conflict', profile: current };
+            }
+
+            transaction.set(profileRef, patch, { merge: true });
+            return {
+                status: 'updated',
+                profile: { ...current, ...patch },
+            };
+        });
     },
 
     /**

@@ -2,12 +2,15 @@ import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import { postOuraTokenRequest, sanitizeOuraTokenError } from './api/_lib/ouraTokenRequest';
 
-const OURA_TOKEN_URL = 'https://api.ouraring.com/oauth/token';
+const DEFAULT_OURA_CLIENT_ID = '92e4c379-b278-4c42-a7c0-db088b67680f';
 
 const sendJson = (res: ServerResponse, status: number, payload: Record<string, unknown>) => {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
   res.end(JSON.stringify(payload));
 };
 
@@ -50,37 +53,13 @@ const parseScopes = (scope: unknown): string[] =>
     ? scope.split(/[ ,]+/).map((s) => s.trim()).filter(Boolean)
     : [];
 
-const mapOAuthTokenResponse = (tokenJson: any, fallbackRefreshToken: string | null = null) => ({
+const mapOAuthTokenResponse = (tokenJson: any) => ({
   accessToken: tokenJson?.access_token || null,
-  refreshToken: tokenJson?.refresh_token || fallbackRefreshToken,
+  refreshToken: tokenJson?.refresh_token || null,
   expiresInSeconds: tokenJson?.expires_in || null,
   grantedScopes: parseScopes(tokenJson?.scope),
   tokenType: tokenJson?.token_type || null,
 });
-
-const postToOuraTokenApi = async (tokenBody: URLSearchParams): Promise<{ ok: boolean; status: number; payload: any }> => {
-  const response = await fetch(OURA_TOKEN_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: tokenBody.toString(),
-  });
-
-  const raw = await response.text();
-  let payload: any = {};
-  try {
-    payload = raw ? JSON.parse(raw) : {};
-  } catch {
-    payload = { raw };
-  }
-
-  return {
-    ok: response.ok,
-    status: response.status,
-    payload,
-  };
-};
 
 const createDevOAuthPlugin = (env: Record<string, string>): Plugin => ({
   name: 'dev-oura-oauth-routes',
@@ -97,12 +76,12 @@ const createDevOAuthPlugin = (env: Record<string, string>): Plugin => ({
         return;
       }
 
-      const clientId = env.OURA_CLIENT_ID;
+      const clientId = env.OURA_CLIENT_ID || env.VITE_OURA_CLIENT_ID || DEFAULT_OURA_CLIENT_ID;
       const clientSecret = env.OURA_CLIENT_SECRET;
-      if (!clientId || !clientSecret) {
+      if (!clientSecret) {
         sendJson(res, 500, {
           error: 'missing_oauth_config',
-          details: 'Set OURA_CLIENT_ID and OURA_CLIENT_SECRET in your local environment.',
+          details: 'Set OURA_CLIENT_SECRET in your local environment (OURA_CLIENT_ID is optional).',
         });
         return;
       }
@@ -140,11 +119,11 @@ const createDevOAuthPlugin = (env: Record<string, string>): Plugin => ({
             client_secret: clientSecret,
           });
 
-          const tokenResponse = await postToOuraTokenApi(tokenBody);
+          const tokenResponse = await postOuraTokenRequest(tokenBody);
           if (!tokenResponse.ok) {
             sendJson(res, tokenResponse.status, {
               error: 'token_exchange_failed',
-              details: tokenResponse.payload,
+              details: sanitizeOuraTokenError(tokenResponse.payload),
             });
             return;
           }
@@ -166,16 +145,16 @@ const createDevOAuthPlugin = (env: Record<string, string>): Plugin => ({
           client_secret: clientSecret,
         });
 
-        const tokenResponse = await postToOuraTokenApi(tokenBody);
+        const tokenResponse = await postOuraTokenRequest(tokenBody);
         if (!tokenResponse.ok) {
           sendJson(res, tokenResponse.status, {
             error: 'refresh_failed',
-            details: tokenResponse.payload,
+            details: sanitizeOuraTokenError(tokenResponse.payload),
           });
           return;
         }
 
-        sendJson(res, 200, mapOAuthTokenResponse(tokenResponse.payload, refreshToken));
+        sendJson(res, 200, mapOAuthTokenResponse(tokenResponse.payload));
       } catch (error) {
         sendJson(res, 500, {
           error: 'server_error',
@@ -219,10 +198,6 @@ export default defineConfig(({ mode }) => {
           },
         },
       },
-    },
-    define: {
-      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
     },
     resolve: {
       alias: {

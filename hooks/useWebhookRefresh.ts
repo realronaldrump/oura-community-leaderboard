@@ -125,12 +125,13 @@ export const useWebhookRefresh = (profile: UserProfile | null, enabled: boolean 
 
         let cancelled = false;
         const now = Date.now();
-        let lastChecked = 0;
-        try {
-            lastChecked = Number(localStorage.getItem(WEBHOOK_SETUP_CHECK_KEY) || '0');
-        } catch {
-            lastChecked = 0;
-        }
+        const lastChecked = (() => {
+            try {
+                return Number(localStorage.getItem(WEBHOOK_SETUP_CHECK_KEY) || '0');
+            } catch {
+                return 0;
+            }
+        })();
 
         if (lastChecked && now - lastChecked < WEBHOOK_SETUP_CHECK_INTERVAL_MS) {
             return;

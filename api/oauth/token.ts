@@ -1,4 +1,5 @@
-const OURA_TOKEN_URL = 'https://api.ouraring.com/oauth/token';
+import { postOuraTokenRequest, sanitizeOuraTokenError } from '../_lib/ouraTokenRequest.js';
+
 const DEFAULT_OURA_CLIENT_ID = '92e4c379-b278-4c42-a7c0-db088b67680f';
 
 const getOAuthConfig = (): { clientId: string; clientSecret: string } | null => {
@@ -16,7 +17,11 @@ const getOAuthConfig = (): { clientId: string; clientSecret: string } | null => 
 };
 
 const sendJson = (res: any, status: number, payload: Record<string, unknown>) => {
-    res.status(status).setHeader('Content-Type', 'application/json').send(JSON.stringify(payload));
+    res.status(status);
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Pragma', 'no-cache');
+    res.send(JSON.stringify(payload));
 };
 
 export default async function handler(req: any, res: any) {
@@ -57,26 +62,13 @@ export default async function handler(req: any, res: any) {
             client_secret: clientSecret,
         });
 
-        const tokenResponse = await fetch(OURA_TOKEN_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: tokenBody.toString(),
-        });
-
-        const raw = await tokenResponse.text();
-        let tokenJson: any = {};
-        try {
-            tokenJson = raw ? JSON.parse(raw) : {};
-        } catch {
-            tokenJson = { raw };
-        }
+        const tokenResponse = await postOuraTokenRequest(tokenBody);
+        const tokenJson = tokenResponse.payload;
 
         if (!tokenResponse.ok) {
             sendJson(res, tokenResponse.status, {
                 error: 'token_exchange_failed',
-                details: tokenJson,
+                details: sanitizeOuraTokenError(tokenJson),
             });
             return;
         }

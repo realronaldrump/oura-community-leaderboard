@@ -204,7 +204,7 @@ export default async function handler(req: any, res: any) {
         return;
     }
 
-    let callbackUrl = '';
+    let callbackUrl: string;
     try {
         callbackUrl = normalizeCallbackUrl(`${resolveServerOrigin(req)}/api/webhook/oura`);
     } catch (error: any) {

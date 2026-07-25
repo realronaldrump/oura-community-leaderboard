@@ -17,6 +17,7 @@ const INCREMENTAL_OVERLAP_DAYS = 3;
 type FetchConfig = {
     includeStaticCollections?: boolean;
     fullHeartrate?: boolean;
+    requireCompleteData?: boolean;
     grantedScopes?: string[];
     availabilityKey?: string;
     profileId?: string;
@@ -299,17 +300,26 @@ export const fetchDailyStats = async (
         canFetchHeartHealth ? ouraService.getDailyCardiovascularAge(token, start, end, { availabilityKey }) : Promise.resolve([]),
         canFetchHeartHealth ? ouraService.getVO2Max(token, start, end, { availabilityKey }) : Promise.resolve([]),
     ];
+    const supplementaryNames = [
+        'spo2', 'stress', 'resilience', 'heartrate', 'workout', 'guidedSession',
+        'sleepTime', 'tag', 'enhancedTag', 'restModePeriod', 'ringConfiguration',
+        'cardiovascularAge', 'vo2Max'
+    ];
 
     const suppSettled = await Promise.allSettled(supplementaryRequests);
+    if (config.requireCompleteData) {
+        const failedNames = suppSettled.flatMap((result, index) =>
+            result.status === 'rejected' ? [supplementaryNames[index]] : []
+        );
+        if (failedNames.length > 0) {
+            throw new Error(`Supplementary data fetch failed (${failedNames.join(', ')})`);
+        }
+    }
     const [
         spo2, stress, resilience, heartrate, workout, guidedSession,
         sleepTime, tag, enhancedTag, restModePeriod, ringConfiguration,
         cardiovascularAge, vo2Max
-    ] = resolveSettled(suppSettled, [
-        'spo2', 'stress', 'resilience', 'heartrate', 'workout', 'guidedSession',
-        'sleepTime', 'tag', 'enhancedTag', 'restModePeriod', 'ringConfiguration',
-        'cardiovascularAge', 'vo2Max'
-    ]);
+    ] = resolveSettled(suppSettled, supplementaryNames);
     const resilienceSettled = suppSettled[2];
 
     const resilienceDiagnostic = !canFetchResilience
@@ -431,7 +441,7 @@ export const syncDailyStats = async (
 
     // Persist only the changed slice so dashboard queries do not block on full-history rewrites.
     if (profileId) {
-        void saveIncrementalProfileStats(profileId, result, delta);
+        await saveIncrementalProfileStats(profileId, result, delta);
     }
 
     return result;

@@ -69,7 +69,11 @@ type BuiltProfileStatsDocuments = {
 type BuiltProfileStatsSliceDocuments = Omit<BuiltProfileStatsDocuments, 'metadata'>;
 
 type FirestoreDocumentPath = [string, string, ...string[]];
-type FirestoreSetOperation = { path: FirestoreDocumentPath; data: unknown };
+type FirestoreSetOperation = {
+    path: FirestoreDocumentPath;
+    data: unknown;
+    merge?: boolean;
+};
 type PartitionOptions = {
     maxOperations?: number;
     maxBytes?: number;
@@ -322,6 +326,7 @@ export const buildIncrementalProfileStatsDocuments = (
 const normalizeSetOperation = (operation: FirestoreSetOperation): FirestoreSetOperation => ({
     path: operation.path,
     data: stripUndefinedDeep(operation.data),
+    merge: operation.merge,
 });
 
 export const estimateSetOperationBytes = (operation: FirestoreSetOperation): number => {
@@ -380,7 +385,12 @@ const commitOperationBatch = async (operations: FirestoreSetOperation[]): Promis
     const batch = writeBatch(db);
     operations.forEach((operation) => {
         const [collectionPath, documentPath, ...pathSegments] = operation.path;
-        batch.set(doc(db, collectionPath, documentPath, ...pathSegments), operation.data, { merge: true });
+        const documentRef = doc(db, collectionPath, documentPath, ...pathSegments);
+        if (operation.merge === false) {
+            batch.set(documentRef, operation.data);
+        } else {
+            batch.set(documentRef, operation.data, { merge: true });
+        }
     });
     await batch.commit();
 };
@@ -419,6 +429,46 @@ const deleteKnownStatsCollection = async (profileId: string, collectionName: str
     }
 };
 
+const deleteUnexpectedStatsDocuments = async (
+    profileId: string,
+    collectionName: string,
+    expectedDocumentIds: Set<string>
+): Promise<void> => {
+    const snapshot = await getDocs(collection(db, PROFILE_STATS_COLLECTION, profileId, collectionName));
+    const obsoleteDocuments = snapshot.docs.filter((document) => !expectedDocumentIds.has(document.id));
+    for (let index = 0; index < obsoleteDocuments.length; index += 450) {
+        const batch = writeBatch(db);
+        obsoleteDocuments.slice(index, index + 450).forEach((document) => batch.delete(document.ref));
+        await batch.commit();
+    }
+};
+
+const pruneFullProfileStats = async (
+    profileId: string,
+    built: BuiltProfileStatsDocuments
+): Promise<void> => {
+    const expectedByCollection = new Map<string, Set<string>>([
+        [DAYS_COLLECTION, new Set(built.days.map((day) => day.day))],
+        [HEART_RATE_DAYS_COLLECTION, new Set(built.heartRateDays.map((day) => day.day))],
+    ]);
+    Object.entries(built.rawCollections).forEach(([collectionName, items]) => {
+        expectedByCollection.set(
+            collectionName,
+            new Set(items.map((item, index) => toDocumentId(item, index)))
+        );
+    });
+
+    await Promise.all(Array.from(expectedByCollection.entries()).map(
+        ([collectionName, expectedDocumentIds]) =>
+            deleteUnexpectedStatsDocuments(profileId, collectionName, expectedDocumentIds)
+    ));
+};
+
+type SaveProfileStatsDependencies = {
+    commitOperations?: (operations: FirestoreSetOperation[]) => Promise<void>;
+    pruneFullSnapshot?: (profileId: string, built: BuiltProfileStatsDocuments) => Promise<void>;
+};
+
 export const clearProfileStats = async (profileId: string): Promise<void> => {
     try {
         await Promise.all([
@@ -430,49 +480,61 @@ export const clearProfileStats = async (profileId: string): Promise<void> => {
         ]);
     } catch (error) {
         logSharedStatsWarning('clear', profileId, error);
+        throw error;
     }
 };
 
 export const saveProfileStats = async (
     profileId: string,
     data: DailyStats,
-    mode: SyncMode = 'incremental'
+    mode: SyncMode = 'incremental',
+    dependencies: SaveProfileStatsDependencies = {}
 ): Promise<void> => {
     try {
-        if (mode === 'full') {
-            await clearProfileStats(profileId);
-        }
-
         const built = buildProfileStatsDocuments(profileId, data, mode);
-        const operations: Array<{ path: FirestoreDocumentPath; data: unknown }> = [
-            {
-                path: [PROFILE_STATS_COLLECTION, profileId] as FirestoreDocumentPath,
-                data: built.metadata,
-            },
+        const commitOperations = dependencies.commitOperations ?? commitSetOperations;
+        const pruneFullSnapshot = dependencies.pruneFullSnapshot ?? pruneFullProfileStats;
+        const dataOperations: FirestoreSetOperation[] = [
             ...built.days.map((day) => ({
                 path: [PROFILE_STATS_COLLECTION, profileId, DAYS_COLLECTION, day.day] as FirestoreDocumentPath,
                 data: day,
+                merge: mode !== 'full',
             })),
             ...built.heartRateDays.map((heartRateDay) => ({
                 path: [PROFILE_STATS_COLLECTION, profileId, HEART_RATE_DAYS_COLLECTION, heartRateDay.day] as FirestoreDocumentPath,
                 data: heartRateDay,
+                merge: mode !== 'full',
             })),
         ];
 
         Object.entries(built.rawCollections).forEach(([collectionName, items]) => {
             items.forEach((item, index) => {
-                operations.push({
+                dataOperations.push({
                     path: [PROFILE_STATS_COLLECTION, profileId, collectionName, toDocumentId(item, index)] as FirestoreDocumentPath,
                     data: isRecord(item)
                         ? { ...item, updatedAt: built.metadata.updatedAt }
                         : { value: item, updatedAt: built.metadata.updatedAt },
+                    merge: mode !== 'full',
                 });
             });
         });
 
-        await commitSetOperations(operations);
+        // Commit replacement data first, prune only after every replacement
+        // write succeeds, then publish freshness metadata last. A failure at
+        // any point leaves the previous metadata intact and is surfaced to the
+        // caller instead of reporting a false successful sync.
+        await commitOperations(dataOperations);
+        if (mode === 'full') {
+            await pruneFullSnapshot(profileId, built);
+        }
+        await commitOperations([{
+            path: [PROFILE_STATS_COLLECTION, profileId] as FirestoreDocumentPath,
+            data: built.metadata,
+            merge: true,
+        }]);
     } catch (error) {
         logSharedStatsWarning('save', profileId, error);
+        throw error;
     }
 };
 
@@ -483,11 +545,7 @@ export const saveIncrementalProfileStats = async (
 ): Promise<void> => {
     try {
         const built = buildIncrementalProfileStatsDocuments(profileId, mergedData, deltaData);
-        const operations: Array<{ path: FirestoreDocumentPath; data: unknown }> = [
-            {
-                path: [PROFILE_STATS_COLLECTION, profileId] as FirestoreDocumentPath,
-                data: built.metadata,
-            },
+        const dataOperations: FirestoreSetOperation[] = [
             ...built.days.map((day) => ({
                 path: [PROFILE_STATS_COLLECTION, profileId, DAYS_COLLECTION, day.day] as FirestoreDocumentPath,
                 data: day,
@@ -500,7 +558,7 @@ export const saveIncrementalProfileStats = async (
 
         Object.entries(built.rawCollections).forEach(([collectionName, items]) => {
             items.forEach((item, index) => {
-                operations.push({
+                dataOperations.push({
                     path: [PROFILE_STATS_COLLECTION, profileId, collectionName, toDocumentId(item, index)] as FirestoreDocumentPath,
                     data: isRecord(item)
                         ? { ...item, updatedAt: built.metadata.updatedAt }
@@ -509,9 +567,15 @@ export const saveIncrementalProfileStats = async (
             });
         });
 
-        await commitSetOperations(operations);
+        await commitSetOperations(dataOperations);
+        await commitSetOperations([{
+            path: [PROFILE_STATS_COLLECTION, profileId] as FirestoreDocumentPath,
+            data: built.metadata,
+            merge: true,
+        }]);
     } catch (error) {
         logSharedStatsWarning('incremental save', profileId, error);
+        throw error;
     }
 };
 
@@ -589,5 +653,6 @@ export const deleteProfileStats = async (profileId: string): Promise<void> => {
         await deleteDoc(doc(db, PROFILE_STATS_COLLECTION, profileId));
     } catch (error) {
         logSharedStatsWarning('delete', profileId, error);
+        throw error;
     }
 };

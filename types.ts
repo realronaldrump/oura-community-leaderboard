@@ -1,6 +1,17 @@
 import { formatRecordLocalClockTime } from './utils/temporal';
 import type { ProfileOffsetSource } from './utils/temporal';
 
+export interface ProfileChallenge {
+  id: string;
+  challengeId: string;
+  userId: string;
+  startDate: string;
+  endDate: string;
+  status: 'active' | 'completed' | 'failed';
+  progress: number;
+  history: Record<string, boolean>;
+}
+
 export interface UserProfile {
   id: string;
   ouraUserId?: string | null;
@@ -23,24 +34,7 @@ export interface UserProfile {
   lastKnownOffsetObservedAt?: string | null;
   lastKnownOffsetSource?: ProfileOffsetSource | null;
   dataExclusionRanges?: DataExclusionRange[];
-  activeChallenges?: any[]; // using any[] temporarilly to avoid circular dependency, or better yet, define a minimal type here or import if possible.
-  // Actually, let's keep it simple and just use an array of objects that match the structure we know, 
-  // or define the structure here if we can't import `UserChallenge` easily without cycles.
-  // `types.ts` is base. `analyticsTypes.ts` imports from it. So we cannot import `UserChallenge` from `analyticsTypes` here.
-  // We will define a simplified version or just use `any[]` and cast it in usage, OR move UserProfile to a separate file that can import both?
-  // Moving UserProfile is too big of a refactor.
-  // We'll define a minimal interface here or just use `Record<string, any>[]` effectively.
-  // Let's copy the structure of UserChallenge here to stay type-safe without import cycles.
-  challenges?: Array<{
-    id: string;
-    challengeId: string;
-    userId: string;
-    startDate: string;
-    endDate: string;
-    status: 'active' | 'completed' | 'failed';
-    progress: number;
-    history: Record<string, boolean>;
-  }>;
+  challenges?: ProfileChallenge[];
 }
 
 export interface DataExclusionRange {

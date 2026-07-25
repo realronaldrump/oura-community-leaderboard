@@ -1,5 +1,7 @@
 import { REDIRECT_URI } from '../constants';
 
+const REQUEST_TIMEOUT_MS = 20_000;
+
 export interface OAuthTokenResponse {
     accessToken: string;
     refreshToken: string | null;
@@ -28,20 +30,37 @@ const parseResponseBody = async (response: Response): Promise<Record<string, unk
 
     try {
         const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : { raw };
+        return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
     } catch {
-        return { raw };
+        // Never retain an unstructured OAuth body in a client-visible error;
+        // upstream proxies can echo credential material.
+        return {};
     }
 };
 
 const postJson = async <T>(url: string, body: Record<string, unknown>): Promise<T> => {
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let response: Response;
+    try {
+        response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+        });
+    } catch (error) {
+        const timedOut = error instanceof Error && error.name === 'AbortError';
+        throw new OAuthRequestError(
+            timedOut ? 'request_timeout' : 'network_error',
+            0,
+            null
+        );
+    } finally {
+        clearTimeout(timeout);
+    }
 
     const payload = await parseResponseBody(response);
     if (!response.ok) {
@@ -54,12 +73,17 @@ const postJson = async <T>(url: string, body: Record<string, unknown>): Promise<
 export const oauthService = {
     exchangeCodeForTokens: async (code: string, redirectUri: string = REDIRECT_URI): Promise<OAuthTokenResponse> => {
         const payload = await postJson<OAuthTokenResponse>('/api/oauth/token', { code, redirectUri });
-        if (!payload?.accessToken || typeof payload.accessToken !== 'string') {
+        if (
+            !payload?.accessToken ||
+            typeof payload.accessToken !== 'string' ||
+            !payload.refreshToken ||
+            typeof payload.refreshToken !== 'string'
+        ) {
             throw new OAuthRequestError(
                 'invalid_token_response',
                 502,
-                payload,
-                'OAuth token response missing accessToken.'
+                null,
+                'OAuth token response missing required credentials.'
             );
         }
         return payload;
@@ -71,7 +95,7 @@ export const oauthService = {
             throw new OAuthRequestError(
                 'invalid_refresh_response',
                 502,
-                payload,
+                null,
                 'OAuth refresh response missing accessToken.'
             );
         }

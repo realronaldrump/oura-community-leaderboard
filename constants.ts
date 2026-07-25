@@ -1,5 +1,5 @@
 
-export const CLIENT_ID = '92e4c379-b278-4c42-a7c0-db088b67680f';
+export const CLIENT_ID = import.meta.env.VITE_OURA_CLIENT_ID || '92e4c379-b278-4c42-a7c0-db088b67680f';
 
 export const REDIRECT_URI = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
 export const OAUTH_STATE_KEY = 'oura_oauth_state_v1';
@@ -31,7 +31,9 @@ export const getAuthUrl = (state: string) => {
 };
 
 export const createOAuthState = (): string => {
-  const randomPart = Math.random().toString(36).slice(2, 12);
+  const randomBytes = new Uint8Array(24);
+  crypto.getRandomValues(randomBytes);
+  const randomPart = Array.from(randomBytes, (value) => value.toString(16).padStart(2, '0')).join('');
   const timestampPart = Date.now().toString(36);
   return `${timestampPart}.${randomPart}`;
 };
