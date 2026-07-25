@@ -24,3 +24,8 @@ dist-ssr
 *.sw?
 
 .vercel
+
+# Local verification output. Screenshots and reports can contain real member
+# names and health metrics, so they must never enter source control.
+artifacts/
+coverage/
