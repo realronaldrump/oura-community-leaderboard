@@ -1,4 +1,4 @@
-import { formatDuration, DailyStats, SleepSession } from '../types';
+import { DailyStats, SleepSession } from '../types';
 import {
     CompetitionMetricDefinition,
     CompetitionMetricId,

@@ -5,7 +5,6 @@ import {
 } from 'recharts';
 
 import { getProfileDisplayName } from '../utils/profileName';
-import { formatISODateForDisplay } from '../utils/date';
 import { getUTCDateFromISODate } from '../utils/temporal';
 
 interface AllTimeHistoryProps {
@@ -158,16 +157,11 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
         const sorted = [...filteredData];
 
         sorted.sort((a, b) => {
-            let primary = 0;
-
-            if (sortField === 'date') {
-                primary = a.dateStr.localeCompare(b.dateStr);
-            } else if (sortField === 'userName') {
-                primary = compareNames(a.userName, b.userName);
-            } else {
-                const numericField: Extract<SortField, 'sleep' | 'readiness' | 'activity' | 'average'> = sortField;
-                primary = a[numericField] - b[numericField];
-            }
+            const primary = sortField === 'date'
+                ? a.dateStr.localeCompare(b.dateStr)
+                : sortField === 'userName'
+                    ? compareNames(a.userName, b.userName)
+                    : a[sortField] - b[sortField];
 
             if (primary !== 0) {
                 return direction * primary;
@@ -213,11 +207,11 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
             </svg>
         );
         return sortDirection === 'asc' ? (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="inline ml-1 text-accent-cyan align-[-1px]">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="inline ml-1 text-accent align-[-1px]">
                 <path d="M6 2L9 6H3L6 2Z" fill="currentColor" />
             </svg>
         ) : (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="inline ml-1 text-accent-cyan align-[-1px]">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="inline ml-1 text-accent align-[-1px]">
                 <path d="M6 10L3 6H9L6 10Z" fill="currentColor" />
             </svg>
         );
@@ -326,24 +320,16 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
         const allTimeWorst = Math.min(...values);
         const bestDisplay = formatScoreStat(allTimeBest);
         const worstDisplay = formatScoreStat(allTimeWorst);
-        const metricLabel = chartMetric.charAt(0).toUpperCase() + chartMetric.slice(1);
-
-        const parts: string[] = [];
-        parts.push(`Your all-time ${metricLabel.toLowerCase()} average is ${allTimeAvg}`);
+        const parts: string[] = [`Visible-series average: ${allTimeAvg}`];
 
         if (values.length >= 14) {
             const diff = recentAvg - allTimeAvg;
-            if (diff > 5) parts.push(`and your recent week (${recentAvg}) is well above your baseline — you're in a great stretch right now`);
-            else if (diff > 3) parts.push(`and your recent week (${recentAvg}) is trending above that — nice improvement`);
-            else if (diff < -5) parts.push(`but your recent week (${recentAvg}) is noticeably below your baseline. Consider whether sleep, stress, or activity patterns have shifted`);
-            else if (diff < -3) parts.push(`but your recent week (${recentAvg}) is a bit below. Small adjustments to your routine could help`);
-            else parts.push(`and you've been right around that lately (${recentAvg}) — steady consistency`);
+            parts.push(`Recent ${recentCount} points: ${recentAvg} (${diff > 0 ? '+' : ''}${diff})`);
         }
 
-        // Add range context for everyday users
         const range = allTimeBest - allTimeWorst;
         if (range > 0) {
-            parts.push(`Your scores have ranged from ${worstDisplay} to ${bestDisplay} across ${values.length} days`);
+            parts.push(`Range: ${worstDisplay}–${bestDisplay} across ${values.length} points`);
         }
 
         return {
@@ -373,7 +359,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                                         <span className="w-1.5 h-1.5 rounded-full bg-[#7BC4A0]" /> Best: <span className="font-mono font-semibold text-text-primary">{chartSummary.stats.best}</span>
                                     </span>
                                     <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-[#D4897B]" /> Lowest: <span className="font-mono font-semibold text-text-primary">{chartSummary.stats.worst}</span>
+                                        <span className="w-1.5 h-1.5 rounded-full bg-error" /> Lowest: <span className="font-mono font-semibold text-text-primary">{chartSummary.stats.worst}</span>
                                     </span>
                                     <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
                                         <span className="w-1.5 h-1.5 rounded-full bg-[#7BA8D4]" /> {chartSummary.stats.totalDays} days tracked
@@ -384,12 +370,12 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
 
                         <div className="flex flex-wrap items-center gap-4">
                             {/* Filters */}
-                            <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer hover:text-[#2D2A26] transition-colors">
+                            <label className="flex min-h-11 items-center gap-2 text-sm text-text-secondary cursor-pointer hover:text-ink transition-colors">
                                 <input
                                     type="checkbox"
                                     checked={showCommonDatesOnly}
                                     onChange={e => setShowCommonDatesOnly(e.target.checked)}
-                                    className="rounded border-black/20 bg-black/5 text-accent-cyan focus:ring-accent-cyan"
+                                    className="h-5 w-5 rounded border-black/20 bg-black/5 text-accent focus:ring-accent"
                                 />
                                 Overlap Only
                             </label>
@@ -398,14 +384,16 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
 
                     {/* Secondary Controls (Metric & Smoothing) */}
                     <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-t border-black/5 pt-4">
-                        <div className="flex gap-1 bg-black/5 p-1 rounded-lg">
+                        <div className="flex gap-1 bg-black/5 p-1 rounded-lg" role="group" aria-label="Chart metric">
                             {(['sleep', 'readiness', 'activity', 'average'] as const).map(m => (
                                 <button
                                     key={m}
+                                    type="button"
                                     onClick={() => setChartMetric(m as any)}
-                                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors uppercase ${chartMetric === m
-                                        ? 'bg-accent-purple/20 text-accent-purple shadow-sm'
-                                        : 'hover:text-[#2D2A26] text-text-muted'
+                                    aria-pressed={chartMetric === m}
+                                    className={`min-h-11 px-3 py-1.5 rounded-md text-xs font-medium transition-colors uppercase ${chartMetric === m
+                                        ? 'bg-metric-insight/20 text-metric-insight shadow-sm'
+                                        : 'hover:text-ink text-text-muted'
                                         }`}
                                 >
                                     {m}
@@ -418,12 +406,13 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                             <select
                                 value={smoothing}
                                 onChange={(e) => setSmoothing(e.target.value as Smoothing)}
-                                className="bg-black/5 border border-black/5 rounded px-2 py-1 text-xs focus:outline-none focus:border-accent-cyan text-[#2D2A26]"
+                                aria-label="Chart smoothing"
+                                className="min-h-11 bg-black/5 border border-black/5 rounded px-2 py-1 text-xs focus:outline-none focus:border-accent text-ink"
                             >
-                                <option value="raw" className="bg-white text-[#2D2A26]">None (Raw)</option>
-                                <option value="3d" className="bg-white text-[#2D2A26]">3-Day Avg</option>
-                                <option value="7d" className="bg-white text-[#2D2A26]">7-Day Avg</option>
-                                <option value="14d" className="bg-white text-[#2D2A26]">14-Day Avg</option>
+                                <option value="raw" className="bg-surface-raised text-ink">None (Raw)</option>
+                                <option value="3d" className="bg-surface-raised text-ink">3-Day Avg</option>
+                                <option value="7d" className="bg-surface-raised text-ink">7-Day Avg</option>
+                                <option value="14d" className="bg-surface-raised text-ink">14-Day Avg</option>
                             </select>
                         </div>
                     </div>
@@ -467,14 +456,14 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                                             const dateStr = new Date(sorted[0].payload.x).toLocaleDateString('en-US', { timeZone: 'UTC' });
 
                                             return (
-                                                <div className="glass-card p-3 text-xs bg-white/95 border border-black/5 shadow-xl">
+                                                <div className="glass-card border border-line bg-surface-raised p-3 text-xs shadow-card">
                                                     <p className="text-text-muted mb-2 font-mono">{dateStr}</p>
                                                     <div className="space-y-1">
                                                         {sorted.map((p, idx) => (
                                                             <div key={idx} className="flex items-center gap-2">
                                                                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
-                                                                <span className="text-[#2D2A26] font-medium">{p.name}:</span>
-                                                                <span className="font-mono text-accent-cyan ml-auto">{p.value}</span>
+                                                                <span className="text-ink font-medium">{p.name}:</span>
+                                                                <span className="font-mono text-accent ml-auto">{p.value}</span>
                                                             </div>
                                                         ))}
                                                     </div>
@@ -502,7 +491,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                                                         onClick={() => toggleChartUser(profile.id)}
                                                         aria-pressed={!isHidden}
                                                         aria-label={`${isHidden ? 'Show' : 'Hide'} ${userName}'s scores`}
-                                                        className={`inline-flex cursor-pointer items-center gap-2 bg-transparent p-0 text-sm font-normal transition-opacity hover:opacity-75 focus-visible:outline-none focus-visible:underline ${isHidden ? 'opacity-40' : 'opacity-100'}`}
+                                                        className={`inline-flex min-h-11 cursor-pointer items-center gap-2 bg-transparent px-2 text-sm font-normal transition-opacity hover:opacity-75 focus-visible:outline-none focus-visible:underline ${isHidden ? 'opacity-40' : 'opacity-100'}`}
                                                     >
                                                         <span
                                                             className="h-2 w-2 rounded-full"
@@ -556,35 +545,48 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                     <select
                         value={filterUser}
                         onChange={(e) => setFilterUser(e.target.value)}
-                        className="bg-base/50 text-text-primary text-xs border border-black/5 rounded px-2 py-1 focus:outline-none text-[#2D2A26]"
+                        aria-label="Filter detailed data by user"
+                            className="min-h-11 bg-canvas/50 text-text-primary text-xs border border-black/5 rounded px-2 py-1 focus:outline-none text-ink"
                     >
-                        <option value="all" className="bg-white text-[#2D2A26]">All Users</option>
+                        <option value="all" className="bg-surface-raised text-ink">All Users</option>
                         {profiles.map(p => (
-                            <option key={p.id} value={p.id} className="bg-white text-[#2D2A26]">{getProfileDisplayName(p)}</option>
+                            <option key={p.id} value={p.id} className="bg-surface-raised text-ink">{getProfileDisplayName(p)}</option>
                         ))}
                     </select>
                 </div>
-                <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                <div className="overflow-x-auto max-h-[500px] overflow-y-auto" tabIndex={0} aria-label="Detailed history table; scroll horizontally to see every score">
                     <table className="w-full text-left border-collapse">
                         <thead className="sticky top-0 bg-void z-10 shadow-lg">
                             <tr className="text-xs text-text-muted uppercase tracking-wider border-b border-dashboard-border">
-                                <th className="p-4 cursor-pointer hover:text-text-primary transition-colors bg-void" onClick={() => handleSort('date')}>
-                                    Date <SortIcon field="date" />
+                                <th className="p-0 bg-void" aria-sort={sortField === 'date' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                                    <button type="button" className="flex min-h-11 w-full items-center p-4 hover:text-text-primary transition-colors" onClick={() => handleSort('date')}>
+                                        Date <SortIcon field="date" />
+                                    </button>
                                 </th>
-                                <th className="p-4 cursor-pointer hover:text-text-primary transition-colors bg-void" onClick={() => handleSort('userName')}>
-                                    User <SortIcon field="userName" />
+                                <th className="p-0 bg-void" aria-sort={sortField === 'userName' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                                    <button type="button" className="flex min-h-11 w-full items-center p-4 hover:text-text-primary transition-colors" onClick={() => handleSort('userName')}>
+                                        User <SortIcon field="userName" />
+                                    </button>
                                 </th>
-                                <th className="p-4 text-center cursor-pointer hover:text-text-primary transition-colors bg-void" onClick={() => handleSort('sleep')}>
-                                    Sleep <SortIcon field="sleep" />
+                                <th className="p-0 text-center bg-void" aria-sort={sortField === 'sleep' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                                    <button type="button" className="flex min-h-11 w-full items-center justify-center p-4 hover:text-text-primary transition-colors" onClick={() => handleSort('sleep')}>
+                                        Sleep <SortIcon field="sleep" />
+                                    </button>
                                 </th>
-                                <th className="p-4 text-center cursor-pointer hover:text-text-primary transition-colors bg-void" onClick={() => handleSort('readiness')}>
-                                    Readiness <SortIcon field="readiness" />
+                                <th className="p-0 text-center bg-void" aria-sort={sortField === 'readiness' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                                    <button type="button" className="flex min-h-11 w-full items-center justify-center p-4 hover:text-text-primary transition-colors" onClick={() => handleSort('readiness')}>
+                                        Readiness <SortIcon field="readiness" />
+                                    </button>
                                 </th>
-                                <th className="p-4 text-center cursor-pointer hover:text-text-primary transition-colors bg-void" onClick={() => handleSort('activity')}>
-                                    Activity <SortIcon field="activity" />
+                                <th className="p-0 text-center bg-void" aria-sort={sortField === 'activity' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                                    <button type="button" className="flex min-h-11 w-full items-center justify-center p-4 hover:text-text-primary transition-colors" onClick={() => handleSort('activity')}>
+                                        Activity <SortIcon field="activity" />
+                                    </button>
                                 </th>
-                                <th className="p-4 text-center cursor-pointer hover:text-text-primary transition-colors bg-void" onClick={() => handleSort('average')}>
-                                    Avg <SortIcon field="average" />
+                                <th className="p-0 text-center bg-void" aria-sort={sortField === 'average' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                                    <button type="button" className="flex min-h-11 w-full items-center justify-center p-4 hover:text-text-primary transition-colors" onClick={() => handleSort('average')}>
+                                        Avg <SortIcon field="average" />
+                                    </button>
                                 </th>
                             </tr>
                         </thead>
@@ -626,8 +628,9 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                     </p>
                     {hasMoreTableRows && (
                         <button
+                            type="button"
                             onClick={() => setVisibleRows((prev) => prev + TABLE_PAGE_SIZE)}
-                            className="px-3 py-1.5 text-xs font-medium rounded-md bg-black/5 hover:bg-black/5 text-text-primary transition-colors"
+                            className="min-h-11 px-3 py-1.5 text-xs font-medium rounded-md bg-black/5 hover:bg-black/5 text-text-primary transition-colors"
                         >
                             Load More
                         </button>

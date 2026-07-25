@@ -1,30 +1,27 @@
-/**
- * Shared Recharts styling constants for claymorphism design.
- * Use these instead of inline style objects to keep charts visually consistent.
- */
+/** Shared Recharts presentation tokens. */
 
-export const CLAY_TOOLTIP_STYLE: React.CSSProperties = {
-  backgroundColor: '#FFFFFF',
-  border: '1px solid rgba(0,0,0,0.1)',
-  borderRadius: '12px',
+export const CHART_TOOLTIP_STYLE: React.CSSProperties = {
+  backgroundColor: 'var(--color-surface)',
+  border: '1px solid var(--color-line)',
+  borderRadius: 'var(--radius-md)',
   fontSize: '12px',
-  color: '#2D2A26',
-  boxShadow: '4px 4px 8px rgba(0,0,0,0.06), -4px -4px 8px rgba(255,255,255,0.8)',
+  color: 'var(--color-ink)',
+  boxShadow: 'var(--shadow-card)',
 };
 
-export const CLAY_TOOLTIP_LABEL_STYLE: React.CSSProperties = {
-  color: '#7A756E',
+export const CHART_TOOLTIP_LABEL_STYLE: React.CSSProperties = {
+  color: 'var(--color-ink-muted)',
 };
 
-export const CLAY_GRID_STROKE = 'rgba(0,0,0,0.06)';
+export const CHART_GRID_STROKE = 'var(--color-line)';
 
-export const CLAY_AXIS_STYLE = {
-  tick: { fill: '#A8A29E', fontSize: 11 },
-  axisLine: { stroke: 'rgba(0,0,0,0.08)' },
+export const CHART_AXIS_STYLE = {
+  tick: { fill: 'var(--color-ink-faint)', fontSize: 11 },
+  axisLine: { stroke: 'var(--color-line)' },
 };
 
-export const CLAY_ACTIVE_DOT = {
+export const CHART_ACTIVE_DOT = {
   r: 5,
   strokeWidth: 2,
-  fill: '#FFFFFF',
+  fill: 'var(--color-surface)',
 };

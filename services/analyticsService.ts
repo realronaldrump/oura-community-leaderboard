@@ -1,12 +1,10 @@
 // Analytics Service - Statistical calculations and pattern detection
 
+import { DailyStats } from '../types';
 import {
-    DailyStats, DailySleep, DailyReadiness, DailyActivity, SleepSession
-} from '../types';
-import {
-    Streak, StreakType, StreakDefinition, Badge, BadgeTier,
-    Pattern, PatternType, CorrelationResult, MetricOption,
-    WhatIfScenario, WhatIfResult, WhatIfReliability, WhatIfTargetScore, Milestone, MilestoneType,
+    Streak, StreakDefinition, Badge, BadgeTier,
+    Pattern, CorrelationResult, MetricOption,
+    WhatIfScenario, WhatIfResult, WhatIfReliability, WhatIfTargetScore, Milestone,
     DailySnapshotData, TimelineDataPoint, TimelineInsight,
     CalendarHeatmapDay, UserChallenge, ChallengeDefinition, ChallengeStatus, AutomatedInsight
 } from '../types/analyticsTypes';
@@ -547,7 +545,7 @@ function detectDayOfWeekPatterns(
                 patterns.push({
                     id: `dow-sleep-${userId}-${i}`,
                     type: 'day_of_week',
-                    title: `${dayNames[i]} Sleep Pattern`,
+                    title: `${dayNames[i]} sleep-score difference`,
                     description: diff < 0
                         ? `${userName}'s sleep scores are ${Math.abs(diff).toFixed(0)}% lower on ${dayNames[i]}s`
                         : `${userName}'s sleep scores are ${diff.toFixed(0)}% higher on ${dayNames[i]}s`,
@@ -556,9 +554,6 @@ function detectDayOfWeekPatterns(
                     impact: diff,
                     dayOfWeek: i,
                     metric: 'sleep',
-                    tip: diff < 0
-                        ? `Try improving ${dayNames[i === 0 ? 6 : i - 1]} evening routines`
-                        : `Keep doing what works on ${dayNames[i === 0 ? 6 : i - 1]} evenings!`,
                     dataPoints: byDay[i].length,
                     discoveredAt: new Date().toISOString()
                 });
@@ -605,17 +600,14 @@ function detectActivitySleepPatterns(
             patterns.push({
                 id: `activity-sleep-${userId}`,
                 type: 'activity_sleep',
-                title: diff > 0 ? 'High Activity → Better Sleep' : 'High Activity → Worse Sleep',
+                title: diff > 0 ? 'Sleep scores were higher after high-step days' : 'Sleep scores were lower after high-step days',
                 description: diff > 0
-                    ? `${userName} sleeps ${diff.toFixed(0)}% better after high-step days (>10k steps)`
-                    : `${userName} sleeps ${Math.abs(diff).toFixed(0)}% worse after high-step days`,
+                    ? `${userName}'s next-day sleep score averaged ${diff.toFixed(0)}% higher after the highest-step quarter than after the lowest-step quarter`
+                    : `${userName}'s next-day sleep score averaged ${Math.abs(diff).toFixed(0)}% lower after the highest-step quarter than after the lowest-step quarter`,
                 affectedUsers: [userId],
                 confidence: Math.min(1, pairs.length / 30),
                 impact: diff,
                 metric: 'steps→sleep',
-                tip: diff > 0
-                    ? 'Keep up the active lifestyle for better sleep!'
-                    : 'Try spacing intense workouts earlier in the day',
                 dataPoints: pairs.length,
                 discoveredAt: new Date().toISOString()
             });
@@ -655,17 +647,14 @@ function detectWeekendEffect(
             patterns.push({
                 id: `weekend-effect-${userId}`,
                 type: 'weekend_effect',
-                title: diff > 0 ? 'Weekend Sleep Boost' : 'Weekend Sleep Dip',
+                title: diff > 0 ? 'Weekend sleep scores were higher' : 'Weekend sleep scores were lower',
                 description: diff > 0
-                    ? `${userName} sleeps ${diff.toFixed(0)}% better on weekends`
-                    : `${userName} sleeps ${Math.abs(diff).toFixed(0)}% worse on weekends`,
+                    ? `${userName}'s weekend sleep score averaged ${diff.toFixed(0)}% higher than the weekday average`
+                    : `${userName}'s weekend sleep score averaged ${Math.abs(diff).toFixed(0)}% lower than the weekday average`,
                 affectedUsers: [userId],
                 confidence: Math.min(1, Math.min(weekdayScores.length, weekendScores.length) / 20),
                 impact: diff,
                 metric: 'sleep',
-                tip: diff < 0
-                    ? 'Try maintaining consistent sleep schedules on weekends'
-                    : 'Weekends are working for you - can you replicate that routine?',
                 dataPoints: weekdayScores.length + weekendScores.length,
                 discoveredAt: new Date().toISOString()
             });
@@ -726,23 +715,13 @@ export function calculateCorrelation(
     const direction = coefficient > 0.1 ? 'positive' : coefficient < -0.1 ? 'negative' : 'none';
 
     // Generate insight
-    let insight = '';
+    let insight: string;
     if (strength === 'strong' || strength === 'moderate') {
-        const meanYArr = ss.mean(yArr);
-        const rawPctArr = Math.abs(meanYArr) > 0.5
-            ? Math.abs(coefficient * ss.standardDeviation(yArr) / meanYArr * 100)
-            : Infinity;
-        const reliablePctArr = isFinite(rawPctArr) && rawPctArr <= 150;
-
-        insight = reliablePctArr
-            ? direction === 'positive'
-                ? `When ${metricX.userName}'s ${metricX.label} is high, ${metricY.userName}'s ${metricY.label} tends to be ${rawPctArr.toFixed(1)}% higher`
-                : `When ${metricX.userName}'s ${metricX.label} is high, ${metricY.userName}'s ${metricY.label} tends to be ${rawPctArr.toFixed(1)}% lower`
-            : direction === 'positive'
-                ? `When ${metricX.userName}'s ${metricX.label} is high, ${metricY.userName}'s ${metricY.label} also tends to be higher`
-                : `When ${metricX.userName}'s ${metricX.label} is high, ${metricY.userName}'s ${metricY.label} tends to be lower`;
+        insight = direction === 'positive'
+            ? `${metricX.label} and ${metricY.label} tended to move together across ${pairedData.length} matched days`
+            : `${metricX.label} and ${metricY.label} tended to move in opposite directions across ${pairedData.length} matched days`;
     } else {
-        insight = `No significant correlation found between ${metricX.label} and ${metricY.label}`;
+        insight = `No moderate or strong correlation found between ${metricX.label} and ${metricY.label}`;
     }
 
     return {
@@ -912,26 +891,15 @@ export function generateAutomatedInsights(data: DailyStats, userId: string, user
                     else if (!isGoodX && isGoodY) insightType = 'negative_habit'; // Bad goes up, good goes down
                 }
 
-                const yValues = correlation.dataPoints.map(p => p.y);
-                const meanY = ss.mean(yValues);
-                const rawPercent = Math.abs(meanY) > 0.5
-                    ? Math.abs(correlation.coefficient * ss.standardDeviation(yValues) / meanY * 100)
-                    : Infinity;
-                const reliablePercent = isFinite(rawPercent) && rawPercent <= 150;
-
-                let title = '';
-                let description = '';
+                let title: string;
+                let description: string;
 
                 if (correlation.direction === 'positive') {
-                    title = `Higher ${metricX.label} = Higher ${metricY.label}`;
-                    description = reliablePercent
-                        ? `When you push your ${metricX.label} higher, your ${metricY.label} sees a typical boost of ${rawPercent.toFixed(1)}%.`
-                        : `When your ${metricX.label} is higher, your ${metricY.label} also tends to be higher.`;
+                    title = `${metricX.label} and ${metricY.label} moved together`;
+                    description = `Across ${correlation.sampleSize} matched days, higher ${metricX.label} tended to appear with higher ${metricY.label} (r = ${correlation.coefficient.toFixed(2)}).`;
                 } else {
-                    title = `Higher ${metricX.label} = Lower ${metricY.label}`;
-                    description = reliablePercent
-                        ? `When your ${metricX.label} goes up, your ${metricY.label} tends to drop by about ${rawPercent.toFixed(1)}%.`
-                        : `When your ${metricX.label} is higher, your ${metricY.label} tends to be lower.`;
+                    title = `${metricX.label} and ${metricY.label} moved in opposite directions`;
+                    description = `Across ${correlation.sampleSize} matched days, higher ${metricX.label} tended to appear with lower ${metricY.label} (r = ${correlation.coefficient.toFixed(2)}).`;
                 }
 
                 insights.push({
@@ -1105,7 +1073,7 @@ function simulateForUser(
     const projectedChange = projectedScore - currentBaseline;
     const isCapped = projectedScoreRaw !== projectedScore;
 
-    let correlation = 0;
+    let correlation: number;
     try {
         correlation = ss.sampleCorrelation(x, y);
     } catch {
@@ -1222,9 +1190,7 @@ export function calculateMilestones(
     const milestones: Milestone[] = [];
     const milestoneDays = [30, 100, 365, 500, 1000];
     const sleepHourMilestones = [100, 500, 1000, 2500, 5000];
-    const stepMilestones = [1000000, 5000000, 10000000]; // Total steps
-
-    for (const { userId, userName, data } of usersData) {
+    for (const { userId, data } of usersData) {
         // Days tracked
         const daysTracked = new Set([
             ...(data.sleep || []).map(s => s.day),

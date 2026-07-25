@@ -8,6 +8,7 @@ import { getProfileDisplayName } from '../../utils/profileName';
 import { formatISODateForDisplay, shiftLocalISODate } from '../../utils/date';
 import { getProfileLocalISODate, getProfileRelativeISODate } from '../../utils/profileTemporal';
 import DateRangePicker from '../DateRangePicker';
+import { Dialog } from '../ui';
 
 type RuleDraft = {
     id: string;
@@ -184,14 +185,10 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
         const parsedRules: CompetitionRule[] = [];
         for (const rule of rules) {
             const metric = getCompetitionMetricDefinition(rule.metricId as any);
-            let target: number | null = null;
-
-            if (metric.inputMode === 'time') {
-                target = timeInputToMinutes(rule.targetText);
-            } else {
-                const parsed = Number(rule.targetText);
-                target = Number.isFinite(parsed) ? parsed : null;
-            }
+            const parsed = Number(rule.targetText);
+            const target = metric.inputMode === 'time'
+                ? timeInputToMinutes(rule.targetText)
+                : Number.isFinite(parsed) ? parsed : null;
 
             if (target == null) {
                 setErrorMessage(`Enter a valid target for ${metric.label}.`);
@@ -271,34 +268,28 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/20 px-4 py-6 backdrop-blur-sm sm:px-6">
-            <div className="mx-auto max-w-5xl rounded-[2rem] border border-[rgba(0,0,0,0.10)] bg-[#F2EDE8] shadow-[0_30px_120px_rgba(0,0,0,0.12)]">
-                <div className="flex items-start justify-between gap-4 border-b border-[rgba(0,0,0,0.06)] px-5 py-5 sm:px-7">
-                    <div>
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-[#6B9E8A]">Compete Builder</p>
-                        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[#2D2A26]">Set it once, start tomorrow</h2>
-                        <p className="mt-2 max-w-2xl text-sm text-[#7A756E]">
-                            Pick a format, choose the metrics, and invite friends. Oura data starts scoring on the next calendar day.
-                        </p>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-[rgba(0,0,0,0.08)] bg-white text-[#7A756E] transition-colors hover:text-[#2D2A26]"
-                    >
-                        <X className="h-5 w-5" />
-                    </button>
-                </div>
-
-                <div className="grid gap-6 px-5 py-5 sm:px-7 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
+        <Dialog
+            isOpen={isOpen}
+            onClose={onClose}
+            title="Create a competition"
+            description="Choose a format, metrics, and people. Scoring begins tomorrow."
+            className="!w-[min(100%,64rem)] !max-h-[min(92vh,60rem)]"
+            busy={isSubmitting}
+        >
+            <p className="mb-5 text-[11px] uppercase tracking-[0.18em] text-accent">Competition builder</p>
+            <div
+                className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]"
+                aria-busy={isSubmitting}
+            >
                     <div className="space-y-6">
                         <section>
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Templates</p>
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Templates</p>
                             <div className="mt-3 grid gap-3 md:grid-cols-2">
                                 {COMPETITION_TEMPLATES.map((template) => (
                                     <button
                                         key={template.id}
                                         type="button"
+                                        aria-pressed={templateId === template.id}
                                         onClick={() => {
                                             const next = buildDraftFromTemplate(template);
                                             setTitle(next.title);
@@ -311,8 +302,8 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                         }}
                                         className={`rounded-[1.25rem] border p-4 text-left transition-colors ${
                                             templateId === template.id
-                                                ? 'border-[rgba(107,158,138,0.3)] bg-[rgba(107,158,138,0.06)]'
-                                                : 'border-[rgba(0,0,0,0.06)] bg-white hover:border-[rgba(0,0,0,0.10)]'
+                                                ? 'border-accent/30 bg-accent-soft'
+                                                : 'border-line bg-surface-raised hover:border-line-strong'
                                         }`}
                                     >
                                         <div className="flex items-center justify-between gap-3">
@@ -320,10 +311,10 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                                 className="h-3 w-3 rounded-full"
                                                 style={{ backgroundColor: template.accentColor }}
                                             />
-                                            <span className="text-[11px] uppercase tracking-[0.14em] text-[#A8A29E]">{template.format}</span>
+                                            <span className="text-[11px] uppercase tracking-[0.14em] text-ink-muted">{template.format}</span>
                                         </div>
-                                        <h3 className="mt-3 text-base font-semibold" style={{ color: '#2D2A26' }}>{template.title}</h3>
-                                        <p className="mt-2 text-sm leading-relaxed" style={{ color: '#7A756E' }}>{template.description}</p>
+                                        <h3 className="mt-3 text-base font-semibold text-ink">{template.title}</h3>
+                                        <p className="mt-2 text-sm leading-relaxed text-ink-secondary">{template.description}</p>
                                     </button>
                                 ))}
                             </div>
@@ -331,11 +322,12 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
 
                         <section className="grid gap-4 md:grid-cols-2">
                             <label className="block">
-                                <span className="mb-2 block text-sm font-medium text-[#4A4540]">Title</span>
+                                <span className="mb-2 block text-sm font-medium text-ink">Title</span>
                                 <input
+                                    data-autofocus
                                     value={title}
                                     onChange={(event) => setTitle(event.target.value)}
-                                    className="w-full rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white px-4 py-3 text-[#2D2A26] outline-none transition-colors focus:border-[#6B9E8A]"
+                                    className="w-full rounded-2xl border border-line bg-surface-raised px-4 py-3 text-ink outline-none transition-colors focus:border-accent"
                                     placeholder="Balanced Week"
                                 />
                             </label>
@@ -350,33 +342,34 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                 todayIsoDay={getProfileLocalISODate(activeProfile)}
                             />
                             <label className="block md:col-span-2">
-                                <span className="mb-2 block text-sm font-medium text-[#4A4540]">Description</span>
+                                <span className="mb-2 block text-sm font-medium text-ink">Description</span>
                                 <textarea
                                     value={description}
                                     onChange={(event) => setDescription(event.target.value)}
                                     rows={3}
-                                    className="w-full rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white px-4 py-3 text-[#2D2A26] outline-none transition-colors focus:border-[#6B9E8A]"
+                                    className="w-full rounded-2xl border border-line bg-surface-raised px-4 py-3 text-ink outline-none transition-colors focus:border-accent"
                                     placeholder="Highest total progress wins."
                                 />
                             </label>
                         </section>
 
                         <section className="grid gap-4 md:grid-cols-3">
-                            <div className="rounded-[1.25rem] border border-[rgba(0,0,0,0.06)] bg-white p-4">
-                                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-[#A8A29E]">
+                            <div className="rounded-[1.25rem] border border-line bg-surface p-4">
+                                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-ink-muted">
                                     <Users className="h-3.5 w-3.5" />
                                     Mode
                                 </div>
-                                <div className="mt-3 grid grid-cols-2 gap-2">
+                                <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label="Competition mode">
                                     {(['solo', 'friends'] as CompetitionMode[]).map((option) => (
                                         <button
                                             key={option}
                                             type="button"
+                                            aria-pressed={mode === option}
                                             onClick={() => setMode(option)}
                                             className={`rounded-xl px-3 py-3 text-sm font-medium transition-colors ${
                                                 mode === option
-                                                    ? 'bg-[#6B9E8A] text-white'
-                                                    : 'bg-[#FAF7F4] text-[#7A756E]'
+                                                    ? 'bg-accent text-white'
+                                                    : 'bg-surface-raised text-ink-secondary'
                                             }`}
                                         >
                                             {option === 'solo' ? 'Solo Goal' : 'Friends'}
@@ -385,21 +378,22 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                 </div>
                             </div>
 
-                            <div className="rounded-[1.25rem] border border-[rgba(0,0,0,0.06)] bg-white p-4">
-                                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-[#A8A29E]">
+                            <div className="rounded-[1.25rem] border border-line bg-surface p-4">
+                                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-ink-muted">
                                     <Target className="h-3.5 w-3.5" />
                                     Format
                                 </div>
-                                <div className="mt-3 grid gap-2">
+                                <div className="mt-3 grid gap-2" role="group" aria-label="Competition format">
                                     {(['goal', 'race', 'combo'] as CompetitionFormat[]).map((option) => (
                                         <button
                                             key={option}
                                             type="button"
+                                            aria-pressed={format === option}
                                             onClick={() => setFormat(option)}
                                             className={`rounded-xl px-3 py-3 text-left text-sm font-medium transition-colors ${
                                                 format === option
-                                                    ? 'bg-[#6B9E8A] text-white'
-                                                    : 'bg-[#FAF7F4] text-[#7A756E]'
+                                                    ? 'bg-accent text-white'
+                                                    : 'bg-surface-raised text-ink-secondary'
                                             }`}
                                         >
                                             {option === 'goal' ? 'Daily Goal' : option === 'race' ? 'Race' : 'Combo'}
@@ -408,18 +402,19 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                 </div>
                             </div>
 
-                            <div className="rounded-[1.25rem] border border-[rgba(0,0,0,0.06)] bg-white p-4">
-                                <div className="text-xs uppercase tracking-[0.16em] text-[#A8A29E]">Duration</div>
-                                <div className="mt-3 flex flex-wrap gap-2">
+                            <div className="rounded-[1.25rem] border border-line bg-surface p-4">
+                                <div className="text-xs uppercase tracking-[0.16em] text-ink-muted">Duration</div>
+                                <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Competition duration">
                                     {DURATIONS.map((days) => (
                                         <button
                                             key={days}
                                             type="button"
+                                            aria-pressed={durationDays === days}
                                             onClick={() => setDurationDays(days)}
-                                            className={`rounded-full px-3 py-2 text-sm font-medium transition-colors ${
+                                            className={`min-h-11 min-w-11 rounded-full px-3 py-2 text-sm font-medium transition-colors ${
                                                 durationDays === days
-                                                    ? 'bg-[#6B9E8A] text-white'
-                                                    : 'bg-[#FAF7F4] text-[#7A756E]'
+                                                    ? 'bg-accent text-white'
+                                                    : 'bg-surface-raised text-ink-secondary'
                                             }`}
                                         >
                                             {days}d
@@ -430,20 +425,20 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                         </section>
 
                         {mode === 'friends' ? (
-                            <section className="rounded-[1.35rem] border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] p-4">
+                            <section className="rounded-[1.35rem] border border-line bg-surface-raised p-4">
                                 <div className="flex items-center justify-between gap-3">
                                     <div>
-                                        <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Invite existing friends</p>
-                                        <h3 className="mt-2 text-lg font-semibold text-[#2D2A26]">Pre-load the participant list</h3>
+                                        <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Invite existing friends</p>
+                                        <h3 className="mt-2 text-lg font-semibold text-ink">Pre-load the participant list</h3>
                                     </div>
-                                    <span className="rounded-full border border-[rgba(0,0,0,0.06)] px-3 py-1 text-[11px] uppercase tracking-[0.12em] text-[#7A756E]">
+                                    <span className="rounded-full border border-line px-3 py-1 text-[11px] uppercase tracking-[0.12em] text-ink-secondary">
                                         {selectedParticipantIds.length} selected
                                     </span>
                                 </div>
 
                                 <div className="mt-4 flex flex-wrap gap-2">
                                     {selectableProfiles.length === 0 ? (
-                                        <div className="rounded-xl border border-dashed border-[rgba(0,0,0,0.08)] bg-white px-4 py-4 text-sm text-[#A8A29E]">
+                                        <div className="rounded-xl border border-dashed border-line bg-surface-raised px-4 py-4 text-sm text-ink-muted">
                                             No other profiles yet. You can still create the competition and share the invite link after.
                                         </div>
                                     ) : selectableProfiles.map((profile) => {
@@ -452,11 +447,12 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                             <button
                                                 key={profile.id}
                                                 type="button"
+                                                aria-pressed={isSelected}
                                                 onClick={() => toggleParticipant(profile.id)}
-                                                className={`rounded-full px-3 py-2 text-sm transition-colors ${
+                                                className={`min-h-11 rounded-full px-3 py-2 text-sm transition-colors ${
                                                     isSelected
-                                                        ? 'bg-[rgba(107,158,138,0.12)] text-[#6B9E8A]'
-                                                        : 'bg-[#FAF7F4] text-[#7A756E]'
+                                                        ? 'bg-accent-soft text-accent'
+                                                        : 'bg-surface-raised text-ink-secondary'
                                                 }`}
                                             >
                                                 {getProfileDisplayName(profile)}
@@ -467,16 +463,16 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                             </section>
                         ) : null}
 
-                        <section className="rounded-[1.35rem] border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] p-4">
+                        <section className="rounded-[1.35rem] border border-line bg-surface-raised p-4">
                             <div className="flex items-center justify-between gap-3">
                                 <div>
-                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Rules</p>
-                                    <h3 className="mt-2 text-lg font-semibold text-[#2D2A26]">Pick the metrics that decide the outcome</h3>
+                                    <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Rules</p>
+                                    <h3 className="mt-2 text-lg font-semibold text-ink">Pick the metrics that decide the outcome</h3>
                                 </div>
                                 <button
                                     type="button"
                                     onClick={addRule}
-                                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[rgba(107,158,138,0.25)] bg-[rgba(107,158,138,0.08)] px-3.5 text-sm font-medium text-[#6B9E8A]"
+                                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-accent/30 bg-accent-soft px-3.5 text-sm font-medium text-accent"
                                 >
                                     <Plus className="h-4 w-4" />
                                     Add Rule
@@ -488,10 +484,10 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                     const metric = getCompetitionMetricDefinition(rule.metricId as any);
 
                                     return (
-                                        <div key={rule.id} className="rounded-[1.15rem] border border-[rgba(0,0,0,0.06)] bg-white p-4">
+                                        <div key={rule.id} className="rounded-[1.15rem] border border-line bg-surface p-4">
                                             <div className="grid gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_auto]">
                                                 <label className="block">
-                                                    <span className="mb-2 block text-xs uppercase tracking-[0.12em] text-[#A8A29E]">Metric</span>
+                                                    <span className="mb-2 block text-xs uppercase tracking-[0.12em] text-ink-muted">Metric</span>
                                                     <select
                                                         value={rule.metricId}
                                                         onChange={(event) => {
@@ -505,7 +501,7 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                                                 aggregation: nextMetric.defaultAggregation,
                                                             });
                                                         }}
-                                                        className="w-full rounded-xl border border-[rgba(0,0,0,0.08)] bg-[#FAF7F4] px-3 py-3 text-sm text-[#2D2A26] outline-none focus:border-[#6B9E8A]"
+                                                        className="w-full rounded-xl border border-line bg-surface-raised px-3 py-3 text-sm text-ink outline-none focus:border-accent"
                                                     >
                                                         {COMPETITION_METRICS.map((option) => (
                                                             <option key={option.id} value={option.id}>
@@ -516,11 +512,11 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                                 </label>
 
                                                 <label className="block">
-                                                    <span className="mb-2 block text-xs uppercase tracking-[0.12em] text-[#A8A29E]">Operator</span>
+                                                    <span className="mb-2 block text-xs uppercase tracking-[0.12em] text-ink-muted">Operator</span>
                                                     <select
                                                         value={rule.operator}
                                                         onChange={(event) => updateRule(rule.id, { operator: event.target.value as 'gte' | 'lte' })}
-                                                        className="w-full rounded-xl border border-[rgba(0,0,0,0.08)] bg-[#FAF7F4] px-3 py-3 text-sm text-[#2D2A26] outline-none focus:border-[#6B9E8A]"
+                                                        className="w-full rounded-xl border border-line bg-surface-raised px-3 py-3 text-sm text-ink outline-none focus:border-accent"
                                                     >
                                                         <option value="gte">At least</option>
                                                         <option value="lte">At most</option>
@@ -528,7 +524,7 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                                 </label>
 
                                                 <label className="block">
-                                                    <span className="mb-2 block text-xs uppercase tracking-[0.12em] text-[#A8A29E]">Target</span>
+                                                    <span className="mb-2 block text-xs uppercase tracking-[0.12em] text-ink-muted">Target</span>
                                                     <input
                                                         type={metric.inputMode === 'time' ? 'time' : 'number'}
                                                         step={metric.inputMode === 'time' ? undefined : (metric.step || 1)}
@@ -536,13 +532,13 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                                         max={metric.inputMode === 'time' ? undefined : metric.max}
                                                         value={rule.targetText}
                                                         onChange={(event) => updateRule(rule.id, { targetText: event.target.value })}
-                                                        className="w-full rounded-xl border border-[rgba(0,0,0,0.08)] bg-[#FAF7F4] px-3 py-3 text-sm text-[#2D2A26] outline-none focus:border-[#6B9E8A]"
+                                                        className="w-full rounded-xl border border-line bg-surface-raised px-3 py-3 text-sm text-ink outline-none focus:border-accent"
                                                     />
                                                 </label>
 
                                                 {format !== 'goal' ? (
                                                     <label className="block">
-                                                        <span className="mb-2 block text-xs uppercase tracking-[0.12em] text-[#A8A29E]">
+                                                        <span className="mb-2 block text-xs uppercase tracking-[0.12em] text-ink-muted">
                                                             {format === 'combo' ? 'Weight %' : 'Weight'}
                                                         </span>
                                                         <input
@@ -551,13 +547,13 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                                             step={1}
                                                             value={rule.weightText}
                                                             onChange={(event) => updateRule(rule.id, { weightText: event.target.value })}
-                                                            className="w-full rounded-xl border border-[rgba(0,0,0,0.08)] bg-[#FAF7F4] px-3 py-3 text-sm text-[#2D2A26] outline-none focus:border-[#6B9E8A]"
+                                                            className="w-full rounded-xl border border-line bg-surface-raised px-3 py-3 text-sm text-ink outline-none focus:border-accent"
                                                         />
                                                     </label>
                                                 ) : (
                                                     <label className="block">
-                                                        <span className="mb-2 block text-xs uppercase tracking-[0.12em] text-[#A8A29E]">Scoring</span>
-                                                        <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] px-3 py-3 text-sm text-[#7A756E]">Daily pass / fail</div>
+                                                        <span className="mb-2 block text-xs uppercase tracking-[0.12em] text-ink-muted">Scoring</span>
+                                                        <div className="rounded-xl border border-line bg-surface-raised px-3 py-3 text-sm text-ink-secondary">Daily pass / fail</div>
                                                     </label>
                                                 )}
 
@@ -566,21 +562,21 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                                         type="button"
                                                         onClick={() => removeRule(rule.id)}
                                                         disabled={rules.length <= 1}
-                                                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[rgba(0,0,0,0.08)] bg-[#FAF7F4] text-[#7A756E] disabled:opacity-40"
-                                                        title={`Remove rule ${index + 1}`}
+                                                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-line bg-surface-raised text-ink-secondary disabled:opacity-40"
+                                                        aria-label={`Remove rule ${index + 1}`}
                                                     >
-                                                        <X className="h-4 w-4" />
+                                                        <X className="h-4 w-4" aria-hidden="true" />
                                                     </button>
                                                 </div>
                                             </div>
 
                                             {format !== 'goal' ? (
                                                 <label className="mt-3 block">
-                                                    <span className="mb-2 block text-xs uppercase tracking-[0.12em] text-[#A8A29E]">Aggregation</span>
+                                                    <span className="mb-2 block text-xs uppercase tracking-[0.12em] text-ink-muted">Aggregation</span>
                                                     <select
                                                         value={rule.aggregation}
                                                         onChange={(event) => updateRule(rule.id, { aggregation: event.target.value as RuleDraft['aggregation'] })}
-                                                        className="w-full rounded-xl border border-[rgba(0,0,0,0.08)] bg-[#FAF7F4] px-3 py-3 text-sm text-[#2D2A26] outline-none focus:border-[#6B9E8A]"
+                                                        className="w-full rounded-xl border border-line bg-surface-raised px-3 py-3 text-sm text-ink outline-none focus:border-accent"
                                                     >
                                                         <option value="daily">Daily progress</option>
                                                         <option value="average">Average across the competition</option>
@@ -596,27 +592,27 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                     </div>
 
                     <aside className="space-y-4">
-                        <div className="rounded-[1.35rem] border border-[rgba(0,0,0,0.06)] bg-[radial-gradient(circle_at_top_right,rgba(107,158,138,0.16),transparent_35%),#FFFFFF] p-5">
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#6B9E8A]">Live Summary</p>
-                            <h3 className="mt-3 text-xl font-semibold text-[#2D2A26]">{title || 'New Competition'}</h3>
-                            <p className="mt-3 text-sm leading-relaxed text-[#7A756E]">{previewCopy}</p>
-                            <div className="mt-4 rounded-2xl border border-[rgba(107,158,138,0.2)] bg-[rgba(107,158,138,0.06)] px-4 py-3 text-sm text-[#6B9E8A]">
+                        <div className="rounded-[1.35rem] border border-line bg-surface p-5 shadow-sm">
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-accent">Preview</p>
+                            <h3 className="mt-3 text-xl font-semibold text-ink">{title || 'New Competition'}</h3>
+                            <p className="mt-3 text-sm leading-relaxed text-ink-secondary">{previewCopy}</p>
+                            <div className="mt-4 rounded-2xl border border-accent/30 bg-accent-soft px-4 py-3 text-sm text-accent">
                                 {mode === 'friends'
                                     ? 'A share link will be generated automatically after creation.'
-                                    : 'Solo goals stay private to this profile.'}
+                                    : 'Solo goals track only this profile.'}
                             </div>
                         </div>
 
-                        <div className="rounded-[1.35rem] border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] p-5">
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Checklist</p>
-                            <div className="mt-4 space-y-3 text-sm text-[#7A756E]">
-                                <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-white px-4 py-3">
-                                    Starts on <span className="text-[#2D2A26]">{formatISODateForDisplay(startDate, 'en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                        <div className="rounded-[1.35rem] border border-line bg-surface-raised p-5">
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Checklist</p>
+                            <div className="mt-4 space-y-3 text-sm text-ink-secondary">
+                                <div className="rounded-xl border border-line bg-surface-raised px-4 py-3">
+                                    Starts on <span className="text-ink">{formatISODateForDisplay(startDate, 'en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
                                 </div>
-                                <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-white px-4 py-3">
-                                    Runs for <span className="text-[#2D2A26]">{durationDays} day{durationDays === 1 ? '' : 's'}</span>
+                                <div className="rounded-xl border border-line bg-surface-raised px-4 py-3">
+                                    Runs for <span className="text-ink">{durationDays} day{durationDays === 1 ? '' : 's'}</span>
                                 </div>
-                                <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-white px-4 py-3">
+                                <div className="rounded-xl border border-line bg-surface-raised px-4 py-3">
                                     {mode === 'friends'
                                         ? `${selectedParticipantIds.length} existing friend${selectedParticipantIds.length === 1 ? '' : 's'} pre-selected`
                                         : 'Solo tracking only'}
@@ -625,7 +621,11 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                         </div>
 
                         {errorMessage ? (
-                            <div className="rounded-[1.25rem] border border-[rgba(212,137,123,0.3)] bg-[#FAF7F4] px-4 py-3 text-sm text-[#D4897B]">
+                            <div
+                                className="rounded-[1.25rem] border border-error/30 bg-error-soft px-4 py-3 text-sm text-error"
+                                role="alert"
+                                aria-live="assertive"
+                            >
                                 {errorMessage}
                             </div>
                         ) : null}
@@ -635,7 +635,7 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                 type="button"
                                 onClick={handleCreate}
                                 disabled={isSubmitting}
-                                className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-[#6B9E8A] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                                className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-accent px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
                             >
                                 {isSubmitting ? 'Creating...' : 'Create Competition'}
                             </button>
@@ -643,15 +643,14 @@ const CompetitionBuilder: React.FC<CompetitionBuilderProps> = ({
                                 type="button"
                                 onClick={onClose}
                                 disabled={isSubmitting}
-                                className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[rgba(0,0,0,0.08)] px-5 py-3 text-sm font-medium text-[#2D2A26] transition-colors hover:bg-[#FAF7F4]"
+                                className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-line px-5 py-3 text-sm font-medium text-ink transition-colors hover:bg-surface-raised"
                             >
                                 Cancel
                             </button>
                         </div>
                     </aside>
-                </div>
             </div>
-        </div>
+        </Dialog>
     );
 };
 

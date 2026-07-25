@@ -8,71 +8,91 @@ export default {
     theme: {
         extend: {
             colors: {
-                // Claymorphism Background System
-                base: '#F2EDE8',
-                void: '#F2EDE8',
-                raised: '#FFFFFF',
-                elevated: '#FAF7F4',
-                hover: '#F0EBE5',
-
-                // Borders - soft, barely there
-                border: {
-                    subtle: 'rgba(0, 0, 0, 0.06)',
-                    DEFAULT: 'rgba(0, 0, 0, 0.10)',
-                    strong: 'rgba(0, 0, 0, 0.15)',
+                canvas: 'var(--color-canvas)',
+                surface: {
+                    DEFAULT: 'var(--color-surface)',
+                    raised: 'var(--color-surface-raised)',
+                    subtle: 'var(--color-surface-subtle)',
+                    strong: 'var(--color-surface-strong)',
                 },
-                'dashboard-border': 'rgba(0, 0, 0, 0.06)',
-
-                // Accent colors - warm, friendly
+                line: {
+                    DEFAULT: 'var(--color-line)',
+                    strong: 'var(--color-line-strong)',
+                },
+                ink: {
+                    DEFAULT: 'var(--color-ink)',
+                    secondary: 'var(--color-ink-secondary)',
+                    muted: 'var(--color-ink-muted)',
+                    faint: 'var(--color-ink-faint)',
+                },
                 accent: {
-                    DEFAULT: '#6B9E8A',
-                    cyan: '#6B9E8A',
-                    purple: '#A08BBE',
-                    orange: '#D4A574',
+                    DEFAULT: 'rgb(var(--color-accent-rgb) / <alpha-value>)',
+                    hover: 'var(--color-accent-hover)',
+                    soft: 'var(--color-accent-soft)',
                 },
-                'accent-dim': 'rgba(107, 158, 138, 0.12)',
-
-                // Metric colors - soft, pastel
+                success: {
+                    DEFAULT: 'rgb(var(--color-success-rgb) / <alpha-value>)',
+                    soft: 'var(--color-success-soft)',
+                },
+                warning: {
+                    DEFAULT: 'rgb(var(--color-warning-rgb) / <alpha-value>)',
+                    soft: 'var(--color-warning-soft)',
+                },
+                error: {
+                    DEFAULT: 'rgb(var(--color-error-rgb) / <alpha-value>)',
+                    soft: 'var(--color-error-soft)',
+                },
+                info: {
+                    DEFAULT: 'rgb(var(--color-info-rgb) / <alpha-value>)',
+                    soft: 'var(--color-info-soft)',
+                },
                 metric: {
-                    green: '#7BC4A0',
-                    blue: '#7BA8D4',
-                    amber: '#D4B87B',
-                    red: '#D4897B',
-                    readiness: '#7BC4A0',
-                    sleep: '#7BA8D4',
-                    activity: '#D4B87B',
+                    readiness: 'rgb(var(--color-readiness-rgb) / <alpha-value>)',
+                    sleep: 'rgb(var(--color-sleep-rgb) / <alpha-value>)',
+                    activity: 'rgb(var(--color-activity-rgb) / <alpha-value>)',
+                    insight: 'rgb(var(--color-insight-rgb) / <alpha-value>)',
                 },
-
-                // Text - warm tones
+                /* Transitional aliases: legacy utilities still resolve to semantic roles. */
+                void: 'var(--color-canvas)',
+                raised: 'var(--color-surface)',
+                elevated: 'var(--color-surface-raised)',
+                hover: 'var(--color-surface-subtle)',
+                border: {
+                    subtle: 'var(--color-line)',
+                    DEFAULT: 'var(--color-line)',
+                    strong: 'var(--color-line-strong)',
+                },
+                'dashboard-border': 'var(--color-line)',
+                'accent-dim': 'var(--color-accent-soft)',
                 text: {
-                    primary: '#2D2A26',
-                    secondary: '#7A756E',
-                    muted: '#A8A29E',
-                    dim: '#C8C2BB',
+                    primary: 'var(--color-ink)',
+                    secondary: 'var(--color-ink-secondary)',
+                    muted: 'var(--color-ink-muted)',
+                    dim: 'var(--color-ink-faint)',
                 },
             },
             fontFamily: {
-                sans: ['Nunito', 'system-ui', 'sans-serif'],
-                mono: ['IBM Plex Mono', 'monospace'],
+                sans: ['Manrope', 'Avenir Next', 'sans-serif'],
+                display: ['Newsreader', 'Georgia', 'serif'],
+                mono: ['IBM Plex Mono', 'ui-monospace', 'monospace'],
             },
             borderRadius: {
-                DEFAULT: '16px',
-                sm: '8px',
-                md: '12px',
-                lg: '16px',
-                xl: '20px',
-                '2xl': '24px',
+                DEFAULT: 'var(--radius-md)',
+                sm: 'var(--radius-sm)',
+                md: 'var(--radius-md)',
+                lg: 'var(--radius-lg)',
+                xl: 'var(--radius-xl)',
+                '2xl': 'var(--radius-xl)',
             },
             boxShadow: {
-                'clay': '6px 6px 12px rgba(0, 0, 0, 0.08), -6px -6px 12px rgba(255, 255, 255, 0.9), inset 1px 1px 2px rgba(255, 255, 255, 0.7), inset -1px -1px 2px rgba(0, 0, 0, 0.04)',
-                'clay-sm': '3px 3px 6px rgba(0, 0, 0, 0.06), -3px -3px 6px rgba(255, 255, 255, 0.8), inset 1px 1px 1px rgba(255, 255, 255, 0.5), inset -1px -1px 1px rgba(0, 0, 0, 0.03)',
-                'clay-lg': '10px 10px 20px rgba(0, 0, 0, 0.1), -10px -10px 20px rgba(255, 255, 255, 0.95), inset 2px 2px 4px rgba(255, 255, 255, 0.8), inset -2px -2px 4px rgba(0, 0, 0, 0.05)',
-                'clay-inset': 'inset 3px 3px 6px rgba(0, 0, 0, 0.08), inset -3px -3px 6px rgba(255, 255, 255, 0.7)',
-                'clay-button': '4px 4px 8px rgba(0, 0, 0, 0.08), -4px -4px 8px rgba(255, 255, 255, 0.9), inset 1px 1px 2px rgba(255, 255, 255, 0.6)',
-                'clay-button-pressed': 'inset 3px 3px 6px rgba(0, 0, 0, 0.1), inset -3px -3px 6px rgba(255, 255, 255, 0.6)',
+                sm: 'var(--shadow-sm)',
+                card: 'var(--shadow-card)',
+                lg: 'var(--shadow-lg)',
+                pressed: 'var(--shadow-pressed)',
+                button: 'var(--shadow-sm)',
             },
             transitionDuration: {
-                DEFAULT: '200ms',
+                DEFAULT: 'var(--duration-base)',
             },
             keyframes: {
                 float: {

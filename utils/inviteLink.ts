@@ -1,8 +1,8 @@
 export const INVITE_PATH = '/join';
 export const COMPETITION_INVITE_PARAM = 'competitionInvite';
 
-const INVITE_SHARE_TITLE = 'Join my Oura leaderboard';
-const INVITE_SHARE_TEXT = 'Connect your Oura account to join our private leaderboard.';
+const INVITE_SHARE_TITLE = 'Join Davis Watches You Sleep';
+const INVITE_SHARE_TEXT = 'Bring your Oura ring and join our shared leaderboard. Bragging rights are not guaranteed.';
 const COMPETITION_INVITE_SHARE_TEXT = 'Join my Oura competition and start tomorrow.';
 
 export type InviteShareResult = 'shared' | 'copied' | 'dismissed';
@@ -50,16 +50,18 @@ const copyInviteLinkWithExecCommand = (inviteLink: string): boolean => {
     textarea.focus();
     textarea.select();
 
-    let copied = false;
+    const copied = (() => {
+        try {
+            return document.execCommand('copy');
+        } catch {
+            return false;
+        }
+    })();
     try {
-        copied = document.execCommand('copy');
-    } catch (error) {
-        copied = false;
+        return copied;
     } finally {
         document.body.removeChild(textarea);
     }
-
-    return copied;
 };
 
 const copyLink = async (inviteLink: string): Promise<string> => {

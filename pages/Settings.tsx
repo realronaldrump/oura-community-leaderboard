@@ -5,6 +5,7 @@ import { fullSync, SyncProgress } from '../services/syncService';
 import SyncModal from '../components/SyncModal';
 import PrimaryProfileSwitcher from '../components/PrimaryProfileSwitcher';
 import InviteLinkCard from '../components/InviteLinkCard';
+import { Button, Dialog } from '../components/ui';
 import { ouraService } from '../services/ouraService';
 import { webhookService } from '../services/webhookService';
 import { DailyStats, DataExclusionRange } from '../types';
@@ -80,7 +81,8 @@ const Settings: React.FC = () => {
     const {
         activeProfile,
         profiles,
-        clearActiveProfileSelection,
+        setActiveProfileId,
+        removeProfile,
         login,
         updateProfile,
         getAccessTokenForProfile,
@@ -90,6 +92,10 @@ const Settings: React.FC = () => {
     const queryClient = useQueryClient();
 
     const [showSyncModal, setShowSyncModal] = useState(false);
+    const [isProfileManagerOpen, setIsProfileManagerOpen] = useState(false);
+    const [profileToRemoveId, setProfileToRemoveId] = useState<string | null>(null);
+    const [isRemovingProfile, setIsRemovingProfile] = useState(false);
+    const [profileManagerError, setProfileManagerError] = useState('');
     const [syncProgress, setSyncProgress] = useState<SyncProgress>({
         status: 'idle', currentStep: '', stepsCompleted: 0, totalSteps: 0, details: '',
     });
@@ -300,7 +306,42 @@ const Settings: React.FC = () => {
         }
     };
 
-    const handleBackToDashboard = () => { window.history.back(); };
+    const handleBackToDashboard = () => {
+        window.history.pushState({}, '', '/');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+    };
+
+    const closeProfileManager = () => {
+        if (isRemovingProfile) return;
+        setIsProfileManagerOpen(false);
+        setProfileToRemoveId(null);
+        setProfileManagerError('');
+    };
+
+    const handleOpenManagedProfile = (profileId: string) => {
+        setActiveProfileId(profileId);
+        closeProfileManager();
+    };
+
+    const handleRemoveManagedProfile = async () => {
+        if (!profileToRemoveId || profiles.length <= 1) return;
+        const fallbackProfile = profiles.find((profile) => profile.id !== profileToRemoveId) || null;
+        setIsRemovingProfile(true);
+        setProfileManagerError('');
+        try {
+            await removeProfile(profileToRemoveId);
+            if (activeProfile?.id === profileToRemoveId && fallbackProfile) {
+                setActiveProfileId(fallbackProfile.id);
+            }
+            setProfileToRemoveId(null);
+        } catch (error) {
+            console.error('Failed to remove profile:', error);
+            setProfileManagerError('That profile could not be removed. Please try again.');
+        } finally {
+            setIsRemovingProfile(false);
+        }
+    };
+    const profileToRemove = profiles.find((profile) => profile.id === profileToRemoveId) || null;
 
     const handleQuickCheck = async () => {
         if (!activeProfile) return;
@@ -521,96 +562,156 @@ const Settings: React.FC = () => {
 
     if (!activeProfile) {
         return (
-            <div className="min-h-screen bg-[#F2EDE8] text-[#2D2A26] flex flex-col items-center justify-center p-4">
+            <main className="min-h-screen bg-canvas text-ink flex flex-col items-center justify-center p-4">
                 <div className="text-center max-w-md w-full space-y-6">
                     <div>
                         <h2 className="text-xl font-semibold mb-2">No Profile Selected</h2>
-                        <p className="text-[#A8A29E] text-sm">Please connect an Oura account or select an existing profile to view settings.</p>
+                        <p className="text-ink-muted text-sm">Please connect an Oura account or select an existing profile to view settings.</p>
                     </div>
                     <div className="flex flex-col gap-3">
-                        <button onClick={login} className="w-full px-4 py-2.5 bg-[#6B9E8A] text-white font-medium rounded-[14px] text-sm hover:opacity-90 transition-opacity">
+                        <button onClick={login} className="min-h-11 w-full px-4 py-2.5 bg-accent text-white font-medium rounded-[14px] text-sm hover:opacity-90 transition-opacity">
                             Connect Oura Account
                         </button>
-                        <button onClick={handleBackToDashboard} className="w-full px-4 py-2.5 border border-[rgba(0,0,0,0.10)] text-[#2D2A26] font-medium rounded-[14px] text-sm hover:bg-[#FAF7F4] transition-colors">
+                        <button onClick={handleBackToDashboard} className="min-h-11 w-full px-4 py-2.5 border border-line-strong text-ink font-medium rounded-[14px] text-sm hover:bg-surface-raised transition-colors">
                             Back to Dashboard
                         </button>
                     </div>
                 </div>
-            </div>
+            </main>
         );
     }
 
     return (
-        <div className="min-h-screen bg-[#F2EDE8] text-[#2D2A26]">
+        <div className="min-h-screen bg-canvas text-ink">
             <SyncModal isOpen={showSyncModal} progress={syncProgress} onClose={() => setShowSyncModal(false)} />
+            <Dialog
+                isOpen={isProfileManagerOpen}
+                title={profileToRemoveId ? 'Remove this sleeper?' : 'Manage sleepers'}
+                description={profileToRemoveId
+                    ? 'This removes the profile and its saved leaderboard history from this shared app.'
+                    : 'Switch who you are viewing or remove an account that should no longer be in the circle.'}
+                onClose={closeProfileManager}
+                busy={isRemovingProfile}
+            >
+                {profileToRemoveId ? (
+                    <div>
+                        <p className="m-0 text-sm leading-6 text-ink-secondary">
+                            Remove <strong className="text-ink">{profileToRemove ? getProfileDisplayName(profileToRemove) : 'this sleeper'}</strong>? This cannot be undone from the app.
+                        </p>
+                        {profileManagerError ? <p className="mt-3 text-sm text-error" role="alert">{profileManagerError}</p> : null}
+                        <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                            <Button variant="secondary" onClick={() => setProfileToRemoveId(null)} disabled={isRemovingProfile}>
+                                Keep profile
+                            </Button>
+                            <Button variant="danger" onClick={handleRemoveManagedProfile} disabled={isRemovingProfile} data-autofocus>
+                                {isRemovingProfile ? 'Removing…' : 'Remove profile'}
+                            </Button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="grid gap-3">
+                        {profiles.map((profile) => {
+                            const isActive = profile.id === activeProfile?.id;
+                            return (
+                                <article key={profile.id} className="rounded-[var(--radius-md)] border border-line bg-surface-raised p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-semibold text-ink">{getProfileDisplayName(profile)}</p>
+                                            <p className="mt-1 text-xs text-ink-muted">{isActive ? 'Currently under observation' : 'In the sleep roster'}</p>
+                                        </div>
+                                        {isActive ? <span className="ui-badge ui-badge--accent">Viewing</span> : null}
+                                    </div>
+                                    <div className="mt-4 grid grid-cols-2 gap-2">
+                                        <Button variant="secondary" onClick={() => handleOpenManagedProfile(profile.id)} disabled={isActive}>
+                                            {isActive ? 'Open now' : 'Open profile'}
+                                        </Button>
+                                        <Button
+                                            variant="quiet"
+                                            onClick={() => setProfileToRemoveId(profile.id)}
+                                            disabled={profiles.length <= 1}
+                                            aria-label={`Remove ${getProfileDisplayName(profile)}`}
+                                        >
+                                            Remove
+                                        </Button>
+                                    </div>
+                                </article>
+                            );
+                        })}
+                        {profiles.length <= 1 ? (
+                            <p className="m-0 text-sm leading-6 text-ink-muted">The only sleeper stays put. Connect another account before removing this one.</p>
+                        ) : null}
+                        <Button onClick={login}>Add another sleeper</Button>
+                    </div>
+                )}
+            </Dialog>
 
-            <nav className="sticky top-0 z-40 bg-white/85 backdrop-blur-xl border-b border-[rgba(0,0,0,0.06)] px-4 py-3">
+            <header className="sticky top-0 z-40 border-b border-line bg-surface px-4 py-3">
                 <div className="max-w-2xl mx-auto flex justify-between items-center">
-                    <button onClick={handleBackToDashboard} className="text-[#A8A29E] hover:text-[#2D2A26] transition-colors flex items-center gap-2 text-sm">
+                    <button type="button" onClick={handleBackToDashboard} className="min-h-11 text-ink-muted hover:text-ink transition-colors flex items-center gap-2 text-sm">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
                         Back
                     </button>
-                    <h1 className="text-base font-semibold">Settings</h1>
+                    <h1 className="text-base font-semibold text-ink">Settings</h1>
                     <div className="w-16" />
                 </div>
-            </nav>
+            </header>
 
-            <div className="max-w-2xl mx-auto px-4 pt-8 pb-12">
+            <main className="settings-content max-w-2xl mx-auto px-4 pt-8 pb-12">
 
                 {/* Profile */}
                 <section className="mb-8">
-                    <h2 className="text-sm font-medium text-[#7A756E] uppercase tracking-wider mb-4">Profile</h2>
-                    <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-[18px] p-5 space-y-5">
+                    <h2 className="text-sm font-medium text-ink-secondary uppercase tracking-wider mb-4">Profile</h2>
+                    <div className="rounded-[18px] border border-line bg-surface p-5 shadow-sm space-y-5">
                         <div>
-                            <p className="text-xs text-[#A8A29E] mb-1.5 uppercase tracking-wide">Email</p>
-                            <p className="text-sm text-[#2D2A26] bg-[#F2EDE8] border border-[rgba(0,0,0,0.06)] rounded-[12px] px-3 py-2.5 cursor-not-allowed opacity-70">{activeProfile.email}</p>
+                            <p className="text-xs text-ink-muted mb-1.5 uppercase tracking-wide">Email</p>
+                            <p className="text-sm text-ink bg-canvas border border-line rounded-[12px] px-3 py-2.5 cursor-not-allowed opacity-70">{activeProfile.email}</p>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-xs text-[#A8A29E] mb-1.5 uppercase tracking-wide">First Name</label>
-                                <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)}
-                                    className="w-full bg-[#F2EDE8] border border-[rgba(0,0,0,0.10)] rounded-[12px] px-3 py-2.5 text-[#2D2A26] text-sm focus:border-[#6B9E8A] outline-none transition-colors"
+                                <label htmlFor="settings-first-name" className="block text-xs text-ink-muted mb-1.5 uppercase tracking-wide">First Name</label>
+                                <input id="settings-first-name" type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)}
+                                    className="w-full bg-canvas border border-line-strong rounded-[12px] px-3 py-2.5 text-ink text-sm focus:border-[#6B9E8A] outline-none transition-colors"
                                     placeholder="First name" />
                             </div>
                             <div>
-                                <label className="block text-xs text-[#A8A29E] mb-1.5 uppercase tracking-wide">Last Name</label>
-                                <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)}
-                                    className="w-full bg-[#F2EDE8] border border-[rgba(0,0,0,0.10)] rounded-[12px] px-3 py-2.5 text-[#2D2A26] text-sm focus:border-[#6B9E8A] outline-none transition-colors"
+                                <label htmlFor="settings-last-name" className="block text-xs text-ink-muted mb-1.5 uppercase tracking-wide">Last Name</label>
+                                <input id="settings-last-name" type="text" value={lastName} onChange={(e) => setLastName(e.target.value)}
+                                    className="w-full bg-canvas border border-line-strong rounded-[12px] px-3 py-2.5 text-ink text-sm focus:border-[#6B9E8A] outline-none transition-colors"
                                     placeholder="Last name" />
                             </div>
                         </div>
 
                         <div className="flex items-center justify-end gap-3 pt-2">
                             {saveMessage && (
-                                <span className={`text-xs ${saveMessage.includes('Failed') ? 'text-[#D4897B]' : 'text-[#6B9E8A]'}`}>{saveMessage}</span>
+                                <span className={`text-xs ${saveMessage.includes('Failed') ? 'text-error' : 'text-accent'}`}>{saveMessage}</span>
                             )}
                             <button onClick={handleSaveProfile} disabled={isSaving}
-                                className="px-5 py-2.5 bg-[#6B9E8A] text-white font-medium rounded-[12px] text-sm disabled:opacity-50 hover:opacity-90 transition-opacity">
+                                className="px-5 py-2.5 bg-accent text-white font-medium rounded-[12px] text-sm disabled:opacity-50 hover:opacity-90 transition-opacity">
                                 {isSaving ? 'Saving...' : 'Save Changes'}
                             </button>
                         </div>
 
-                        <hr className="border-[rgba(0,0,0,0.06)]" />
+                        <hr className="border-line" />
 
-                        <div className="flex justify-between items-center bg-[#F2EDE8] border border-[rgba(0,0,0,0.06)] rounded-[14px] p-4">
+                        <div className="flex flex-col items-stretch gap-4 bg-canvas border border-line rounded-[14px] p-4 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                                <p className="text-[#2D2A26] font-medium text-sm">Switch Profile</p>
-                                <p className="text-[#A8A29E] text-xs mt-1">Currently viewing as {getProfileDisplayName(activeProfile)}</p>
+                                <p className="text-ink font-medium text-sm">Switch Profile</p>
+                                <p className="text-ink-muted text-xs mt-1">Currently viewing as {getProfileDisplayName(activeProfile)}</p>
                             </div>
                             {profiles.length > 1 ? (
-                                <div className="flex items-center gap-2">
-                                    <PrimaryProfileSwitcher selectClassName="min-w-[11rem]" />
+                                <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[minmax(11rem,1fr)_auto]">
+                                    <PrimaryProfileSwitcher selectClassName="w-full sm:min-w-[11rem]" />
                                     <button
-                                        onClick={clearActiveProfileSelection}
-                                        className="px-4 py-2 border border-[rgba(0,0,0,0.10)] text-[#2D2A26] font-medium rounded-[12px] text-sm hover:bg-[#FAF7F4] transition-colors whitespace-nowrap"
+                                        onClick={() => setIsProfileManagerOpen(true)}
+                                        className="min-h-11 px-4 py-2 border border-line-strong text-ink font-medium rounded-[12px] text-sm hover:bg-surface-raised transition-colors whitespace-nowrap"
                                     >
                                         Manage
                                     </button>
                                 </div>
                             ) : (
-                                <p className="text-[#A8A29E] text-xs">Add another profile to enable switching.</p>
+                                <p className="text-ink-muted text-xs">Add another profile to enable switching.</p>
                             )}
                         </div>
                     </div>
@@ -618,74 +719,74 @@ const Settings: React.FC = () => {
 
                 {/* Data Quality */}
                 <section className="mb-8">
-                    <h2 className="text-sm font-medium text-[#7A756E] uppercase tracking-wider mb-4">Data Quality</h2>
-                    <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-[18px] p-5 space-y-5">
+                    <h2 className="text-sm font-medium text-ink-secondary uppercase tracking-wider mb-4">Data Quality</h2>
+                    <div className="rounded-[18px] border border-line bg-surface p-5 shadow-sm space-y-5">
                         <div>
                             <div className="flex items-start justify-between gap-4">
                                 <div>
-                                    <p className="text-[#2D2A26] font-medium text-sm">Ring Breaks & Excluded Days</p>
-                                    <p className="text-[#A8A29E] text-xs mt-1 leading-relaxed">
+                                    <p className="text-ink font-medium text-sm">Ring Breaks & Excluded Days</p>
+                                    <p className="text-ink-muted text-xs mt-1 leading-relaxed">
                                         Save days when the ring was not worn. These days stay on this profile and are omitted from dashboard scores, analytics, comparisons, competitions, and CSV exports.
                                     </p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="font-mono text-lg font-semibold text-[#2D2A26]">{excludedDayCount}</p>
-                                    <p className="text-[11px] uppercase tracking-wide text-[#A8A29E]">days excluded</p>
+                                    <p className="font-mono text-lg font-semibold text-ink">{excludedDayCount}</p>
+                                    <p className="text-[11px] uppercase tracking-wide text-ink-muted">days excluded</p>
                                 </div>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <label className="block">
-                                <span className="block text-xs text-[#A8A29E] mb-1.5 uppercase tracking-wide">Start Date</span>
+                                <span className="block text-xs text-ink-muted mb-1.5 uppercase tracking-wide">Start Date</span>
                                 <input
                                     type="date"
                                     value={exclusionStartDay}
                                     onChange={(event) => setExclusionStartDay(event.target.value)}
-                                    className="w-full bg-[#F2EDE8] border border-[rgba(0,0,0,0.10)] rounded-[12px] px-3 py-2.5 text-[#2D2A26] text-sm focus:border-[#6B9E8A] outline-none transition-colors"
+                                    className="w-full bg-canvas border border-line-strong rounded-[12px] px-3 py-2.5 text-ink text-sm focus:border-[#6B9E8A] outline-none transition-colors"
                                 />
                             </label>
                             <label className="block">
-                                <span className="block text-xs text-[#A8A29E] mb-1.5 uppercase tracking-wide">End Date</span>
+                                <span className="block text-xs text-ink-muted mb-1.5 uppercase tracking-wide">End Date</span>
                                 <input
                                     type="date"
                                     value={exclusionEndDay}
                                     onChange={(event) => setExclusionEndDay(event.target.value)}
-                                    className="w-full bg-[#F2EDE8] border border-[rgba(0,0,0,0.10)] rounded-[12px] px-3 py-2.5 text-[#2D2A26] text-sm focus:border-[#6B9E8A] outline-none transition-colors"
+                                    className="w-full bg-canvas border border-line-strong rounded-[12px] px-3 py-2.5 text-ink text-sm focus:border-[#6B9E8A] outline-none transition-colors"
                                 />
                             </label>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
                             <label className="block min-w-0">
-                                <span className="block text-xs text-[#A8A29E] mb-1.5 uppercase tracking-wide">Label</span>
+                                <span className="block text-xs text-ink-muted mb-1.5 uppercase tracking-wide">Label</span>
                                 <input
                                     type="text"
                                     value={exclusionLabel}
                                     onChange={(event) => setExclusionLabel(event.target.value)}
-                                    className="w-full bg-[#F2EDE8] border border-[rgba(0,0,0,0.10)] rounded-[12px] px-3 py-2.5 text-[#2D2A26] text-sm focus:border-[#6B9E8A] outline-none transition-colors"
+                                    className="w-full bg-canvas border border-line-strong rounded-[12px] px-3 py-2.5 text-ink text-sm focus:border-[#6B9E8A] outline-none transition-colors"
                                     placeholder="Travel, charging break, illness..."
                                 />
                             </label>
                             <button
                                 onClick={handleAddDataExclusion}
                                 disabled={isSavingExclusion}
-                                className="px-5 py-2.5 bg-[#6B9E8A] text-white font-medium rounded-[12px] text-sm disabled:opacity-50 hover:opacity-90 transition-opacity whitespace-nowrap"
+                                className="px-5 py-2.5 bg-accent text-white font-medium rounded-[12px] text-sm disabled:opacity-50 hover:opacity-90 transition-opacity whitespace-nowrap"
                             >
                                 {isSavingExclusion ? 'Saving...' : 'Add Exclusion'}
                             </button>
                         </div>
 
                         {exclusionMessage && (
-                            <p className={`text-xs ${exclusionMessage.includes('Failed') || exclusionMessage.includes('valid') ? 'text-[#D4897B]' : 'text-[#6B9E8A]'}`}>
+                            <p className={`text-xs ${exclusionMessage.includes('Failed') || exclusionMessage.includes('valid') ? 'text-error' : 'text-accent'}`}>
                                 {exclusionMessage}
                             </p>
                         )}
 
-                        <div className="border-t border-[rgba(0,0,0,0.06)] pt-4">
+                        <div className="border-t border-line pt-4">
                             {dataExclusionRanges.length === 0 ? (
-                                <div className="rounded-[14px] border border-[rgba(0,0,0,0.06)] bg-[#F2EDE8] px-4 py-3">
-                                    <p className="text-sm text-[#7A756E]">No ring breaks are excluded for this profile.</p>
+                                <div className="rounded-[14px] border border-line bg-canvas px-4 py-3">
+                                    <p className="text-sm text-ink-secondary">No ring breaks are excluded for this profile.</p>
                                 </div>
                             ) : (
                                 <div className="space-y-2">
@@ -697,15 +798,15 @@ const Settings: React.FC = () => {
                                         const dayCount = getDataExclusionRangeDayCount(range);
 
                                         return (
-                                            <div key={range.id} className="flex items-center justify-between gap-3 rounded-[14px] border border-[rgba(0,0,0,0.06)] bg-[#F2EDE8] px-4 py-3">
+                                            <div key={range.id} className="flex items-center justify-between gap-3 rounded-[14px] border border-line bg-canvas px-4 py-3">
                                                 <div className="min-w-0">
-                                                    <p className="text-sm font-medium text-[#2D2A26] truncate">{range.label || (isSingleDay ? 'Excluded day' : 'Ring break')}</p>
-                                                    <p className="text-xs text-[#A8A29E] mt-1">{dateLabel} - {dayCount} {dayCount === 1 ? 'day' : 'days'}</p>
+                                                    <p className="text-sm font-medium text-ink truncate">{range.label || (isSingleDay ? 'Excluded day' : 'Ring break')}</p>
+                                                    <p className="text-xs text-ink-muted mt-1">{dateLabel} - {dayCount} {dayCount === 1 ? 'day' : 'days'}</p>
                                                 </div>
                                                 <button
                                                     onClick={() => handleRemoveDataExclusion(range.id)}
                                                     disabled={isSavingExclusion}
-                                                    className="px-3 py-1.5 border border-[rgba(0,0,0,0.10)] text-[#7A756E] font-medium rounded-[10px] text-xs hover:bg-[#FAF7F4] transition-colors disabled:opacity-50"
+                                                    className="px-3 py-1.5 border border-line-strong text-ink-secondary font-medium rounded-[10px] text-xs hover:bg-surface-raised transition-colors disabled:opacity-50"
                                                 >
                                                     Remove
                                                 </button>
@@ -720,33 +821,33 @@ const Settings: React.FC = () => {
 
                 {/* Data Sync */}
                 <section className="mb-8">
-                    <h2 className="text-sm font-medium text-[#7A756E] uppercase tracking-wider mb-4">Data Sync</h2>
-                    <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-[18px] p-5">
-                        <div className="flex items-start justify-between gap-4">
+                    <h2 className="text-sm font-medium text-ink-secondary uppercase tracking-wider mb-4">Data Sync</h2>
+                    <div className="rounded-[18px] border border-line bg-surface p-5 shadow-sm">
+                        <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div className="flex-1">
-                                <p className="text-[#2D2A26] font-medium text-sm">Full Data Sync</p>
-                                <p className="text-[#A8A29E] text-xs mt-1 leading-relaxed">
+                                <p className="text-ink font-medium text-sm">Full Data Sync</p>
+                                <p className="text-ink-muted text-xs mt-1 leading-relaxed">
                                     Download your complete Oura history. This may take a few minutes.<br />
                                     The dashboard syncs recent data automatically every hour. Use Full Sync here to backfill your complete history.
                                 </p>
                             </div>
-                            <button onClick={handleFullSync} className="px-4 py-2 border border-[rgba(0,0,0,0.10)] text-[#2D2A26] font-medium rounded-[12px] text-sm hover:bg-[#FAF7F4] transition-colors whitespace-nowrap">
+                            <button onClick={handleFullSync} className="min-h-11 w-full rounded-[12px] border border-line-strong px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-raised sm:w-auto whitespace-nowrap">
                                 Sync All Data
                             </button>
                         </div>
 
-                        <div className="mt-5 pt-5 border-t border-[rgba(0,0,0,0.06)]">
-                            <div className="flex items-start justify-between gap-4">
+                        <div className="mt-5 pt-5 border-t border-line">
+                            <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between">
                                 <div className="flex-1">
-                                    <p className="text-[#2D2A26] font-medium text-sm">Quick API & Freshness Check</p>
-                                    <p className="text-[#A8A29E] text-xs mt-1 leading-relaxed">
+                                    <p className="text-ink font-medium text-sm">Quick API & Freshness Check</p>
+                                    <p className="text-ink-muted text-xs mt-1 leading-relaxed">
                                         Fast verification against Oura `daily_sleep`, `daily_readiness`, and `daily_activity` endpoints over the last {QUICK_CHECK_LOOKBACK_DAYS + 1} days.
                                     </p>
                                 </div>
                                 <button
                                     onClick={handleQuickCheck}
                                     disabled={quickCheck.status === 'running'}
-                                    className="px-4 py-2 border border-[rgba(0,0,0,0.10)] text-[#2D2A26] font-medium rounded-[12px] text-sm hover:bg-[#FAF7F4] transition-colors whitespace-nowrap disabled:opacity-50"
+                                    className="min-h-11 w-full rounded-[12px] border border-line-strong px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-raised disabled:opacity-50 sm:w-auto whitespace-nowrap"
                                 >
                                     {quickCheck.status === 'running' ? 'Checking...' : 'Run Check'}
                                 </button>
@@ -756,12 +857,12 @@ const Settings: React.FC = () => {
                                 <div
                                     className={`mt-3 rounded-[12px] border px-3 py-2.5 text-xs ${
                                         quickCheck.status === 'ok'
-                                            ? 'border-[#6B9E8A]/40 bg-[#6B9E8A]/10 text-[#4A7A64]'
+                                            ? 'border-[#6B9E8A]/40 bg-accent/10 text-[#4A7A64]'
                                             : quickCheck.status === 'warning'
                                                 ? 'border-[#D4A574]/40 bg-[#D4A574]/10 text-[#A07A4A]'
                                                 : quickCheck.status === 'error'
-                                                    ? 'border-[#D4897B]/40 bg-[#D4897B]/10 text-[#A0574A]'
-                                                    : 'border-[rgba(0,0,0,0.10)] bg-[#F2EDE8] text-[#7A756E]'
+                                                    ? 'border-[#D4897B]/40 bg-error/10 text-[#A0574A]'
+                                                    : 'border-line-strong bg-canvas text-ink-secondary'
                                     }`}
                                 >
                                     <p className="font-medium">{quickCheck.message}</p>
@@ -777,18 +878,18 @@ const Settings: React.FC = () => {
                             )}
                         </div>
 
-                        <div className="mt-5 pt-5 border-t border-[rgba(0,0,0,0.06)]">
-                            <div className="flex items-start justify-between gap-4">
+                        <div className="mt-5 pt-5 border-t border-line">
+                            <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between">
                                 <div className="flex-1">
-                                    <p className="text-[#2D2A26] font-medium text-sm">Live Webhook Updates</p>
-                                    <p className="text-[#A8A29E] text-xs mt-1 leading-relaxed">
+                                    <p className="text-ink font-medium text-sm">Live Webhook Updates</p>
+                                    <p className="text-ink-muted text-xs mt-1 leading-relaxed">
                                         Configure Oura webhooks so the Today view refreshes as soon as Oura publishes new data.
                                     </p>
                                 </div>
                                 <button
                                     onClick={handleEnableLiveUpdates}
                                     disabled={webhookStatus.status === 'running'}
-                                    className="px-4 py-2 border border-[rgba(0,0,0,0.10)] text-[#2D2A26] font-medium rounded-[12px] text-sm hover:bg-[#FAF7F4] transition-colors whitespace-nowrap disabled:opacity-50"
+                                    className="min-h-11 w-full rounded-[12px] border border-line-strong px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-raised disabled:opacity-50 sm:w-auto whitespace-nowrap"
                                 >
                                     {webhookStatus.status === 'running'
                                         ? 'Configuring...'
@@ -802,12 +903,12 @@ const Settings: React.FC = () => {
                                 <div
                                     className={`mt-3 rounded-[12px] border px-3 py-2.5 text-xs ${
                                         webhookStatus.status === 'ok'
-                                            ? 'border-[#6B9E8A]/40 bg-[#6B9E8A]/10 text-[#4A7A64]'
+                                            ? 'border-[#6B9E8A]/40 bg-accent/10 text-[#4A7A64]'
                                             : webhookStatus.status === 'warning'
                                                 ? 'border-[#D4A574]/40 bg-[#D4A574]/10 text-[#A07A4A]'
                                                 : webhookStatus.status === 'error'
-                                                    ? 'border-[#D4897B]/40 bg-[#D4897B]/10 text-[#A0574A]'
-                                                    : 'border-[rgba(0,0,0,0.10)] bg-[#F2EDE8] text-[#7A756E]'
+                                                    ? 'border-[#D4897B]/40 bg-error/10 text-[#A0574A]'
+                                                    : 'border-line-strong bg-canvas text-ink-secondary'
                                     }`}
                                 >
                                     <p className="font-medium">{webhookStatus.message}</p>
@@ -827,15 +928,15 @@ const Settings: React.FC = () => {
 
                 {/* Add Profiles */}
                 <section>
-                    <h2 className="text-sm font-medium text-[#7A756E] uppercase tracking-wider mb-4">Add Profiles</h2>
+                    <h2 className="text-sm font-medium text-ink-secondary uppercase tracking-wider mb-4">Add Profiles</h2>
                     <div className="space-y-4">
-                        <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-[18px] p-5">
-                            <div className="flex items-center justify-between gap-4">
+                        <div className="rounded-[18px] border border-line bg-surface p-5 shadow-sm">
+                            <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between">
                                 <div className="flex-1">
-                                    <p className="text-[#2D2A26] font-medium text-sm">Connect Another Account</p>
-                                    <p className="text-[#A8A29E] text-xs mt-1">Add another Oura profile to seamlessly switch between them.</p>
+                                    <p className="text-ink font-medium text-sm">Connect Another Account</p>
+                                    <p className="text-ink-muted text-xs mt-1">Add another Oura profile to the leaderboard.</p>
                                 </div>
-                                <button onClick={login} className="px-4 py-2 bg-[#6B9E8A] text-white font-medium rounded-[12px] text-sm hover:opacity-90 transition-opacity whitespace-nowrap">
+                                <button onClick={login} className="min-h-11 w-full rounded-[12px] bg-accent px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto whitespace-nowrap">
                                     Connect Account
                                 </button>
                             </div>
@@ -843,12 +944,12 @@ const Settings: React.FC = () => {
 
                         <InviteLinkCard
                             title="Invite a friend"
-                            description="Send this link to a new friend and they will land directly on the join flow. Once they connect Oura, they are added to the same shared leaderboard automatically."
+                            description="They can connect Oura and add themselves to the board. Anyone with this app link can open the shared board, so only send it to someone you trust."
                             memberCount={profiles.length}
                         />
                     </div>
                 </section>
-            </div>
+            </main>
         </div>
     );
 };

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatISODateForDisplay } from '../utils/date';
 import { getUTCDateFromISODate } from '../utils/temporal';
@@ -108,6 +108,9 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
 }) => {
     const dates = datesProp ?? [];
     const rootRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
+    const panelId = useId();
     const newestDay = dates[0] || '';
     const oldestDay = dates[dates.length - 1] || '';
 
@@ -120,7 +123,9 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
 
     // Build a Set for O(1) availability lookups
     const availableSet = useMemo(() => new Set(dates), [dates]);
-    const hasDateConstraint = dates.length > 0;
+    // Omitting `dates` means every day inside min/max is available. Passing an
+    // explicit empty array means the caller has no available days yet.
+    const hasDateConstraint = datesProp !== undefined;
 
     /* ── Range state ──────────────────────────────── */
 
@@ -240,7 +245,6 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
             setViewYear(d.getUTCFullYear());
             setViewMonth(d.getUTCMonth());
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen]);
 
     const navigateMonth = (delta: number) => {
@@ -265,6 +269,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                 onSelectDate(isoDay);
             }
             setIsOpen(false);
+            window.requestAnimationFrame(() => triggerRef.current?.focus());
         }
     };
 
@@ -291,17 +296,26 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
 
     useEffect(() => {
         if (!isOpen) return;
+        const focusTimer = window.setTimeout(() => {
+            panelRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+        }, 0);
         const onPointer = (e: PointerEvent) => {
             if (!rootRef.current?.contains(e.target as Node)) setIsOpen(false);
         };
         const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') setIsOpen(false);
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsOpen(false);
+                triggerRef.current?.focus();
+            }
         };
         document.addEventListener('pointerdown', onPointer);
-        document.addEventListener('keydown', onKey);
+        document.addEventListener('keydown', onKey, true);
         return () => {
+            window.clearTimeout(focusTimer);
             document.removeEventListener('pointerdown', onPointer);
-            document.removeEventListener('keydown', onKey);
+            document.removeEventListener('keydown', onKey, true);
         };
     }, [isOpen]);
 
@@ -321,54 +335,61 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
         <div className="dp-calendar">
             {/* Month navigation */}
             <div className="dp-month-nav">
-                <button type="button" onClick={() => navigateMonth(-1)} className="dp-month-btn" aria-label="Previous month">
-                    <ChevronLeft className="h-4 w-4" />
+                <button type="button" onClick={() => navigateMonth(-1)} className="dp-month-btn min-h-11 min-w-11" aria-label="Previous month">
+                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                 </button>
                 <span className="dp-month-label">
                     {MONTH_NAMES[viewMonth]} {viewYear}
                 </span>
-                <button type="button" onClick={() => navigateMonth(1)} className="dp-month-btn" aria-label="Next month">
-                    <ChevronRight className="h-4 w-4" />
+                <button type="button" onClick={() => navigateMonth(1)} className="dp-month-btn min-h-11 min-w-11" aria-label="Next month">
+                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
                 </button>
             </div>
 
-            {/* Weekday headers */}
-            <div className="dp-weekdays">
-                {WEEKDAYS.map((wd) => (
-                    <span key={wd} className="dp-weekday">{wd}</span>
-                ))}
-            </div>
+            <div
+                className="dp-calendar-viewport"
+                role="region"
+                aria-label="Calendar dates"
+                tabIndex={0}
+            >
+                {/* Weekday headers */}
+                <div className="dp-weekdays">
+                    {WEEKDAYS.map((wd) => (
+                        <span key={wd} className="dp-weekday">{wd}</span>
+                    ))}
+                </div>
 
-            {/* Day cells */}
-            <div className="dp-days">
-                {monthGrid.map((isoDay, i) => {
-                    if (!isoDay) return <span key={`empty-${i}`} className="dp-cell-empty" />;
-                    const dayNum = Number(isoDay.slice(8));
-                    const selectable = isDaySelectable(isoDay);
-                    const selected = isDaySelected(isoDay);
-                    const inRange = isDayInRange(isoDay);
-                    const isToday = todayIsoDay ? isoDay === todayIsoDay : false;
+                {/* Day cells */}
+                <div className="dp-days">
+                    {monthGrid.map((isoDay, i) => {
+                        if (!isoDay) return <span key={`empty-${i}`} className="dp-cell-empty" />;
+                        const dayNum = Number(isoDay.slice(8));
+                        const selectable = isDaySelectable(isoDay);
+                        const selected = isDaySelected(isoDay);
+                        const inRange = isDayInRange(isoDay);
+                        const isToday = todayIsoDay ? isoDay === todayIsoDay : false;
 
-                    return (
-                        <button
-                            key={isoDay}
-                            type="button"
-                            disabled={!selectable}
-                            onClick={() => handleDayClick(isoDay)}
-                            className={[
-                                'dp-cell',
-                                selected && 'is-selected',
-                                inRange && !selected && 'is-in-range',
-                                isToday && !selected && 'is-today',
-                                !selectable && 'is-unavailable',
-                            ].filter(Boolean).join(' ')}
-                            aria-label={formatDayLong(isoDay)}
-                            aria-pressed={selected}
-                        >
-                            {dayNum}
-                        </button>
-                    );
-                })}
+                        return (
+                            <button
+                                key={isoDay}
+                                type="button"
+                                disabled={!selectable}
+                                onClick={() => handleDayClick(isoDay)}
+                                className={[
+                                    'dp-cell min-h-11 min-w-11',
+                                    selected && 'is-selected',
+                                    inRange && !selected && 'is-in-range',
+                                    isToday && !selected && 'is-today',
+                                    !selectable && 'is-unavailable',
+                                ].filter(Boolean).join(' ')}
+                                aria-label={formatDayLong(isoDay)}
+                                aria-pressed={selected}
+                            >
+                                {dayNum}
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
         </div>
     );
@@ -382,23 +403,27 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                     <span className="mb-2 block text-sm font-medium text-[var(--text-primary)]">{label}</span>
                 )}
                 <button
+                    ref={triggerRef}
                     type="button"
                     disabled={isDisabled}
                     onClick={() => setIsOpen((o) => !o)}
                     className={`date-picker-trigger dp-field-trigger ${isDisabled ? 'is-disabled' : ''}`}
                     aria-expanded={isOpen}
                     aria-haspopup="dialog"
+                    aria-controls={isOpen ? panelId : undefined}
                 >
-                    <CalendarDays className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+                    <CalendarDays className="h-4 w-4 shrink-0 text-[var(--accent)]" aria-hidden="true" />
                     <span className="truncate font-medium">{activeDay ? formatDayLong(activeDay) : 'Pick a date'}</span>
-                    <ChevronDown className={`ml-auto h-4 w-4 shrink-0 text-[var(--text-muted)] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                    <ChevronDown aria-hidden="true" className={`ml-auto h-4 w-4 shrink-0 text-[var(--text-muted)] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {isOpen && (
                     <div
+                        id={panelId}
+                        ref={panelRef}
                         role="dialog"
                         aria-label="Date picker"
-                        className="date-picker-panel absolute left-0 z-50 mt-2 w-[min(92vw,22rem)] rounded-xl border border-[var(--border-default)] bg-[var(--bg-raised)] p-3 shadow-[0_18px_44px_rgba(0,0,0,0.12)]"
+                        className="date-picker-panel date-picker-panel--field absolute left-0 z-50 mt-2 rounded-xl border border-[var(--border-default)] bg-[var(--bg-raised)] p-3 shadow-[0_18px_44px_rgba(0,0,0,0.12)]"
                     >
                         {calendarGrid}
                     </div>
@@ -412,16 +437,18 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
     return (
         <div ref={rootRef} className={`relative ${className}`}>
             <button
+                ref={triggerRef}
                 type="button"
                 disabled={isDisabled}
                 onClick={() => setIsOpen((o) => !o)}
                 className={`date-picker-trigger group ${isDisabled ? 'is-disabled' : ''}`}
                 aria-expanded={isOpen}
                 aria-haspopup="dialog"
+                aria-controls={isOpen ? panelId : undefined}
             >
-                <CalendarDays className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+                <CalendarDays className="h-4 w-4 shrink-0 text-[var(--accent)]" aria-hidden="true" />
                 <span className="truncate font-medium">{triggerLabel}</span>
-                <ChevronDown className={`ml-auto h-4 w-4 shrink-0 text-[var(--text-muted)] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown aria-hidden="true" className={`ml-auto h-4 w-4 shrink-0 text-[var(--text-muted)] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {showStepper && (
@@ -440,6 +467,8 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
 
             {isOpen && (
                 <div
+                    id={panelId}
+                    ref={panelRef}
                     role="dialog"
                     aria-label={isRangeMode ? 'Date range picker' : 'Date picker'}
                     className="date-picker-panel absolute right-0 z-50 mt-2 w-[min(92vw,22rem)] rounded-xl border border-[var(--border-default)] bg-[var(--bg-raised)] p-3 shadow-[0_18px_44px_rgba(0,0,0,0.12)]"
@@ -453,7 +482,8 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                                         key={qr.key}
                                         type="button"
                                         onClick={() => applyQuickRange(qr.days)}
-                                        className={`date-picker-chip ${activeQuickRange === qr.key ? 'is-active' : ''}`}
+                                        aria-pressed={activeQuickRange === qr.key}
+                                        className={`date-picker-chip min-h-11 ${activeQuickRange === qr.key ? 'is-active' : ''}`}
                                     >
                                         {qr.label}
                                     </button>
@@ -461,7 +491,8 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                                 <button
                                     type="button"
                                     onClick={applyFullRange}
-                                    className={`date-picker-chip ${activeQuickRange === 'all' ? 'is-active' : ''}`}
+                                    aria-pressed={activeQuickRange === 'all'}
+                                    className={`date-picker-chip min-h-11 ${activeQuickRange === 'all' ? 'is-active' : ''}`}
                                 >
                                     Max
                                 </button>
@@ -480,8 +511,8 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                         <div className="space-y-3">
                             {/* Quick buttons */}
                             <div className="flex flex-wrap gap-1.5">
-                                <button type="button" onClick={() => newestDay && onSelectDate(newestDay)} className="date-picker-chip">Latest</button>
-                                <button type="button" onClick={() => oldestDay && onSelectDate(oldestDay)} className="date-picker-chip">Oldest</button>
+                                <button type="button" onClick={() => newestDay && onSelectDate(newestDay)} className="date-picker-chip min-h-11">Latest</button>
+                                <button type="button" onClick={() => oldestDay && onSelectDate(oldestDay)} className="date-picker-chip min-h-11">Oldest</button>
                             </div>
 
                             {/* Calendar */}

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { CLAY_TOOLTIP_STYLE } from '../../utils/chartStyles';
+import { CHART_TOOLTIP_STYLE } from '../../utils/chartStyles';
 import {
     LineChart,
     Line,
@@ -66,7 +66,7 @@ const ComparisonHeartRateChart: React.FC<ComparisonHeartRateChartProps> = ({ ser
     const formattedData = useMemo(() => buildComparisonHeartRateChartData(activeSeries), [activeSeries]);
 
     if (activeSeries.length === 0) {
-        return <div className="text-center text-[#A8A29E]">No heart rate data available</div>;
+        return <div className="text-center text-ink-muted">No heart rate data available</div>;
     }
 
     return (
@@ -95,7 +95,7 @@ const ComparisonHeartRateChart: React.FC<ComparisonHeartRateChartProps> = ({ ser
                         domain={['dataMin - 5', 'dataMax + 5']}
                     />
                     <Tooltip
-                        contentStyle={CLAY_TOOLTIP_STYLE}
+                        contentStyle={CHART_TOOLTIP_STYLE}
                         itemStyle={{ color: '#2D2A26' }}
                     />
                     <Legend />

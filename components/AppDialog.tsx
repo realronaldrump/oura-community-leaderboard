@@ -1,5 +1,5 @@
 import React from 'react';
-import { IOSButton, IOSModal } from './ios';
+import { Button, Dialog } from './ui';
 
 type DialogIntent = 'info' | 'destructive';
 
@@ -26,37 +26,38 @@ const AppDialog: React.FC<AppDialogProps> = ({
     onConfirm,
     onCancel,
 }) => {
-    const panelClasses = intent === 'destructive'
-        ? 'bg-[#D4897B]/8 border border-[#D4897B]/20'
-        : 'bg-[#6B9E8A]/6 border border-[#6B9E8A]/15';
-
     return (
-        <IOSModal isOpen={isOpen} onClose={onCancel || onConfirm} title={title}>
+        <Dialog isOpen={isOpen} onClose={onCancel || onConfirm} title={title}>
             <div className="space-y-5">
-                <div className={`rounded-2xl p-3 ${panelClasses}`}>
-                    <p className="text-sm text-[#7A756E] leading-relaxed">{message}</p>
+                <div
+                    className={`rounded-lg border p-4 ${intent === 'destructive'
+                        ? 'border-error/25 bg-error-soft'
+                        : 'border-line bg-surface-raised'}`}
+                >
+                    <p className="m-0 text-sm leading-relaxed text-ink-secondary">{message}</p>
                 </div>
 
                 <div className={`grid gap-2 ${onCancel ? 'grid-cols-2' : 'grid-cols-1'}`}>
                     {onCancel && (
-                        <IOSButton
+                        <Button
                             variant="secondary"
                             onClick={onCancel}
                             disabled={confirmDisabled}
                         >
                             {cancelText}
-                        </IOSButton>
+                        </Button>
                     )}
-                    <IOSButton
-                        variant={intent === 'destructive' ? 'destructive' : 'primary'}
+                    <Button
+                        variant={intent === 'destructive' ? 'danger' : 'primary'}
                         onClick={onConfirm}
                         disabled={confirmDisabled}
+                        data-autofocus={!onCancel ? true : undefined}
                     >
                         {confirmText}
-                    </IOSButton>
+                    </Button>
                 </div>
             </div>
-        </IOSModal>
+        </Dialog>
     );
 };
 

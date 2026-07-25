@@ -1,6 +1,7 @@
 import React from 'react';
-import { Calendar, X } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { formatISODateForDisplay } from '../../utils/date';
+import { Dialog } from '../ui';
 
 interface DetailsModalProps {
     isOpen: boolean;
@@ -16,45 +17,19 @@ interface DetailsModalProps {
 const DetailsModal: React.FC<DetailsModalProps> = ({
     isOpen, onClose, title, subtitle, description, stats, dates, datesTitle = 'Contributing Days'
 }) => {
-    if (!isOpen) return null;
-
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            {/* Backdrop */}
-            <div
-                className="absolute inset-0 bg-[var(--bg-void)]/80 backdrop-blur-sm"
-                onClick={onClose}
-            />
-
-            {/* Modal */}
-            <div className="relative card w-full max-w-lg max-h-[85vh] flex flex-col animate-fade-in-up border border-[var(--border-default)] shadow-2xl bg-[var(--bg-elevated)]">
-                {/* Header */}
-                <div className="p-6 border-b border-[var(--border-subtle)]">
-                    <div className="flex items-start justify-between">
-                        <div>
-                            <h3 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-                                {title}
-                            </h3>
-                            {subtitle && (
-                                <p className="text-[var(--accent)] text-sm font-medium mt-1">
-                                    {subtitle}
-                                </p>
-                            )}
-                        </div>
-                        <button
-                            onClick={onClose}
-                            className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1"
-                        >
-                            <X className="w-6 h-6" />
-                        </button>
-                    </div>
-                </div>
-
-                {/* Content */}
-                <div className="p-6 overflow-y-auto custom-scrollbar">
-                    <p className="text-[var(--text-secondary)] mb-6">
-                        {description}
-                    </p>
+        <Dialog
+            isOpen={isOpen}
+            onClose={onClose}
+            title={title}
+            description={subtitle || description}
+        >
+            <div className="overflow-y-auto custom-scrollbar">
+                    {subtitle ? (
+                        <p className="text-[var(--text-secondary)] mb-6">
+                            {description}
+                        </p>
+                    ) : null}
 
                     {/* Stats Grid */}
                     {stats.length > 0 && (
@@ -107,9 +82,8 @@ const DetailsModal: React.FC<DetailsModalProps> = ({
                             </div>
                         </div>
                     )}
-                </div>
             </div>
-        </div>
+        </Dialog>
     );
 };
 

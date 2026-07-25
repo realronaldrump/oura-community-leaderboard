@@ -73,25 +73,22 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
         if (!eventDay || minutesOfDay == null) return null;
 
         const previousDay = shiftLocalISODate(targetDay, -1);
-        let dayOffset = 0;
-        if (eventDay === targetDay) {
-            dayOffset = 1440;
-        } else if (eventDay === previousDay) {
-            dayOffset = 0;
-        } else if (eventDay < previousDay) {
-            dayOffset = -1440;
-        } else {
-            dayOffset = 2880;
-        }
+        const dayOffset = eventDay === targetDay
+            ? 1440
+            : eventDay === previousDay
+                ? 0
+                : eventDay < previousDay
+                    ? -1440
+                    : 2880;
 
         return dayOffset + minutesOfDay - 720;
     };
 
     const getInsightIcon = (type: string) => {
         switch (type) {
-            case 'sleep_timing': return <BedDouble className="w-4 h-4 text-[#7BA8D4]" />;
-            case 'activity': return <Activity className="w-4 h-4 text-[#7BC4A0]" />;
-            default: return <Heart className="w-4 h-4 text-[#D4897B]" />;
+            case 'sleep_timing': return <BedDouble className="w-4 h-4 text-metric-sleep" />;
+            case 'activity': return <Activity className="w-4 h-4 text-success" />;
+            default: return <Heart className="w-4 h-4 text-error" />;
         }
     };
 
@@ -164,14 +161,9 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                         {/* 0 = 12PM prev day, 12 = 12AM, 24 = 12PM current day */}
                         {[0, 3, 6, 9, 12, 15, 18, 21, 24].map(offsetHours => {
                             const isMidnight = offsetHours === 12;
-                            let label = '';
-                            if (offsetHours % 12 === 0) {
-                                label = isMidnight ? '12AM' : '12PM';
-                            } else {
-                                const h = offsetHours % 12; // 3, 6, 9
-                                const isAm = offsetHours > 12 && offsetHours < 24;
-                                label = `${h}${isAm ? 'AM' : 'PM'}`;
-                            }
+                            const label = offsetHours % 12 === 0
+                                ? (isMidnight ? '12AM' : '12PM')
+                                : `${offsetHours % 12}${offsetHours > 12 && offsetHours < 24 ? 'AM' : 'PM'}`;
 
                             return (
                                 <div
@@ -189,7 +181,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                 </div>
 
                 {/* User rows */}
-                {sessionData.map((userData, userIdx) => {
+                {sessionData.map((userData) => {
                     const { session, userName, color } = userData;
                     if (!session) return null;
 

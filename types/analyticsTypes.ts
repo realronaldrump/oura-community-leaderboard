@@ -1,7 +1,5 @@
 // Analytics Types for Advanced Dashboard Features
 
-import { DailySleep, DailyReadiness, DailyActivity, SleepSession, DailyStats } from '../types';
-
 // ============================================
 // STREAK TRACKING
 // ============================================
@@ -74,7 +72,7 @@ export interface Badge {
 export type PatternType =
     | 'day_of_week'            // "Fridays show 20% higher stress"
     | 'activity_sleep'         // "Best sleep follows >10k step days"
-    | 'hrv_readiness'          // HRV predicts next-day readiness
+    | 'hrv_readiness'          // HRV compared with next-day readiness
     | 'cross_user'             // Both users affected similarly
     | 'seasonal'               // Time-of-year patterns
     | 'weekend_effect';        // Weekend vs weekday differences
@@ -85,11 +83,10 @@ export interface Pattern {
     title: string;
     description: string;
     affectedUsers: string[];    // User IDs
-    confidence: number;         // 0-1 statistical confidence
-    impact: number;             // % effect size
+    confidence: number;         // Legacy 0-1 sample-coverage heuristic
+    impact: number;             // Observed percentage difference
     dayOfWeek?: number;         // 0-6 for day patterns
     metric: string;
-    tip?: string;               // Actionable suggestion
     dataPoints: number;         // Sample size
     discoveredAt: string;       // ISO date
 }
@@ -142,7 +139,7 @@ export interface WhatIfScenario {
     currentAverage?: number;
     adjustment: number;         // e.g., +30 minutes
     unit: string;               // e.g., "minutes", "steps"
-    targetScore?: WhatIfTargetScore; // Predicted next-day score domain
+    targetScore?: WhatIfTargetScore; // Score domain used for the historical estimate
     lookbackDays?: number | 'all'; // Restrict model to recent days for relevance
     outlierTrimPercent?: number; // Winsorization percent on both tails (0-0.2 typical)
 }

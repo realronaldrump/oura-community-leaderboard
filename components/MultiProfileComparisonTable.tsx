@@ -49,37 +49,75 @@ const MultiProfileComparisonTable: React.FC<MultiProfileComparisonTableProps> = 
     };
 
     return (
-        <section className="overflow-hidden rounded-[1.25rem] border border-[rgba(0,0,0,0.06)] bg-white">
-            <div className="border-b border-[rgba(0,0,0,0.06)] px-4 py-4">
+        <section className="overflow-hidden rounded-[1.25rem] border border-line bg-surface shadow-sm">
+            <div className="border-b border-line px-4 py-4">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <h3 className="text-lg font-semibold tracking-tight text-[#2D2A26]">{title}</h3>
-                        {subtitle ? <p className="mt-1 text-sm text-[#7A756E]">{subtitle}</p> : null}
+                        <h3 className="text-lg font-semibold tracking-tight text-ink">{title}</h3>
+                        {subtitle ? <p className="mt-1 text-sm text-ink-secondary">{subtitle}</p> : null}
                     </div>
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-[#A8A29E]">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-ink-muted">
                         {columns.length} participants
                     </p>
                 </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="comparison-mobile sm:hidden">
+                {rows.map((row) => {
+                    const numericValues = columns
+                        .map((column) => toNumber(row.cells[column.id]?.value))
+                        .filter((value): value is number => value != null);
+                    const bestValue = numericValues.length > 0
+                        ? (row.inverse ? Math.min(...numericValues) : Math.max(...numericValues))
+                        : null;
+
+                    return (
+                        <section key={row.label} className="comparison-mobile__group">
+                            <header>
+                                <h4>{row.label}</h4>
+                                <span>{row.inverse ? 'Lowest value highlighted' : 'Highest value highlighted'}</span>
+                            </header>
+                            <dl>
+                                {columns.map((column) => {
+                                    const cell = row.cells[column.id];
+                                    const numericValue = toNumber(cell?.value);
+                                    const isBest = bestValue != null && numericValue != null && scoresMatch(numericValue, bestValue);
+                                    const displayValue = cell?.display ?? (numericValue != null ? numericValue.toLocaleString() : '—');
+                                    return (
+                                        <div key={`${row.label}-${column.id}`} className={isBest ? 'is-best' : ''}>
+                                            <dt>
+                                                <span style={{ backgroundColor: column.color }} aria-hidden="true" />
+                                                {column.name}
+                                            </dt>
+                                            <dd style={{ color: isBest ? column.color : undefined }}>{displayValue}</dd>
+                                            <p>{cell?.caption || (numericValue != null ? `Value ${numericValue.toLocaleString()}` : 'No data')}</p>
+                                        </div>
+                                    );
+                                })}
+                            </dl>
+                        </section>
+                    );
+                })}
+            </div>
+
+            <div className="hidden overflow-x-auto sm:block" tabIndex={0} aria-label={`${title} comparison table; scroll horizontally for every participant`}>
                 <div className="grid" style={gridStyle}>
-                    <div className="border-b border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] px-4 py-3 text-[11px] font-medium uppercase tracking-[0.16em] text-[#A8A29E]">
+                    <div className="border-b border-line bg-surface-raised px-4 py-3 text-[11px] font-medium uppercase tracking-[0.16em] text-ink-muted">
                         Metric
                     </div>
                     {columns.map((column) => (
                         <div
                             key={column.id}
-                            className="border-b border-l border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] px-4 py-3"
+                            className="border-b border-l border-line bg-surface-raised px-4 py-3"
                         >
                             <div className="flex items-center gap-2">
                                 <span
                                     className="h-2.5 w-2.5 rounded-full"
                                     style={{ backgroundColor: column.color }}
                                 />
-                                <p className="text-sm font-semibold text-[#2D2A26] leading-tight" style={{ wordBreak: 'break-word' }}>{column.name}</p>
+                                <p className="text-sm font-semibold text-ink leading-tight" style={{ wordBreak: 'break-word' }}>{column.name}</p>
                             </div>
-                            <p className="mt-1 font-mono text-xs text-[#7A756E]">
+                            <p className="mt-1 font-mono text-xs text-ink-secondary">
                                 {column.score != null ? `Score ${column.score}` : 'No score'}
                             </p>
                         </div>
@@ -95,10 +133,10 @@ const MultiProfileComparisonTable: React.FC<MultiProfileComparisonTableProps> = 
 
                         return (
                             <React.Fragment key={row.label}>
-                                <div className="border-b border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] px-4 py-4">
-                                    <p className="text-sm font-medium text-[#2D2A26]">{row.label}</p>
-                                    <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-[#A8A29E]">
-                                        {row.inverse ? 'Lower is better' : 'Higher is better'}
+                                <div className="border-b border-line bg-surface-raised px-4 py-4">
+                                    <p className="text-sm font-medium text-ink">{row.label}</p>
+                                    <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-ink-muted">
+                                        {row.inverse ? 'Lowest value highlighted' : 'Highest value highlighted'}
                                     </p>
                                 </div>
                                 {columns.map((column) => {
@@ -110,11 +148,11 @@ const MultiProfileComparisonTable: React.FC<MultiProfileComparisonTableProps> = 
                                     return (
                                         <div
                                             key={`${row.label}-${column.id}`}
-                                            className="border-b border-l border-[rgba(0,0,0,0.06)] px-3 py-3"
+                                            className="border-b border-l border-line px-3 py-3"
                                         >
                                             <div
                                                 className={`rounded-xl border px-3 py-3 transition-colors ${
-                                                    isBest ? 'bg-black/5' : 'bg-white'
+                                                    isBest ? 'bg-surface-subtle' : 'bg-surface-raised'
                                                 }`}
                                                 style={{
                                                     borderColor: isBest ? `${column.color}55` : 'rgba(0,0,0,0.06)',
@@ -122,12 +160,12 @@ const MultiProfileComparisonTable: React.FC<MultiProfileComparisonTableProps> = 
                                                 }}
                                             >
                                                 <p
-                                                    className="text-sm font-semibold text-[#2D2A26]"
+                                                    className="text-sm font-semibold text-ink"
                                                     style={{ color: isBest ? column.color : '#2D2A26' }}
                                                 >
                                                     {displayValue}
                                                 </p>
-                                                <p className="mt-1 text-[11px] leading-relaxed text-[#7A756E]">
+                                                <p className="mt-1 text-[11px] leading-relaxed text-ink-secondary">
                                                     {cell?.caption || (numericValue != null ? `Value ${numericValue.toLocaleString()}` : 'No data')}
                                                 </p>
                                             </div>

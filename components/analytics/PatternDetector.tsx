@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { DailyStats } from '../../types';
-import { Pattern, PatternType } from '../../types/analyticsTypes';
+import { PatternType } from '../../types/analyticsTypes';
 import { detectPatterns } from '../../services/analyticsService';
-import { Calendar, Activity, Heart, Users, Sun, PartyPopper, Search, ChevronDown, Lightbulb, Info } from 'lucide-react';
+import { Calendar, Activity, Heart, Users, Sun, PartyPopper, Search, ChevronDown, Info } from 'lucide-react';
 import InfoTooltip from './InfoTooltip';
 import { getProfileDisplayName } from '../../utils/profileName';
 
@@ -13,13 +13,13 @@ interface PatternDetectorProps {
 
 const getPatternIcon = (type: PatternType) => {
     switch (type) {
-        case 'day_of_week': return <Calendar className="w-5 h-5 text-[#7BA8D4]" />;
-        case 'activity_sleep': return <Activity className="w-5 h-5 text-[#7BC4A0]" />;
-        case 'hrv_readiness': return <Heart className="w-5 h-5 text-[#A08BBE]" />;
-        case 'cross_user': return <Users className="w-5 h-5 text-[#7BA8D4]" />;
-        case 'seasonal': return <Sun className="w-5 h-5 text-[#D4897B]" />;
-        case 'weekend_effect': return <PartyPopper className="w-5 h-5 text-[#D4897B]" />;
-        default: return <Info className="w-5 h-5 text-[#C8C2BB]" />;
+        case 'day_of_week': return <Calendar className="w-5 h-5 text-metric-sleep" />;
+        case 'activity_sleep': return <Activity className="w-5 h-5 text-success" />;
+        case 'hrv_readiness': return <Heart className="w-5 h-5 text-metric-insight" />;
+        case 'cross_user': return <Users className="w-5 h-5 text-metric-sleep" />;
+        case 'seasonal': return <Sun className="w-5 h-5 text-error" />;
+        case 'weekend_effect': return <PartyPopper className="w-5 h-5 text-error" />;
+        default: return <Info className="w-5 h-5 text-ink-faint" />;
     }
 };
 
@@ -59,7 +59,7 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
 
         switch (sortBy) {
             case 'confidence':
-                result = [...result].sort((a, b) => b.confidence - a.confidence);
+                result = [...result].sort((a, b) => b.dataPoints - a.dataPoints);
                 break;
             case 'impact':
                 result = [...result].sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
@@ -92,9 +92,9 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
                 <div className="flex justify-center mb-4">
                     <Search className="w-12 h-12 text-[var(--text-muted)]" />
                 </div>
-                <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Analyzing Patterns</h3>
+                <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Not enough history yet</h3>
                 <p className="text-[var(--text-muted)] text-sm">
-                    We need more data to detect patterns. Keep tracking for at least 2 weeks!
+                    Pattern comparisons need at least two weeks of matched data.
                 </p>
             </div>
         );
@@ -105,11 +105,11 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
             {/* Header with filters */}
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <h3 className="section-header mb-0">Pattern Feed</h3>
+                    <h3 className="section-header mb-0">Pattern summary</h3>
                     <InfoTooltip
                         title="Pattern Detection"
-                        description="Automatically detected trends and correlations in your health data across multiple dimensions."
-                        calculation="Patterns are found by analyzing your data for recurring relationships (e.g., high activity days → poor sleep). Confidence indicates how consistent the pattern is. Impact shows the effect size."
+                        description="Compares recurring differences across days, weekends, and matched metrics in synced history."
+                        calculation="Sample size is the number of values used. Difference is the percentage gap between the compared groups; it does not establish cause."
                     />
                 </div>
                 <p className="text-sm text-[var(--text-muted)] mt-1">
@@ -120,6 +120,7 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
                     <select
                         value={filter}
                         onChange={(e) => setFilter(e.target.value as FilterType)}
+                        aria-label="Filter patterns by type"
                         className="px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--accent)]"
                     >
                         <option value="all">All Types</option>
@@ -133,10 +134,11 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
                     <select
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value as SortType)}
+                        aria-label="Sort patterns"
                         className="px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--accent)]"
                     >
-                        <option value="confidence">By Confidence</option>
-                        <option value="impact">By Impact</option>
+                        <option value="confidence">By sample size</option>
+                        <option value="impact">By difference</option>
                         <option value="recent">Most Recent</option>
                     </select>
                 </div>
@@ -149,9 +151,12 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
                         key={pattern.id}
                         className={`card border-l-4 ${patternColors[pattern.type]} overflow-hidden transition-all duration-200`}
                     >
-                        <div
-                            className="p-4 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
+                        <button
+                            type="button"
+                            className="block min-h-11 w-full p-4 text-left transition-colors hover:bg-[var(--bg-hover)]"
                             onClick={() => toggleExpanded(pattern.id)}
+                            aria-expanded={expandedPatterns.has(pattern.id)}
+                            aria-controls={`pattern-details-${pattern.id}`}
                         >
                             <div className="flex items-start gap-4">
                                 {getPatternIcon(pattern.type)}
@@ -161,11 +166,8 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
                                         <h4 className="font-semibold text-[var(--text-primary)]">
                                             {pattern.title}
                                         </h4>
-                                        <span className={`text-xs px-2 py-0.5 rounded-full ${pattern.confidence >= 0.8 ? 'bg-[#7BC4A0]/20 text-[#7BC4A0]' :
-                                            pattern.confidence >= 0.6 ? 'bg-[#D4B87B]/20 text-[#D4B87B]' :
-                                                'bg-[#C8C2BB]/20 text-[#C8C2BB]'
-                                            }`}>
-                                            {(pattern.confidence * 100).toFixed(0)}% confident
+                                        <span className="rounded-full bg-surface-subtle px-2 py-0.5 text-xs text-ink-secondary">
+                                            {pattern.dataPoints} points
                                         </span>
                                     </div>
 
@@ -174,39 +176,29 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
                                     </p>
 
                                     <div className="flex items-center gap-4 mt-2 text-xs text-[var(--text-muted)]">
-                                        <span className={`font-mono ${pattern.impact > 0 ? 'text-[#7BC4A0]' : 'text-[#D4897B]'}`}>
-                                            {pattern.impact > 0 ? '+' : ''}{pattern.impact.toFixed(1)}% impact
+                                        <span className={`font-mono ${pattern.impact > 0 ? 'text-success' : 'text-error'}`}>
+                                            {pattern.impact > 0 ? '+' : ''}{pattern.impact.toFixed(1)}% difference
                                         </span>
-                                        <span>•</span>
-                                        <span>{pattern.dataPoints} data points</span>
                                         <span>•</span>
                                         <span>{pattern.metric}</span>
                                     </div>
                                 </div>
 
-                                <button className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+                                <span className="grid min-h-11 min-w-11 place-items-center text-[var(--text-muted)]" aria-hidden="true">
                                     <ChevronDown
                                         className={`w-5 h-5 transition-transform ${expandedPatterns.has(pattern.id) ? 'rotate-180' : ''}`}
                                     />
-                                </button>
+                                </span>
                             </div>
-                        </div>
+                        </button>
 
                         {/* Expanded content */}
                         {expandedPatterns.has(pattern.id) && (
-                            <div className="px-4 pb-4 pt-0 border-t border-[var(--border-subtle)]">
+                            <div
+                                id={`pattern-details-${pattern.id}`}
+                                className="px-4 pb-4 pt-0 border-t border-[var(--border-subtle)]"
+                            >
                                 <div className="pt-4 space-y-4">
-                                    {/* Actionable Tip */}
-                                    {pattern.tip && (
-                                        <div className="flex items-start gap-3 p-3 rounded-lg bg-[var(--accent)]/10 border border-[var(--accent)]/20">
-                                            <Lightbulb className="w-5 h-5 text-[var(--accent)] flex-shrink-0 mt-0.5" />
-                                            <div>
-                                                <p className="text-sm font-medium text-[var(--accent)]">Tip</p>
-                                                <p className="text-sm text-[var(--text-secondary)]">{pattern.tip}</p>
-                                            </div>
-                                        </div>
-                                    )}
-
                                     {/* Pattern Details */}
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                         <div>
@@ -237,13 +229,13 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
                                         </div>
                                     </div>
 
-                                    {/* Impact Visualization */}
+                                    {/* Difference visualization */}
                                     <div>
-                                        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2">Impact</p>
+                                        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2">Difference</p>
                                         <div className="h-8 bg-[var(--bg-base)] rounded-lg overflow-hidden relative flex items-center">
                                             <div className="absolute left-1/2 w-px h-full bg-[var(--border-default)]" />
                                             <div
-                                                className={`h-4 rounded-full ${pattern.impact > 0 ? 'bg-[#7BC4A0]' : 'bg-[#D4897B]'}`}
+                                                className={`h-4 rounded-full ${pattern.impact > 0 ? 'bg-[#7BC4A0]' : 'bg-error'}`}
                                                 style={{
                                                     width: `${Math.min(50, Math.abs(pattern.impact) * 2)}%`,
                                                     marginLeft: pattern.impact > 0 ? '50%' : `${50 - Math.min(50, Math.abs(pattern.impact) * 2)}%`
@@ -274,8 +266,8 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
             {filteredPatterns.length > 0 && filteredPatterns.length < 4 && (
                 <div className="card p-6 text-center border border-dashed border-[var(--border-subtle)] bg-[var(--bg-elevated)]">
                     <Search className="w-8 h-8 text-[var(--text-muted)] opacity-40 mx-auto mb-3" />
-                    <p className="text-sm text-[var(--text-secondary)] font-medium mb-1">More patterns emerge as you collect data</p>
-                    <p className="text-xs text-[var(--text-muted)]">Check back in a few weeks as your history grows — richer data unlocks deeper insights.</p>
+                    <p className="text-sm text-[var(--text-secondary)] font-medium mb-1">More history may reveal more comparisons</p>
+                    <p className="text-xs text-[var(--text-muted)]">Check again after more days have synced.</p>
                 </div>
             )}
         </div>

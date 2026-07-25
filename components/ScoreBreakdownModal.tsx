@@ -4,7 +4,7 @@ import { AreaChart, Area, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { DailyReadiness, DailySleep, DailyActivity, SleepSession } from '../types';
 import { IOSModal, IOSListItem, IOSButton } from './ios';
 import { formatISODateForDisplay } from '../utils/date';
-import { CLAY_TOOLTIP_STYLE, CLAY_GRID_STROKE, CLAY_AXIS_STYLE, CLAY_ACTIVE_DOT } from '../utils/chartStyles';
+import { CHART_TOOLTIP_STYLE, CHART_GRID_STROKE, CHART_AXIS_STYLE, CHART_ACTIVE_DOT } from '../utils/chartStyles';
 
 interface ScoreHistoryPoint {
     date: string;
@@ -23,11 +23,35 @@ interface ScoreBreakdownModalProps {
 interface FactorDefinition {
     key: string;
     label: string;
-    description: string;
-    weight: number | null;
+    contributorScore: number | null;
     actualValue?: string;
     icon: React.ReactNode;
 }
+
+const FACTOR_DESCRIPTIONS: Record<string, string> = {
+    previous_night: 'How last night’s sleep contributed to today’s readiness score.',
+    sleep_balance: 'How recent sleep amount compares with your longer-term sleep needs.',
+    hrv_balance: 'How recent nighttime HRV compares with your personal baseline.',
+    resting_heart_rate: 'How last night’s resting heart rate compared with your personal baseline.',
+    recovery_index: 'How quickly your resting heart rate settled during the night.',
+    body_temperature: 'How overnight temperature deviation compared with your personal baseline.',
+    activity_balance: 'How recent activity load and recovery contributed to readiness.',
+    previous_day_activity: 'How yesterday’s activity contributed to today’s readiness score.',
+    sleep_regularity: 'How consistent recent sleep and wake timing has been.',
+    total_sleep: 'How total sleep duration contributed to the sleep score.',
+    efficiency: 'The share of time in bed that was spent asleep.',
+    restfulness: 'How interruptions and movement contributed to the sleep score.',
+    rem_sleep: 'How REM sleep duration contributed to the sleep score.',
+    deep_sleep: 'How deep sleep duration contributed to the sleep score.',
+    latency: 'How the time it took to fall asleep contributed to the sleep score.',
+    timing: 'How sleep timing aligned with your estimated sleep window.',
+    meet_daily_targets: 'How often recent daily activity targets were met.',
+    move_every_hour: 'How often you avoided long inactive periods.',
+    recovery_time: 'How much recovery time followed recent activity.',
+    stay_active: 'How total daily movement contributed to the activity score.',
+    training_frequency: 'How often training sessions occurred in the recent period.',
+    training_volume: 'How recent training load compared with your usual pattern.',
+};
 
 const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
     isOpen,
@@ -41,182 +65,163 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
 
     const getFactorsForScoreType = (type: string, data: any, session?: SleepSession | null): FactorDefinition[] => {
         switch (type) {
-            case 'readiness':
+            case 'readiness': {
                 const readiness = data as DailyReadiness;
                 return [
                     {
                         key: 'previous_night',
                         label: 'Previous Night',
-                        description: 'Quality and duration of sleep from the previous night. This factor evaluates how well you slept last night, including total sleep time, sleep stages, and how restful your sleep was. Good sleep quality is fundamental to feeling ready for the day.',
-                        weight: readiness.contributors.previous_night,
+                        contributorScore: readiness.contributors.previous_night,
                         icon: <Moon className="w-4 h-4" />
                     },
                     {
                         key: 'sleep_balance',
                         label: 'Sleep Balance',
-                        description: 'Consistency and adequacy of your sleep patterns over the past 1-2 weeks. This factor tracks whether you\'re getting enough sleep consistently, going to bed and waking at regular times, and maintaining good sleep habits.',
-                        weight: readiness.contributors.sleep_balance,
+                        contributorScore: readiness.contributors.sleep_balance,
                         icon: <Clock className="w-4 h-4" />
                     },
                     {
                         key: 'hrv_balance',
                         label: 'HRV Balance',
-                        description: 'Heart rate variability trends over time, which indicates your body\'s recovery status and stress levels. Higher and stable HRV suggests good recovery, while declining HRV may indicate accumulated stress or insufficient recovery.',
-                        weight: readiness.contributors.hrv_balance,
+                        contributorScore: readiness.contributors.hrv_balance,
                         actualValue: session?.average_hrv ? `${session.average_hrv} ms` : undefined,
                         icon: <Heart className="w-4 h-4" />
                     },
                     {
                         key: 'resting_heart_rate',
                         label: 'Resting Heart Rate',
-                        description: 'Your resting heart rate compared to your baseline. A lower resting heart rate generally indicates better cardiovascular fitness and recovery, while elevated resting heart rate may suggest stress, fatigue, or incomplete recovery.',
-                        weight: readiness.contributors.resting_heart_rate,
+                        contributorScore: readiness.contributors.resting_heart_rate,
                         actualValue: session?.lowest_heart_rate ? `${session.lowest_heart_rate} bpm` : undefined,
                         icon: <Heart className="w-4 h-4" />
                     },
                     {
                         key: 'recovery_index',
                         label: 'Recovery Index',
-                        description: 'Your body\'s ability to recover from physical stress and exercise. This factor analyzes how quickly your heart rate returns to normal after activity and overall recovery patterns, indicating whether you\'re adequately recovering between workouts.',
-                        weight: readiness.contributors.recovery_index,
+                        contributorScore: readiness.contributors.recovery_index,
                         icon: <TrendingUp className="w-4 h-4" />
                     },
                     {
                         key: 'body_temperature',
                         label: 'Body Temperature',
-                        description: 'Your body temperature patterns and deviations from your baseline. Slightly lower resting body temperature can indicate better recovery, while elevated temperature may suggest illness, stress, or accumulated fatigue.',
-                        weight: readiness.contributors.body_temperature,
+                        contributorScore: readiness.contributors.body_temperature,
                         icon: <Thermometer className="w-4 h-4" />
                     },
                     {
                         key: 'activity_balance',
                         label: 'Activity Balance',
-                        description: 'The balance between physical activity and rest periods. This factor ensures you\'re getting enough movement without overtraining, and adequate rest to allow for recovery and adaptation.',
-                        weight: readiness.contributors.activity_balance,
+                        contributorScore: readiness.contributors.activity_balance,
                         icon: <Target className="w-4 h-4" />
                     },
                     {
                         key: 'previous_day_activity',
                         label: 'Previous Day Activity',
-                        description: 'The intensity and volume of physical activity from the previous day. This factor considers whether your activity level was appropriate and how it impacts your current readiness.',
-                        weight: readiness.contributors.previous_day_activity,
+                        contributorScore: readiness.contributors.previous_day_activity,
                         icon: <Zap className="w-4 h-4" />
                     },
                     {
                         key: 'sleep_regularity',
                         label: 'Sleep Regularity',
-                        description: 'How consistent your sleep schedule has been. Regular sleep and wake times help maintain your circadian rhythm and improve overall sleep quality and readiness.',
-                        weight: readiness.contributors.sleep_regularity,
+                        contributorScore: readiness.contributors.sleep_regularity,
                         icon: <Calendar className="w-4 h-4" />
                     }
                 ];
+            }
 
-            case 'sleep':
+            case 'sleep': {
                 const sleep = data as DailySleep;
                 return [
                     {
                         key: 'total_sleep',
                         label: 'Total Sleep',
-                        description: 'The total amount of time spent asleep during your sleep period. This factor evaluates whether you\'re getting adequate sleep duration for optimal health and performance.',
-                        weight: sleep.contributors.total_sleep,
+                        contributorScore: sleep.contributors.total_sleep,
                         actualValue: session?.total_sleep_duration ? `${Math.round(session.total_sleep_duration / 3600)}h ${Math.round((session.total_sleep_duration % 3600) / 60)}m` : undefined,
                         icon: <Clock className="w-4 h-4" />
                     },
                     {
                         key: 'efficiency',
                         label: 'Efficiency',
-                        description: 'The percentage of time in bed actually spent sleeping. This factor measures sleep quality by evaluating how quickly you fall asleep and how much of your time in bed is spent sleeping versus awake.',
-                        weight: sleep.contributors.efficiency,
+                        contributorScore: sleep.contributors.efficiency,
                         actualValue: session?.efficiency ? `${session.efficiency}%` : undefined,
                         icon: <Target className="w-4 h-4" />
                     },
                     {
                         key: 'restfulness',
                         label: 'Restfulness',
-                        description: 'How restful and undisturbed your sleep was, based on movement and awakenings during the night. More restful sleep with fewer interruptions contributes to higher sleep quality.',
-                        weight: sleep.contributors.restfulness,
+                        contributorScore: sleep.contributors.restfulness,
                         icon: <Moon className="w-4 h-4" />
                     },
                     {
                         key: 'rem_sleep',
                         label: 'REM Sleep',
-                        description: 'The amount of time spent in REM (Rapid Eye Movement) sleep, which is crucial for emotional processing, creativity, memory consolidation, and cognitive function.',
-                        weight: sleep.contributors.rem_sleep,
+                        contributorScore: sleep.contributors.rem_sleep,
                         actualValue: session?.rem_sleep_duration ? `${Math.round(session.rem_sleep_duration / 3600)}h ${Math.round((session.rem_sleep_duration % 3600) / 60)}m` : undefined,
                         icon: <Zap className="w-4 h-4" />
                     },
                     {
                         key: 'deep_sleep',
                         label: 'Deep Sleep',
-                        description: 'The duration of deep sleep stages, which are essential for physical recovery, immune function, tissue repair, and hormone release.',
-                        weight: sleep.contributors.deep_sleep,
+                        contributorScore: sleep.contributors.deep_sleep,
                         actualValue: session?.deep_sleep_duration ? `${Math.round(session.deep_sleep_duration / 3600)}h ${Math.round((session.deep_sleep_duration % 3600) / 60)}m` : undefined,
                         icon: <Moon className="w-4 h-4" />
                     },
                     {
                         key: 'latency',
                         label: 'Latency',
-                        description: 'The time it takes to fall asleep after getting into bed. Shorter latency typically indicates better sleep health and less stress before bed.',
-                        weight: sleep.contributors.latency,
+                        contributorScore: sleep.contributors.latency,
                         actualValue: session?.latency ? `${Math.round(session.latency / 60)}m` : undefined,
                         icon: <Clock className="w-4 h-4" />
                     },
                     {
                         key: 'timing',
                         label: 'Timing',
-                        description: 'How well your sleep timing aligns with your circadian rhythm and regular sleep schedule. Consistent sleep-wake times support better sleep quality and overall health.',
-                        weight: sleep.contributors.timing,
+                        contributorScore: sleep.contributors.timing,
                         icon: <Clock className="w-4 h-4" />
                     }
                 ];
+            }
 
-            case 'activity':
+            case 'activity': {
                 const activity = data as DailyActivity;
                 return [
                     {
                         key: 'meet_daily_targets',
                         label: 'Meet Daily Targets',
-                        description: 'How consistently you meet your daily activity goals over the past 7 days. This factor tracks your ability to maintain regular physical activity and achieve step or calorie targets.',
-                        weight: activity.contributors.meet_daily_targets,
+                        contributorScore: activity.contributors.meet_daily_targets,
                         icon: <Target className="w-4 h-4" />
                     },
                     {
                         key: 'move_every_hour',
                         label: 'Move Every Hour',
-                        description: 'Your success in taking regular movement breaks throughout the day to avoid prolonged sedentary periods. Standing up and moving each hour supports metabolism, circulation, and overall health.',
-                        weight: activity.contributors.move_every_hour,
+                        contributorScore: activity.contributors.move_every_hour,
                         actualValue: activity.inactivity_alerts !== undefined ? `${activity.inactivity_alerts} alerts` : undefined,
                         icon: <Clock className="w-4 h-4" />
                     },
                     {
                         key: 'recovery_time',
                         label: 'Recovery Time',
-                        description: 'The balance between activity and adequate rest periods over the past 7 days. This factor ensures you\'re not overtraining and are allowing sufficient recovery between activities.',
-                        weight: activity.contributors.recovery_time,
+                        contributorScore: activity.contributors.recovery_time,
                         icon: <TrendingUp className="w-4 h-4" />
                     },
                     {
                         key: 'stay_active',
                         label: 'Stay Active',
-                        description: 'Your level of consistent physical activity spread throughout the day, rather than being sedentary for long periods with occasional bursts of activity.',
-                        weight: activity.contributors.stay_active,
+                        contributorScore: activity.contributors.stay_active,
                         icon: <Zap className="w-4 h-4" />
                     },
                     {
                         key: 'training_frequency',
                         label: 'Training Frequency',
-                        description: 'How often you engage in structured training or higher-intensity physical activity sessions over the past 7 days. Regular training supports cardiovascular fitness and strength.',
-                        weight: activity.contributors.training_frequency,
+                        contributorScore: activity.contributors.training_frequency,
                         icon: <Target className="w-4 h-4" />
                     },
                     {
                         key: 'training_volume',
                         label: 'Training Volume',
-                        description: 'The overall intensity and duration of your training activities over the past 7 days. This factor tracks the total workload you\'ve put into physical activities.',
-                        weight: activity.contributors.training_volume,
+                        contributorScore: activity.contributors.training_volume,
                         icon: <TrendingUp className="w-4 h-4" />
                     }
                 ];
+            }
 
             default:
                 return [];
@@ -274,7 +279,7 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                         <p className="text-sm font-medium" style={{ color: scoreColor }}>
                             Score: {score}/100
                         </p>
-                        <p className="text-[#A8A29E] text-xs mt-1">
+                        <p className="text-ink-muted text-xs mt-1">
                             {formatISODateForDisplay(date, undefined, {
                                 weekday: 'long',
                                 year: 'numeric',
@@ -287,25 +292,25 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
 
                 {/* Content */}
                 <div className="overflow-y-auto ios-scroll max-h-[68vh] space-y-6">
-                    <div className="bg-white p-4 rounded-xl border border-[rgba(0,0,0,0.06)] shadow-clay-sm">
+                    <div className="rounded-xl border border-line bg-surface-raised p-4 shadow-sm">
                         <div className="flex items-end justify-between gap-4">
                             <div>
-                                <p className="text-[#A8A29E] text-sm mb-1">Current Score</p>
+                                <p className="text-ink-muted text-sm mb-1">Current Score</p>
                                 <div className="flex items-baseline gap-2">
                                     <span className="text-4xl font-bold font-mono" style={{ color: scoreColor }}>
                                         {score}
                                     </span>
-                                    <span className="text-[#A8A29E] text-sm font-medium">/100</span>
+                                    <span className="text-ink-muted text-sm font-medium">/100</span>
                                 </div>
                             </div>
                             {trend && (
                                 <div
                                     className={`flex items-center gap-1 text-sm font-medium ${
                                         trend.direction === 'stable'
-                                            ? 'text-[#A8A29E]'
+                                            ? 'text-ink-muted'
                                             : trend.direction === 'up'
-                                                ? 'text-[#7BC4A0]'
-                                                : 'text-[#D4897B]'
+                                                ? 'text-success'
+                                                : 'text-error'
                                     }`}
                                 >
                                     {trend.direction === 'up'
@@ -314,41 +319,34 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                                             ? <TrendingDown className="w-4 h-4" />
                                             : <Minus className="w-4 h-4" />}
                                     <span>{Math.abs(trend.change).toFixed(1)}%</span>
-                                    <span className="text-[#A8A29E] text-xs">vs prior window</span>
+                                    <span className="text-ink-muted text-xs">vs prior window</span>
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    <div className="mb-6">
-                        <p className="text-[#7A756E] text-sm">
-                            Your {scoreType} score is calculated by weighting various health factors.
-                            Each factor contributes to overall score based on its importance and your individual metrics.
-                        </p>
-                    </div>
-
                     {/* Score Calculation Explanation */}
-                    <div className="bg-white p-4 rounded-xl border border-[rgba(0,0,0,0.06)] mb-6" style={{ boxShadow: '4px 4px 8px rgba(0,0,0,0.06), -4px -4px 8px rgba(255,255,255,0.8)' }}>
-                        <h4 className="text-sm font-medium text-[#2D2A26] mb-2 flex items-center gap-2">
+                    <div className="mb-6 rounded-xl border border-line bg-surface-raised p-4 shadow-sm">
+                        <h4 className="text-sm font-medium text-ink mb-2 flex items-center gap-2">
                             <Calculator className="w-4 h-4" />
                             How Score is Calculated
                         </h4>
-                        <p className="text-[#7A756E] text-sm">
-                            Your {scoreType} score of <strong>{score}/100</strong> is calculated by Oura's proprietary algorithm that combines
-                            multiple health factors. Each factor receives a score (1-100) based on your performance in that area.
-                            These factor scores are then weighted and combined to produce your final {scoreType} score.
+                        <p className="text-ink-secondary text-sm">
+                            Oura calculates the {scoreType} score from the contributor scores below. Oura does not publish the exact weighting.
                         </p>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-2" role="group" aria-label="Score history time range">
                         {(['7d', '14d', '30d'] as const).map((range) => (
                             <button
                                 key={range}
+                                type="button"
+                                aria-pressed={selectedTimeRange === range}
                                 onClick={() => setSelectedTimeRange(range)}
                                 className={`flex-1 min-h-11 rounded-lg border px-3 py-2 text-sm font-medium transition-all ${
                                     selectedTimeRange === range
-                                        ? 'border-[#6B9E8A]/30 bg-[#6B9E8A]/15 text-[#6B9E8A]'
-                                        : 'border-[rgba(0,0,0,0.08)] bg-white text-[#7A756E] hover:border-[rgba(0,0,0,0.15)]'
+                                        ? 'border-[#6B9E8A]/30 bg-accent/15 text-accent'
+                                        : 'border-line bg-surface text-ink-secondary hover:border-line-strong'
                                 }`}
                             >
                                 {range === '7d' ? '7 Days' : range === '14d' ? '14 Days' : '30 Days'}
@@ -356,8 +354,8 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                         ))}
                     </div>
 
-                    <div className="bg-white p-4 rounded-xl border border-[rgba(0,0,0,0.06)] shadow-clay-sm">
-                        <h4 className="text-sm font-medium text-[#2D2A26] mb-4 flex items-center gap-2">
+                    <div className="rounded-xl border border-line bg-surface-raised p-4 shadow-sm">
+                        <h4 className="text-sm font-medium text-ink mb-4 flex items-center gap-2">
                             <Calendar className="w-4 h-4" />
                             {title} History
                         </h4>
@@ -377,22 +375,22 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                                                 <stop offset="95%" stopColor={scoreColor} stopOpacity={0} />
                                             </linearGradient>
                                         </defs>
-                                        <CartesianGrid strokeDasharray="3 3" stroke={CLAY_GRID_STROKE} />
+                                        <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
                                         <XAxis
                                             dataKey="date"
-                                            tick={CLAY_AXIS_STYLE.tick}
+                                            tick={CHART_AXIS_STYLE.tick}
                                             tickFormatter={(value) => formatISODateForDisplay(value, undefined, { month: 'short', day: 'numeric' })}
-                                            axisLine={CLAY_AXIS_STYLE.axisLine}
+                                            axisLine={CHART_AXIS_STYLE.axisLine}
                                             minTickGap={20}
                                         />
                                         <YAxis
                                             domain={chartDomain}
-                                            tick={CLAY_AXIS_STYLE.tick}
-                                            axisLine={CLAY_AXIS_STYLE.axisLine}
+                                            tick={CHART_AXIS_STYLE.tick}
+                                            axisLine={CHART_AXIS_STYLE.axisLine}
                                             tickCount={5}
                                         />
                                         <Tooltip
-                                            contentStyle={CLAY_TOOLTIP_STYLE}
+                                            contentStyle={CHART_TOOLTIP_STYLE}
                                             formatter={(value: number) => [`${value}/100`, 'Score']}
                                             labelFormatter={(label) => formatISODateForDisplay(label, undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                                         />
@@ -402,13 +400,13 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                                             stroke={scoreColor}
                                             strokeWidth={2}
                                             fill={`url(#score-history-${scoreType})`}
-                                            activeDot={{ ...CLAY_ACTIVE_DOT, stroke: scoreColor }}
+                                            activeDot={{ ...CHART_ACTIVE_DOT, stroke: scoreColor }}
                                         />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </div>
                         ) : (
-                            <div className="flex min-h-[10rem] items-center justify-center rounded-lg border border-dashed border-[rgba(0,0,0,0.1)] bg-[#FAF7F4] px-4 text-center text-sm text-[#A8A29E]">
+                            <div className="flex min-h-[10rem] items-center justify-center rounded-lg border border-dashed border-[rgba(0,0,0,0.1)] bg-surface-raised px-4 text-center text-sm text-ink-muted">
                                 Not enough score history yet to draw a chart.
                             </div>
                         )}
@@ -420,15 +418,15 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                             <IOSListItem
                                 key={factor.key}
                                 title={factor.label}
-                                subtitle={factor.description}
-                                icon={<div className="text-[#6B9E8A] ios-touch-target">{factor.icon}</div>}
+                                subtitle={FACTOR_DESCRIPTIONS[factor.key] ?? 'Oura contributor score.'}
+                                icon={<div className="text-accent ios-touch-target">{factor.icon}</div>}
                                 rightElement={
                                     <div className="text-right">
-                                        <div className="text-[#2D2A26] font-mono font-bold">
-                                            {factor.weight || '--'}
+                                        <div className="text-ink font-mono font-bold">
+                                            {factor.contributorScore ?? '—'}
                                         </div>
-                                        {factor.actualValue && (
-                                            <div className="text-[#A8A29E] text-xs">
+                                        {factor.actualValue != null && (
+                                            <div className="text-ink-muted text-xs">
                                                 {factor.actualValue}
                                             </div>
                                         )}
@@ -438,13 +436,6 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
                         ))}
                     </div>
 
-                    {/* Summary */}
-                    <div className="mt-6 p-4 bg-[#FAF7F4] rounded-xl border border-[rgba(0,0,0,0.06)]" style={{ boxShadow: 'inset 2px 2px 4px rgba(0,0,0,0.04), inset -2px -2px 4px rgba(255,255,255,0.6)' }}>
-                        <p className="text-[#7A756E] text-sm">
-                            <strong>Note:</strong> Each factor receives an individual score (1-100) based on your performance in that area.
-                            Higher factor scores indicate better performance in that specific health area.
-                        </p>
-                    </div>
                 </div>
 
                 <IOSButton onClick={onClose} className="w-full" variant="secondary">

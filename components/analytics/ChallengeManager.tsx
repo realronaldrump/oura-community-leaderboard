@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useUser } from '../../contexts/UserContext';
 import { CHALLENGE_DEFINITIONS } from '../../services/analyticsService';
-import { ChallengeDefinition, ChallengeType } from '../../types/analyticsTypes';
-import { Crown, Zap, Footprints, Moon, Play, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { ChallengeDefinition } from '../../types/analyticsTypes';
+import { Crown, Zap, Footprints, Moon, Play, CheckCircle, XCircle } from 'lucide-react';
 import { formatISODateForDisplay } from '../../utils/date';
 import { getProfileLocalISODate, getProfileRelativeISODate } from '../../utils/profileTemporal';
 
@@ -12,18 +12,8 @@ const ChallengeManager: React.FC = () => {
 
     if (!activeProfile) return null;
 
-    // Use a safe accessor for challenges to avoid type issues if not yet defined
-    // @ts-ignore
-    const userChallenges = (activeProfile.challenges || []) as Array<{
-        id: string;
-        challengeId: string;
-        userId: string;
-        startDate: string;
-        endDate: string;
-        status: 'active' | 'completed' | 'failed';
-        progress: number;
-        history: Record<string, boolean>;
-    }>;
+    // Legacy profile documents may not have a challenges array yet.
+    const userChallenges = activeProfile.challenges || [];
 
     const activeChallenges = userChallenges.filter(c => c.status === 'active');
     const pastChallenges = userChallenges.filter(c => c.status !== 'active');
@@ -46,7 +36,7 @@ const ChallengeManager: React.FC = () => {
             };
 
             const updatedChallenges = [...userChallenges, newChallenge];
-            await updateProfile({ challenges: updatedChallenges } as any);
+            await updateProfile({ challenges: updatedChallenges });
         } catch (error) {
             console.error("Failed to join challenge", error);
         } finally {
@@ -56,10 +46,10 @@ const ChallengeManager: React.FC = () => {
 
     const getIcon = (type: string) => {
         switch (type) {
-            case 'sleep_consistency': return <Crown className="w-5 h-5 text-[#D4B87B]" />;
-            case 'readiness_streak': return <Zap className="w-5 h-5 text-[#7BC4A0]" />;
-            case 'step_goal': return <Footprints className="w-5 h-5 text-[#7BA8D4]" />;
-            case 'early_bedtime': return <Moon className="w-5 h-5 text-[#A08BBE]" />;
+            case 'sleep_consistency': return <Crown className="w-5 h-5 text-warning" />;
+            case 'readiness_streak': return <Zap className="w-5 h-5 text-success" />;
+            case 'step_goal': return <Footprints className="w-5 h-5 text-metric-sleep" />;
+            case 'early_bedtime': return <Moon className="w-5 h-5 text-metric-insight" />;
             default: return <Crown className="w-5 h-5" />;
         }
     };
@@ -73,7 +63,7 @@ const ChallengeManager: React.FC = () => {
                     Active Challenges
                 </h3>
                 {activeChallenges.length === 0 ? (
-                    <div className="p-8 text-center border border-dashed border-[var(--border-subtle)] rounded-xl bg-[var(--bg-card)]">
+                    <div className="p-8 text-center border border-dashed border-[var(--border-subtle)] rounded-xl bg-[var(--color-surface-raised)]">
                         <p className="text-[var(--text-muted)]">No active challenges. Start one below!</p>
                     </div>
                 ) : (
@@ -118,7 +108,7 @@ const ChallengeManager: React.FC = () => {
             {/* Available Challenges */}
             <div>
                 <h3 className="section-header flex items-center gap-2">
-                    <Crown className="w-5 h-5 text-[#D4B87B]" />
+                    <Crown className="w-5 h-5 text-warning" />
                     Available Challenges
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -139,10 +129,11 @@ const ChallengeManager: React.FC = () => {
                                     {def.description}
                                 </p>
                                 <button
+                                    type="button"
                                     onClick={() => handleJoin(def)}
                                     disabled={isActive || isJoining === def.id}
-                                    className={`w-full py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all ${isActive
-                                            ? 'bg-[#7BC4A0]/20 text-[#7BC4A0] cursor-default'
+                                    className={`min-h-11 w-full py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all ${isActive
+                                            ? 'bg-[#7BC4A0]/20 text-success cursor-default'
                                             : 'btn-primary'
                                         }`}
                                 >
@@ -168,18 +159,18 @@ const ChallengeManager: React.FC = () => {
             {pastChallenges.length > 0 && (
                 <div>
                     <h3 className="section-header flex items-center gap-2">
-                        <CheckCircle className="w-5 h-5 text-[#C8C2BB]" />
+                        <CheckCircle className="w-5 h-5 text-ink-faint" />
                         History
                     </h3>
                     <div className="space-y-2">
                         {pastChallenges.map(c => {
                             const def = CHALLENGE_DEFINITIONS.find(d => d.id === c.challengeId);
                             return (
-                                <div key={c.id} className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)]">
+                                <div key={c.id} className="flex items-center justify-between p-3 rounded-lg bg-[var(--color-surface-raised)] border border-[var(--border-subtle)]">
                                     <div className="flex items-center gap-3">
                                         {c.status === 'completed'
-                                            ? <CheckCircle className="w-5 h-5 text-[#7BC4A0]" />
-                                            : <XCircle className="w-5 h-5 text-[#D4897B]" />
+                                            ? <CheckCircle className="w-5 h-5 text-success" />
+                                            : <XCircle className="w-5 h-5 text-error" />
                                         }
                                         <div>
                                             <p className="font-medium text-[var(--text-primary)]">{def?.name || 'Unknown Challenge'}</p>
@@ -188,7 +179,7 @@ const ChallengeManager: React.FC = () => {
                                             </p>
                                         </div>
                                     </div>
-                                    <span className={`text-xs font-bold uppercase tracking-wider px-2 py-1 rounded ${c.status === 'completed' ? 'bg-[#7BC4A0]/10 text-[#7BC4A0]' : 'bg-[#D4897B]/10 text-[#D4897B]'
+                                    <span className={`text-xs font-bold uppercase tracking-wider px-2 py-1 rounded ${c.status === 'completed' ? 'bg-[#7BC4A0]/10 text-success' : 'bg-error/10 text-error'
                                         }`}>
                                         {c.status}
                                     </span>

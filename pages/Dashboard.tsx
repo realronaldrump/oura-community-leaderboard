@@ -1,33 +1,22 @@
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import {
     DailyActivity, DailyReadiness, DailySleep, SleepSession, HeartRate,
     DailySpO2, DailyStress, DailyResilience, LeaderboardEntry, UserProfile, formatDuration, formatTime, DailyStats
 } from '../types';
 import { useUser } from '../contexts/UserContext';
 import MetricCard from '../components/MetricCard';
-import SleepStagesChart from '../components/charts/SleepStagesChart';
-import HeartRateChart from '../components/charts/HeartRateChart';
-import ContributorsBreakdown from '../components/ContributorsBreakdown';
-import ScoreBreakdownModal from '../components/ScoreBreakdownModal';
-import MetricDetailModal, { MetricDetailType } from '../components/MetricDetailModal';
-import LeaderboardUserDetailModal from '../components/LeaderboardUserDetailModal';
-import AppDialog from '../components/AppDialog';
-import { CLAY_TOOLTIP_STYLE } from '../utils/chartStyles';
-import {
-    LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip
-} from 'recharts';
+import type { MetricDetailType } from '../components/MetricDetailModal';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { mergeDailyStats, syncDailyStats } from '../hooks/useOuraData';
-import ComparisonHeartRateChart from '../components/charts/ComparisonHeartRateChart';
 import SyncModal from '../components/SyncModal';
 import PrimaryProfileSwitcher from '../components/PrimaryProfileSwitcher';
 import DateRangePicker from '../components/DateRangePicker';
-import InviteLinkCard from '../components/InviteLinkCard';
 import InviteLinkModal from '../components/InviteLinkModal';
-import MultiProfileComparisonTable, { ComparisonRow } from '../components/MultiProfileComparisonTable';
+import type { ComparisonRow } from '../components/MultiProfileComparisonTable';
+import { Button, SegmentedControl, Skeleton } from '../components/ui';
 import { getStoredDailyStats } from '../services/firestoreStatsService';
 import { smartSync, SyncProgress } from '../services/syncService';
-import { ouraService } from '../services/ouraService';
+import { isReconnectRequiredError } from '../services/ouraTokenLifecycle';
 
 // Lazily load the heavier secondary views so the Today view (the mobile
 // landing screen) ships in a much smaller initial bundle.
@@ -42,21 +31,32 @@ const MilestoneTracker = lazy(() => import('../components/analytics/MilestoneTra
 const DailySnapshot = lazy(() => import('../components/analytics/DailySnapshot'));
 const SleepRhythm = lazy(() => import('../components/analytics/SleepRhythm'));
 const AllTimeHistory = lazy(() => import('../components/AllTimeHistory'));
+const SleepStagesChart = lazy(() => import('../components/charts/SleepStagesChart'));
+const HeartRateChart = lazy(() => import('../components/charts/HeartRateChart'));
+const HrvTrendChart = lazy(() => import('../components/charts/HrvTrendChart'));
+const ComparisonHeartRateChart = lazy(() => import('../components/charts/ComparisonHeartRateChart'));
+const ContributorsBreakdown = lazy(() => import('../components/ContributorsBreakdown'));
+const ScoreBreakdownModal = lazy(() => import('../components/ScoreBreakdownModal'));
+const MetricDetailModal = lazy(() => import('../components/MetricDetailModal'));
+const LeaderboardUserDetailModal = lazy(() => import('../components/LeaderboardUserDetailModal'));
+const MultiProfileComparisonTable = lazy(() => import('../components/MultiProfileComparisonTable'));
 
 const ViewLoadingFallback: React.FC = () => (
-    <div className="flex items-center justify-center gap-3 py-16 animate-fade-in">
-        <div className="h-4 w-4 rounded-full border-2 border-[rgba(0,0,0,0.10)] border-t-[#6B9E8A] animate-spin" />
-        <span className="text-sm text-[#7A756E]">Loading view...</span>
+    <div className="grid gap-4 py-8" aria-label="Loading view" role="status">
+        <Skeleton className="h-7 w-40" />
+        <Skeleton className="h-28 w-full rounded-xl" />
+        <div className="grid grid-cols-2 gap-3">
+            <Skeleton className="h-24 rounded-xl" />
+            <Skeleton className="h-24 rounded-xl" />
+        </div>
     </div>
 );
 import { useAutoSync, formatLastSync } from '../hooks/useAutoSync';
 import { useWebhookRefresh } from '../hooks/useWebhookRefresh';
-import { useCompetitionInvitePreview } from '../hooks/useCompetitions';
-import { X, RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain, Users, Trophy, TrendingUp, TrendingDown, Minus, BarChart3, Swords, Download, CalendarDays, Sparkles, GitCompareArrows, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain, Users, Trophy, TrendingUp, TrendingDown, Minus, BarChart3, Swords, Download, CalendarDays, Search, GitCompareArrows, ArrowRight, ChevronLeft } from 'lucide-react';
 import { getProfileDisplayName } from '../utils/profileName';
-import { getCompetitionInviteToken, isInviteLocation } from '../utils/inviteLink';
+import { getCompetitionInviteToken } from '../utils/inviteLink';
 import {
-    formatLocalISODate,
     formatISODateForDisplay,
     isISODateString,
     shiftLocalISODate,
@@ -72,6 +72,7 @@ import {
     getProfileLocalISODate,
 } from '../utils/profileTemporal';
 import { filterDailyStatsForProfile, isDayExcludedByRanges } from '../utils/dataExclusions';
+import { buildAlignedDailyScoreAverages } from '../utils/scoreTrends';
 
 const METERS_TO_MILES = 0.000621371;
 const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
@@ -80,9 +81,44 @@ const LIVE_DAILY_STATS_STALE_MS = 1000 * 60 * 5;
 const LIVE_DAILY_STATS_REFETCH_MS = 1000 * 60 * 5;
 type DayRange = { start: string; end: string };
 type ScoreType = 'readiness' | 'sleep' | 'activity';
+type ViewMode = 'today' | 'compare' | 'compete' | 'trends' | 'streaks' | 'insights' | 'more' | 'export';
 type ScoreHistoryPoint = { date: string; value: number };
 type MetricHistoryPoint = { date: string; value: number; label?: string };
-const COMPARE_PALETTE = ['#6B9E8A', '#7BA8D4', '#A08BBE', '#D4B87B', '#D4897B', '#7BC4A0', '#7BA8D4', '#D4897B'];
+const COMPARE_PALETTE = [
+    'var(--color-accent)',
+    'var(--color-sleep)',
+    'var(--color-insight)',
+    'var(--color-activity)',
+    'var(--color-error)',
+    'var(--color-success)',
+];
+
+const pathForView = (view: ViewMode): string => {
+    switch (view) {
+        case 'compare': return '/leaderboard';
+        case 'compete': return '/leaderboard/compete';
+        case 'trends': return '/trends';
+        case 'streaks': return '/trends/streaks';
+        case 'insights': return '/trends/insights';
+        case 'more': return '/more';
+        case 'export': return '/more/export';
+        default: return '/';
+    }
+};
+
+const viewFromLocation = (): ViewMode => {
+    if (typeof window === 'undefined') return 'today';
+    if (getCompetitionInviteToken(window.location.search)) return 'compete';
+    const path = window.location.pathname;
+    if (path === '/leaderboard/compete') return 'compete';
+    if (path === '/leaderboard') return 'compare';
+    if (path === '/trends/streaks') return 'streaks';
+    if (path === '/trends/insights') return 'insights';
+    if (path === '/trends') return 'trends';
+    if (path === '/more/export') return 'export';
+    if (path === '/more') return 'more';
+    return 'today';
+};
 
 const filterByDayRange = <T extends { day?: string }>(items: T[] | undefined, range: DayRange | null): T[] => {
     if (!items || items.length === 0) return [];
@@ -1215,82 +1251,19 @@ const PersonalRecordsStrip: React.FC<{
 
     const expandedCategory = categories.find(c => c.id === expandedId) ?? null;
 
-    const [speedMultiplier, setSpeedMultiplier] = useState(1);
-    const baseDuration = Math.min(1200, Math.max(500, categories.length * 14));
-    const marqueeDurationSeconds = baseDuration / speedMultiplier;
-    const marqueeStyle = { '--records-marquee-duration': `${marqueeDurationSeconds}s` } as React.CSSProperties;
-    const speedSteps = [0.5, 1, 1.5, 2, 3];
-    const speedLabel = speedMultiplier === 1 ? '1×' : `${speedMultiplier}×`;
-
-    const trackRef = useRef<HTMLDivElement>(null);
-    const dragRef = useRef<{ startX: number; startTime: number; dragging: boolean; moved: boolean }>({ startX: 0, startTime: 0, dragging: false, moved: false });
-
-    const handleTouchStart = useCallback((e: React.TouchEvent) => {
-        const track = trackRef.current;
-        if (!track) return;
-        const anim = track.getAnimations()[0];
-        if (!anim) return;
-        anim.pause();
-        dragRef.current = { startX: e.touches[0].clientX, startTime: (anim.currentTime as number) || 0, dragging: true, moved: false };
-    }, []);
-
-    const handleTouchMove = useCallback((e: React.TouchEvent) => {
-        const d = dragRef.current;
-        if (!d.dragging) return;
-        const track = trackRef.current;
-        if (!track) return;
-        const anim = track.getAnimations()[0];
-        if (!anim) return;
-        const duration = (anim.effect?.getComputedTiming().duration as number) || 0;
-        if (!duration) return;
-        const dx = e.touches[0].clientX - d.startX;
-        if (Math.abs(dx) > 5) d.moved = true;
-        // Map px drag to animation time: track is translateX(0) -> translateX(-50%), so full width = track.scrollWidth / 2
-        const halfWidth = track.scrollWidth / 2;
-        const timeDelta = (dx / halfWidth) * duration;
-        const next = ((d.startTime - timeDelta) % duration + duration) % duration;
-        anim.currentTime = next;
-    }, []);
-
-    const handleTouchEnd = useCallback(() => {
-        const d = dragRef.current;
-        d.dragging = false;
-        const track = trackRef.current;
-        if (!track) return;
-        const anim = track.getAnimations()[0];
-        if (anim) anim.play();
-    }, []);
-
     if (categories.length === 0) return null;
 
-    const skipRecords = (direction: 'forward' | 'back') => {
-        const track = trackRef.current;
-        if (!track) return;
-        const animations = track.getAnimations();
-        if (animations.length === 0) return;
-        const anim = animations[0];
-        const duration = (anim.effect?.getComputedTiming().duration as number) || 0;
-        if (!duration) return;
-        const skipAmount = (duration / categories.length) * 3;
-        const ct = (anim.currentTime as number) || 0;
-        const next = direction === 'forward'
-            ? (ct + skipAmount) % duration
-            : ((ct - skipAmount) % duration + duration) % duration;
-        anim.currentTime = next;
-    };
-
-    const renderRecordChip = (cat: RecordCategory, idx: number, duplicate: boolean) => {
+    const renderRecordChip = (cat: RecordCategory) => {
         const record = cat.entries[0];
         const isExpanded = expandedId === cat.id;
         const context = getRecordContext(record);
         return (
             <button
-                key={`${duplicate ? 'loop' : 'main'}-${cat.id}`}
+                key={cat.id}
                 type="button"
                 className="record-chip"
                 style={{ outline: isExpanded ? `2px solid ${cat.color}` : undefined, outlineOffset: isExpanded ? '1px' : undefined }}
-                onClick={() => { if (dragRef.current.moved) return; setExpandedId(isExpanded ? null : cat.id); }}
-                tabIndex={duplicate ? -1 : 0}
+                onClick={() => setExpandedId(isExpanded ? null : cat.id)}
                 aria-pressed={isExpanded}
             >
                 <div className="record-icon" style={{ backgroundColor: cat.bg }}>
@@ -1312,66 +1285,13 @@ const PersonalRecordsStrip: React.FC<{
         <section className="mb-10 animate-fade-in-up">
             <div className="flex items-center gap-2 mb-3">
                 <span className="inline-block w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: '#B9944A' }} />
-                <h3 className="text-sm font-bold text-[#2D2A26]">Personal Records</h3>
-                <span className="text-[10px] text-[#A8A29E] bg-[#FAF7F4] px-2 py-0.5 rounded border border-[rgba(0,0,0,0.06)]">
+                <h3 className="text-sm font-bold text-ink">Personal Records</h3>
+                <span className="text-[10px] text-ink-muted bg-surface-raised px-2 py-0.5 rounded border border-line">
                     Highs, lows, averages, streaks
                 </span>
             </div>
-            <div className="relative records-strip-wrapper">
-                <div
-                    className="records-strip mb-3"
-                    style={marqueeStyle}
-                    aria-label="Personal record highlights"
-                    onTouchStart={handleTouchStart}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={handleTouchEnd}
-                >
-                    <div className="records-strip-track" ref={trackRef}>
-                        <div className="records-strip-group">
-                            {categories.map((cat, idx) => renderRecordChip(cat, idx, false))}
-                        </div>
-                        <div className="records-strip-group" aria-hidden="true">
-                            {categories.map((cat, idx) => renderRecordChip(cat, idx, true))}
-                        </div>
-                    </div>
-                </div>
-                <button
-                    type="button"
-                    className="records-strip-nav records-strip-nav-left"
-                    onClick={() => skipRecords('back')}
-                    aria-label="Skip back"
-                >
-                    <ChevronLeft size={16} />
-                </button>
-                <button
-                    type="button"
-                    className="records-strip-nav records-strip-nav-right"
-                    onClick={() => skipRecords('forward')}
-                    aria-label="Skip forward"
-                >
-                    <ChevronRight size={16} />
-                </button>
-                <div className="records-strip-fade records-strip-fade-left" />
-                <div className="records-strip-fade records-strip-fade-right" />
-            </div>
-            <div className="records-speed-control">
-                <span className="records-speed-label">Speed</span>
-                <div className="records-speed-track">
-                    {speedSteps.map((step) => (
-                        <button
-                            key={step}
-                            type="button"
-                            className={`records-speed-dot${speedMultiplier === step ? ' active' : ''}`}
-                            onClick={() => setSpeedMultiplier(step)}
-                            aria-label={`${step}× speed`}
-                        />
-                    ))}
-                    <div
-                        className="records-speed-fill"
-                        style={{ width: `${(speedSteps.indexOf(speedMultiplier) / (speedSteps.length - 1)) * 100}%` }}
-                    />
-                </div>
-                <span className="records-speed-value">{speedLabel}</span>
+            <div className="records-strip mb-3" aria-label="Personal record highlights">
+                {categories.map(renderRecordChip)}
             </div>
             {expandedCategory && (
                 <div className="records-top10-drawer animate-fade-in-up" style={{ animationFillMode: 'both' }}>
@@ -1497,11 +1417,13 @@ const FriendTrendsStrip: React.FC<{
     profiles: UserProfile[];
     userQueries: any[];
     onViewCompare: () => void;
-    onViewTrends: () => void;
-}> = ({ leaderboardData, profiles, userQueries, onViewCompare, onViewTrends }) => {
+}> = ({ leaderboardData, profiles, userQueries, onViewCompare }) => {
     const friendTrends = useMemo((): FriendTrendData[] => {
-        return leaderboardData.map((entry, idx) => {
-            const data = userQueries[idx]?.data as DailyStats | undefined;
+        return leaderboardData.map((entry) => {
+            const profileIndex = profiles.findIndex((profile) => profile.id === entry.id);
+            const data = profileIndex >= 0
+                ? userQueries[profileIndex]?.data as DailyStats | undefined
+                : undefined;
             const base: FriendTrendData = {
                 id: entry.id ?? entry.name,
                 name: entry.name,
@@ -1543,27 +1465,15 @@ const FriendTrendsStrip: React.FC<{
             const activityCat = calcCat(sortedActivity, 'Activity', 'activity', CATEGORY_COLORS.activity);
             const categories = [sleepCat, readinessCat, activityCat].filter(c => c.recentAvg > 0);
 
-            // Overall recent avg & trend
-            const recentOverall: number[] = [];
-            const olderOverall: number[] = [];
-            for (let i = 0; i < Math.min(7, sortedSleep.length); i++) {
-                const s = Number(sortedSleep[i]?.score) || 0;
-                const r = Number(sortedReadiness[i]?.score) || 0;
-                const a = Number(sortedActivity[i]?.score) || 0;
-                if (s > 0 || r > 0 || a > 0) {
-                    const count = (s > 0 ? 1 : 0) + (r > 0 ? 1 : 0) + (a > 0 ? 1 : 0);
-                    recentOverall.push(Math.round((s + r + a) / count));
-                }
-            }
-            for (let i = 7; i < Math.min(14, sortedSleep.length); i++) {
-                const s = Number(sortedSleep[i]?.score) || 0;
-                const r = Number(sortedReadiness[i]?.score) || 0;
-                const a = Number(sortedActivity[i]?.score) || 0;
-                if (s > 0 || r > 0 || a > 0) {
-                    const count = (s > 0 ? 1 : 0) + (r > 0 ? 1 : 0) + (a > 0 ? 1 : 0);
-                    olderOverall.push(Math.round((s + r + a) / count));
-                }
-            }
+            // Overall recent average and trend. Align by calendar day first so a
+            // missing metric never shifts a different date into the same slot.
+            const dailyOverall = buildAlignedDailyScoreAverages([
+                data.sleep,
+                data.readiness,
+                data.activity,
+            ]);
+            const recentOverall = dailyOverall.slice(0, 7).map((point) => point.value);
+            const olderOverall = dailyOverall.slice(7, 14).map((point) => point.value);
 
             const recentAvg = recentOverall.length > 0 ? Math.round(recentOverall.reduce((a, b) => a + b, 0) / recentOverall.length) : entry.average;
             const olderAvg = olderOverall.length > 0 ? Math.round(olderOverall.reduce((a, b) => a + b, 0) / olderOverall.length) : null;
@@ -1579,7 +1489,7 @@ const FriendTrendsStrip: React.FC<{
             const strongest = [...categories].sort((a, b) => b.recentAvg - a.recentAvg)[0];
             const weakest = [...categories].sort((a, b) => a.recentAvg - b.recentAvg)[0];
 
-            let summary = '';
+            let summary: string;
             if (trendDirection === 'down') {
                 if (dipping.length > 0) {
                     summary = `${dipping.map(c => c.label).join(' & ')} ${dipping.length > 1 ? 'are' : 'is'} dipping`;
@@ -1614,7 +1524,7 @@ const FriendTrendsStrip: React.FC<{
                 summary,
             };
         });
-    }, [leaderboardData, userQueries]);
+    }, [leaderboardData, profiles, userQueries]);
 
     const FRIEND_COLORS = ['#6B9E8A', '#7BA8D4', '#A08BBE', '#D4B87B', '#D4897B', '#7BC4A0'];
 
@@ -1623,10 +1533,10 @@ const FriendTrendsStrip: React.FC<{
             <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                     <span className="inline-block w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: '#6B9E8A' }} />
-                    <h3 className="text-sm font-bold text-[#2D2A26]">Group Trends</h3>
-                    <span className="text-[10px] text-[#A8A29E] bg-[#FAF7F4] px-2 py-0.5 rounded-full border border-[rgba(0,0,0,0.06)]">7-day avg</span>
+                    <h3 className="text-sm font-bold text-ink">Group Trends</h3>
+                    <span className="text-[10px] text-ink-muted bg-surface-raised px-2 py-0.5 rounded-full border border-line">7-day avg</span>
                 </div>
-                <button onClick={onViewCompare} className="flex items-center gap-1 text-xs text-[#6B9E8A] font-medium hover:text-[#5A8D79] transition-colors">
+                <button type="button" onClick={onViewCompare} className="flex min-h-11 items-center gap-1 px-2 text-xs text-accent font-medium hover:text-accent-hover transition-colors">
                     Full compare <ArrowRight className="w-3 h-3" />
                 </button>
             </div>
@@ -1636,11 +1546,10 @@ const FriendTrendsStrip: React.FC<{
                     const overallTrendColor = friend.trendDirection === 'up' ? '#7BC4A0' :
                         friend.trendDirection === 'down' ? '#D4897B' : '#A8A29E';
                     return (
-                        <div
+                        <article
                             key={friend.id || friend.name}
                             className={`friend-trend-card-v2 stagger-${idx + 1} animate-fade-in-up`}
                             style={{ animationFillMode: 'both' }}
-                            onClick={onViewTrends}
                         >
                             {/* Header row: avatar + name + overall score + sparkline */}
                             <div className="ftc-header">
@@ -1709,7 +1618,7 @@ const FriendTrendsStrip: React.FC<{
                             {friend.summary && (
                                 <p className="ftc-summary">{friend.summary}</p>
                             )}
-                        </div>
+                        </article>
                     );
                 })}
             </div>
@@ -1799,26 +1708,20 @@ const TrendInsightsPanel: React.FC<{
 
                 if (diff > 3) {
                     result.push({
-                        color: '#7BC4A0', title: 'You\'re improving',
-                        body: `Your overall average went from ${olderAvg} to ${recentAvg} this week. ${recentSleep > recentActivity && recentSleep > recentReadiness ? 'Sleep is leading the charge.' : recentActivity > recentSleep ? 'Your activity has been driving the improvement.' : 'Readiness is particularly strong.'}`,
+                        color: '#7BC4A0', title: `7-day average up ${diff}`,
+                        body: `Recent seven days: ${recentAvg}. Previous seven: ${olderAvg}.`,
                         detail: catDetail || `+${diff} points vs prior week`,
                     });
                 } else if (diff < -3) {
-                    // Find the biggest category decline
-                    const sleepDiff = olderSleep !== null ? recentSleep - olderSleep : 0;
-                    const readinessDiff = olderReadiness !== null ? recentReadiness - olderReadiness : 0;
-                    const activityDiff = olderActivity !== null ? recentActivity - olderActivity : 0;
-                    const biggestDrop = Math.min(sleepDiff, readinessDiff, activityDiff);
-                    const tipText = biggestDrop === sleepDiff ? 'Try going to bed 30 minutes earlier tonight.' : biggestDrop === activityDiff ? 'Even a short walk could help turn things around.' : 'Give yourself some recovery time if you can.';
                     result.push({
-                        color: '#D4897B', title: 'Slight dip this week',
-                        body: `Your average dropped from ${olderAvg} to ${recentAvg}. ${tipText}`,
+                        color: '#D4897B', title: `7-day average down ${Math.abs(diff)}`,
+                        body: `Recent seven days: ${recentAvg}. Previous seven: ${olderAvg}.`,
                         detail: catDetail || `${diff} points vs prior week`,
                     });
                 } else {
                     result.push({
-                        color: '#A8A29E', title: 'Holding steady',
-                        body: `Your average is around ${recentAvg}, about the same as last week. Consistency like this is great for long-term health.`,
+                        color: '#A8A29E', title: '7-day average is steady',
+                        body: `Recent seven days: ${recentAvg}. Previous seven: ${olderAvg}.`,
                         detail: catDetail,
                     });
                 }
@@ -1830,10 +1733,9 @@ const TrendInsightsPanel: React.FC<{
             if (bestRecent.avg !== worstRecent.avg) {
                 const bestDate = formatISODateForDisplay(bestRecent.day, 'en-US', { weekday: 'short', month: 'short', day: 'numeric' });
                 const worstDate = formatISODateForDisplay(worstRecent.day, 'en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                const bestCategory = bestRecent.sleep >= bestRecent.readiness && bestRecent.sleep >= bestRecent.activity ? 'sleep' : bestRecent.activity >= bestRecent.readiness ? 'activity' : 'readiness';
                 result.push({
-                    color: '#7BA8D4', title: 'This week\'s best and toughest',
-                    body: `Your peak was ${bestDate} (avg ${bestRecent.avg}), driven mostly by strong ${bestCategory}. The toughest day was ${worstDate} (avg ${worstRecent.avg}).`,
+                    color: '#7BA8D4', title: 'Highest and lowest this week',
+                    body: `${bestDate}: ${bestRecent.avg}. ${worstDate}: ${worstRecent.avg}.`,
                     detail: `${bestRecent.avg - worstRecent.avg} point spread across the week`,
                 });
             }
@@ -1843,14 +1745,14 @@ const TrendInsightsPanel: React.FC<{
                 const gap = recentSleep - recentActivity;
                 if (gap > 10) {
                     result.push({
-                        color: '#7BA8D4', title: 'Sleep is outpacing activity',
-                        body: `Your sleep score (${recentSleep}) is well above your activity (${recentActivity}). You're resting great — even a short daily walk could help balance things out.`,
+                        color: '#7BA8D4', title: 'Sleep score is higher than activity',
+                        body: `Seven-day averages: sleep ${recentSleep}, activity ${recentActivity}. These scores use different inputs, so the gap is descriptive, not diagnostic.`,
                         detail: `Sleep ${recentSleep} vs Activity ${recentActivity}`,
                     });
                 } else if (gap < -10) {
                     result.push({
-                        color: '#D4B87B', title: 'Active but under-recovered',
-                        body: `Your activity (${recentActivity}) is outpacing sleep (${recentSleep}). Your body is putting in the work — prioritize an earlier bedtime to keep things sustainable.`,
+                        color: '#D4B87B', title: 'Activity score is higher than sleep',
+                        body: `Seven-day averages: activity ${recentActivity}, sleep ${recentSleep}. These scores use different inputs, so the gap is descriptive, not diagnostic.`,
                         detail: `Activity ${recentActivity} vs Sleep ${recentSleep}`,
                     });
                 }
@@ -1875,10 +1777,10 @@ const TrendInsightsPanel: React.FC<{
                 const gap = leader.avg - userAvgs[userAvgs.length - 1].avg;
                 const closeBattle = userAvgs.length >= 2 && leader.avg - runner.avg <= 3;
                 result.push({
-                    color: '#6B9E8A', title: closeBattle ? `${leader.name} and ${runner.name} are neck and neck` : `${leader.name} leads the group`,
+                    color: '#6B9E8A', title: closeBattle ? `${leader.name} and ${runner.name} are neck and neck` : `${leader.name} leads the 14-day ranking`,
                     body: closeBattle
-                        ? `${leader.name} (${leader.avg}) and ${runner.name} (${runner.avg}) are within a few points of each other over the past 2 weeks. A couple of good nights could change the lead.`
-                        : `With a 14-day average of ${leader.avg}, ${leader.name} is ${gap > 5 ? 'solidly' : 'slightly'} ahead. The group spread is ${gap} points — ${gap > 10 ? 'there\'s room for everyone to close the gap' : 'everyone is pretty close'}.`,
+                        ? `${leader.name}: ${leader.avg}. ${runner.name}: ${runner.avg}. The gap is ${leader.avg - runner.avg} points.`
+                        : `${leader.name}'s 14-day average is ${leader.avg}. The group spans ${gap} points.`,
                     detail: `${userAvgs.map(u => `${u.name}: ${u.avg}`).join(' / ')}`,
                 });
             }
@@ -1907,16 +1809,59 @@ const TrendInsightsPanel: React.FC<{
     );
 };
 
+const DailyRankSummary: React.FC<{
+    rank: number | null;
+    participantCount: number;
+    average: number | null;
+    scores: Array<{ type: ScoreType; label: string; value: number | null | undefined; color: string }>;
+    freshnessLabel: string;
+    onSelectScore: (type: ScoreType) => void;
+}> = ({ rank, participantCount, average, scores, freshnessLabel, onSelectScore }) => (
+    <section className="daily-rank" aria-labelledby="daily-rank-title">
+        <div className="daily-rank__lead">
+            <div>
+                <p className="ui-eyebrow">Today’s sleep surveillance</p>
+                <h2 id="daily-rank-title" className="daily-rank__title">
+                    {rank ? <>Rank <span>#{rank}</span></> : 'Rank pending'}
+                </h2>
+                <p className="daily-rank__context">
+                    {participantCount > 0 ? `Among ${participantCount} synced ${participantCount === 1 ? 'sleeper' : 'sleepers'}` : 'Waiting for comparable scores'}
+                </p>
+            </div>
+            <div className="daily-rank__average" aria-label={average == null ? 'Daily average unavailable' : `Daily average ${average}`}>
+                <strong>{average ?? '—'}</strong>
+                <span>daily avg</span>
+            </div>
+        </div>
+
+        <div className="daily-rank__scores" aria-label="Daily scores">
+            {scores.map((score) => (
+                <button
+                    key={score.type}
+                    type="button"
+                    className="daily-score"
+                    onClick={() => onSelectScore(score.type)}
+                    aria-label={`${score.label}: ${score.value ?? 'not available'}. View score details`}
+                >
+                    <span className="daily-score__dot" style={{ background: score.color }} aria-hidden="true" />
+                    <span className="daily-score__label">{score.label}</span>
+                    <strong style={{ color: score.value != null ? score.color : undefined }}>{score.value ?? '—'}</strong>
+                </button>
+            ))}
+        </div>
+
+        <div className="daily-rank__freshness">
+            <span className="daily-rank__pulse" aria-hidden="true" />
+            <span>{freshnessLabel}</span>
+        </div>
+    </section>
+);
+
 const Dashboard: React.FC = () => {
     const {
         activeProfile,
         profiles,
-        setActiveProfileId,
         login,
-        removeProfile,
-        firebaseError,
-        isLoadingProfiles,
-        retryFirebaseConnection,
         getAccessTokenForProfile,
         markProfileSyncSuccess,
         markProfileSyncError,
@@ -1924,9 +1869,7 @@ const Dashboard: React.FC = () => {
     const [competitionInviteToken, setCompetitionInviteToken] = useState<string | null>(() => (
         typeof window !== 'undefined' ? getCompetitionInviteToken(window.location.search) : null
     ));
-    const [viewMode, setViewMode] = useState<'today' | 'compare' | 'compete' | 'trends' | 'streaks' | 'insights' | 'export'>(() => (
-        typeof window !== 'undefined' && getCompetitionInviteToken(window.location.search) ? 'compete' : 'today'
-    ));
+    const [viewMode, setViewMode] = useState<ViewMode>(viewFromLocation);
     const [isSyncing, setIsSyncing] = useState(false);
     const [showSyncModal, setShowSyncModal] = useState(false);
     const [syncProgress, setSyncProgress] = useState<SyncProgress>({
@@ -1953,41 +1896,44 @@ const Dashboard: React.FC = () => {
         isOpen: boolean;
         user: LeaderboardEntry | null;
     }>({ isOpen: false, user: null });
-    const [profilePendingRemoval, setProfilePendingRemoval] = useState<{ id: string; name: string } | null>(null);
-    const [isRemovingProfile, setIsRemovingProfile] = useState(false);
-    const [removeProfileError, setRemoveProfileError] = useState<string | null>(null);
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+    const [expandedDeferredSections, setExpandedDeferredSections] = useState<Set<string>>(() => new Set());
 
-    const { preview: competitionInvitePreview, isLoading: competitionInvitePreviewLoading } = useCompetitionInvitePreview(competitionInviteToken);
+    const handleDeferredSectionToggle = useCallback((section: string, isOpen: boolean) => {
+        setExpandedDeferredSections((current) => {
+            const next = new Set(current);
+            if (isOpen) next.add(section);
+            else next.delete(section);
+            return next;
+        });
+    }, []);
 
     const queryClient = useQueryClient();
 
-    const getDashboardErrorState = (error: unknown): { title: string; message: string } => {
+    const getDashboardErrorState = (error: unknown): { title: string; message: string; requiresReconnect: boolean } => {
         const raw = error instanceof Error ? error.message : String(error || '');
         const message = raw.toLowerCase();
 
-        if (
-            message.includes('unauthorized') ||
-            message.includes('401') ||
-            message.includes('missing_refresh_token') ||
-            message.includes('refresh_failed')
-        ) {
+        if (isReconnectRequiredError(error)) {
             return {
-                title: 'Session Expired',
-                message: 'Your Oura connection has expired. Please securely reconnect your ring to continue syncing your data.',
+                title: 'Oura connection expired',
+                message: 'Oura rejected the saved refresh credential. Reconnect this account to resume syncing.',
+                requiresReconnect: true,
             };
         }
 
         if (message.includes('missing required oura consent') || message.includes('missing oura consent scopes')) {
             return {
-                title: 'Reconnect Required',
+                title: 'Permission needed',
                 message: 'Your Oura connection is active, but required permissions were not granted. Reconnect your ring and approve the requested access to continue syncing.',
+                requiresReconnect: true,
             };
         }
 
         return {
-            title: 'Could Not Load Data',
-            message: 'There was a problem loading your Oura data. Try again, and reconnect your ring if the problem persists.',
+            title: 'Sync paused',
+            message: 'Oura or the network did not complete this request. Your saved connection is still intact; wait a moment and try again.',
+            requiresReconnect: false,
         };
     };
 
@@ -2077,22 +2023,39 @@ const Dashboard: React.FC = () => {
         };
     }, [activeProfile?.id, primeStoredStatsCache, queryClient]);
 
-    // Auto-sync every hour
-    const profileIds = useMemo(() => profiles.map(p => p.id), [profiles]);
-    const { lastSyncTime } = useAutoSync(profileIds, !!activeProfile);
+    // Auto-sync stale profiles independently. Freshness comes from each
+    // profile's durable successful-sync marker, never shared browser state.
+    const autoSyncProfiles = useMemo(() => profiles.map((profile) => ({
+        id: profile.id,
+        lastSuccessfulSyncAt: profile.lastSuccessfulSyncAt,
+    })), [profiles]);
+    useAutoSync(autoSyncProfiles, !!activeProfile);
+    const activeProfileLastSuccessfulSyncAt = activeProfile?.lastSuccessfulSyncAt ?? null;
     useWebhookRefresh(activeProfile, viewMode === 'today');
 
+    const navigateToView = useCallback((nextView: ViewMode) => {
+        const nextUrl = new URL(pathForView(nextView), window.location.origin);
+        if (nextView === 'compete' && competitionInviteToken) {
+            nextUrl.searchParams.set('competitionInvite', competitionInviteToken);
+        }
+        const nextDestination = `${nextUrl.pathname}${nextUrl.search}`;
+        if (`${window.location.pathname}${window.location.search}` !== nextDestination) {
+            window.history.pushState({ view: nextView }, '', nextDestination);
+        }
+        if (nextView !== 'compete') setCompetitionInviteToken(null);
+        setViewMode(nextView);
+        window.scrollTo({ top: 0, behavior: 'auto' });
+    }, [competitionInviteToken]);
+
     useEffect(() => {
-        const syncInviteToken = () => {
+        const syncLocation = () => {
             const nextToken = getCompetitionInviteToken(window.location.search);
             setCompetitionInviteToken(nextToken);
-            if (nextToken) {
-                setViewMode('compete');
-            }
+            setViewMode(viewFromLocation());
         };
 
-        window.addEventListener('popstate', syncInviteToken);
-        return () => window.removeEventListener('popstate', syncInviteToken);
+        window.addEventListener('popstate', syncLocation);
+        return () => window.removeEventListener('popstate', syncLocation);
     }, []);
 
     // Manual sync
@@ -2135,6 +2098,7 @@ const Dashboard: React.FC = () => {
             return ({
                 queryKey: ['dailyStats', p.id],
                 queryFn: () => loadProfileDailyStats(p),
+                enabled: Boolean(activeProfile),
                 staleTime: viewMode === 'today' && p.id === activeProfile?.id
                     ? LIVE_DAILY_STATS_STALE_MS
                     : DEFAULT_DAILY_STATS_STALE_MS,
@@ -2142,10 +2106,9 @@ const Dashboard: React.FC = () => {
                     ? LIVE_DAILY_STATS_REFETCH_MS
                     : (false as const),
                 refetchIntervalInBackground: false,
-                // Respect staleTime on focus: webhook signals and the 5-minute
-                // interval already keep the live profile fresh, so an app switch
-                // should not force a full Oura re-sync every time.
-                refetchOnWindowFocus: true,
+                // Webhook signals and the active-profile interval own freshness;
+                // tab focus must not start a synchronized multi-profile burst.
+                refetchOnWindowFocus: false,
             });
         })
     });
@@ -2216,8 +2179,13 @@ const Dashboard: React.FC = () => {
             const tokenExpiryMs = profile.tokenExpiresAt ? new Date(profile.tokenExpiresAt).getTime() : 0;
             const missingRefresh = !profile.refreshToken;
 
-            if (query?.isError || profile.lastSyncError) {
+            if (profile.lastSyncError) {
                 map.set(profile.id, { level: 'error', label: 'Needs reconnect' });
+                return;
+            }
+
+            if (query?.isError) {
+                map.set(profile.id, { level: 'warning', label: 'Sync retry needed' });
                 return;
             }
 
@@ -2762,6 +2730,34 @@ const Dashboard: React.FC = () => {
         }).filter((e): e is LeaderboardEntry => e !== null).sort((a, b) => b.average - a.average);
     }, [profiles, analysisUserQueries, activeProfile?.id]);
 
+    const referenceLeaderboardData = useMemo(() => profiles
+        .map((profile, index) => {
+            const data = analysisUserQueries[index]?.data as DailyStats | undefined;
+            if (!data || !referenceDay) return null;
+            const readiness = findLatestByDay(data.readiness, referenceDay)?.score;
+            const sleep = findLatestByDay(data.sleep, referenceDay)?.score;
+            const activity = findLatestByDay(data.activity, referenceDay)?.score;
+            const scores = [readiness, sleep, activity].filter(isScoreReady);
+            if (scores.length === 0) return null;
+            return {
+                id: profile.id,
+                name: getProfileDisplayName(profile),
+                readiness: readiness ?? 0,
+                sleep: sleep ?? 0,
+                activity: activity ?? 0,
+                average: Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length),
+                isCurrentUser: profile.id === activeProfile?.id,
+            } satisfies LeaderboardEntry;
+        })
+        .filter((entry): entry is LeaderboardEntry => entry !== null)
+        .sort((left, right) => right.average - left.average), [activeProfile?.id, analysisUserQueries, profiles, referenceDay]);
+
+    const activeReferenceRankIndex = referenceLeaderboardData.findIndex((entry) => entry.id === activeProfile?.id);
+    const activeReferenceRank = activeReferenceRankIndex >= 0 ? activeReferenceRankIndex + 1 : null;
+    const activeReferenceAverage = activeReferenceRankIndex >= 0
+        ? referenceLeaderboardData[activeReferenceRankIndex].average
+        : null;
+
     const completeDaySetFromStats = (data?: DailyStats): Set<string> => {
         if (!data) return new Set<string>();
 
@@ -3082,7 +3078,6 @@ const Dashboard: React.FC = () => {
         if (hour < 17) return 'Good afternoon';
         return 'Good evening';
     };
-    const inviteLanding = isInviteLocation(window.location.pathname, window.location.search);
     const clearCompetitionInviteToken = () => {
         if (typeof window === 'undefined') return;
         const url = new URL(window.location.href);
@@ -3103,14 +3098,6 @@ const Dashboard: React.FC = () => {
     };
 
     const getStressLabel = (summary: string | null | undefined) => getStressSummaryLabel(summary as DailyStress['day_summary']);
-
-    const getScoreQuality = (score: number | null | undefined): string => {
-        if (!score) return '';
-        if (score >= 85) return 'Optimal';
-        if (score >= 70) return 'Good';
-        if (score >= 60) return 'Fair';
-        return 'Pay attention';
-    };
 
     const getDailyInsight = (): string => {
         const parts: string[] = [];
@@ -3143,227 +3130,10 @@ const Dashboard: React.FC = () => {
                 const avg = Math.round((rScore + sScore + aScore) / 3);
                 return avg >= 75 ? 'Looking like a good day ahead.' : 'Listen to your body today.';
             }
-            return 'Your daily health overview.';
+            return 'The overnight evidence is still coming in. Davis is watching patiently.';
         }
         return parts.join(' · ');
     };
-
-    const handleOpenRemoveProfileDialog = (profile: { id: string; firstName?: string | null; lastName?: string | null; email?: string | null; }) => {
-        setProfilePendingRemoval({ id: profile.id, name: getProfileDisplayName(profile) });
-    };
-
-    const handleConfirmRemoveProfile = async () => {
-        if (!profilePendingRemoval || isRemovingProfile) return;
-        setIsRemovingProfile(true);
-        try {
-            await removeProfile(profilePendingRemoval.id);
-        } catch (error) {
-            console.error('Failed to remove profile:', error);
-            const message = error instanceof Error ? error.message : 'Failed to remove profile.';
-            setRemoveProfileError(message);
-        } finally {
-            setIsRemovingProfile(false);
-            setProfilePendingRemoval(null);
-        }
-    };
-
-    // ============================================
-    // LOGIN / PROFILE SELECTION
-    // ============================================
-    if (!activeProfile) {
-        return (
-            <div className="min-h-screen bg-[#F2EDE8] px-4 py-8 sm:px-6">
-                <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
-                    <section className="relative overflow-hidden rounded-[2rem] border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] p-6 sm:p-8">
-                        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(107,158,138,0.12),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(123,168,212,0.10),transparent_36%)]" />
-                        <div className="relative">
-                            <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(107,158,138,0.25)] bg-[rgba(107,158,138,0.08)] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#6B9E8A]">
-                                <Heart className="h-3.5 w-3.5" />
-                                {competitionInviteToken ? 'Competition invite' : inviteLanding ? 'Invite link' : 'Davis Watches You Sleep'}
-                            </div>
-
-                            <h1 className="mt-5 max-w-2xl text-3xl font-semibold tracking-tight text-[#2D2A26] sm:text-4xl">
-                                {competitionInviteToken
-                                    ? "Join the leaderboard and lock in tomorrow's competition."
-                                    : inviteLanding
-                                        ? 'Join this Oura leaderboard in one step.'
-                                        : profiles.length > 0
-                                            ? 'Add a new friend without touching the existing setup.'
-                                            : 'Start your shared Oura leaderboard.'}
-                            </h1>
-                            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[#3D3A36] sm:text-base">
-                                {competitionInviteToken
-                                    ? 'Connect your Oura account once. You will join the shared leaderboard and the invited competition in the same flow.'
-                                    : inviteLanding
-                                        ? 'Connect your Oura account and you will appear alongside the rest of the group automatically.'
-                                        : profiles.length > 0
-                                            ? 'The shared board is already live. A new friend just needs the invite link and one Oura sign-in to add themselves.'
-                                            : 'Connect the first Oura account to create the board, then invite others from the dashboard or settings.'}
-                            </p>
-
-                            <div className="mt-6 flex flex-wrap gap-3">
-                                <div className="rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white/70 px-4 py-3">
-                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Members</p>
-                                    <p className="mt-1 text-2xl font-semibold text-[#2D2A26]">{profiles.length}</p>
-                                </div>
-                                <div className="rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white/70 px-4 py-3">
-                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Joining</p>
-                                    <p className="mt-1 text-sm font-medium text-[#2D2A26]">Oura OAuth</p>
-                                    <p className="text-xs text-[#A8A29E]">No manual profile entry</p>
-                                </div>
-                            </div>
-
-                            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                                <button
-                                    onClick={login}
-                                    className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#6B9E8A] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-                                >
-                                    {competitionInviteToken
-                                        ? 'Join Competition'
-                                        : profiles.length > 0
-                                            ? 'Join This Leaderboard'
-                                            : 'Connect Oura Ring'}
-                                </button>
-                                {profiles.length > 0 ? (
-                                    <div className="inline-flex min-h-12 items-center rounded-xl border border-[rgba(0,0,0,0.06)] px-4 py-3 text-sm text-[#7A756E]">
-                                        Already on this device? Choose your profile on the right.
-                                    </div>
-                                ) : null}
-                            </div>
-
-                            {competitionInviteToken ? (
-                                <div className="mt-6 rounded-[1.35rem] border border-[rgba(107,158,138,0.25)] bg-[rgba(107,158,138,0.06)] p-4">
-                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#6B9E8A]">Competition Preview</p>
-                                    <h3 className="mt-2 text-lg font-semibold text-[#2D2A26]">
-                                        {competitionInvitePreviewLoading
-                                            ? 'Loading competition...'
-                                            : competitionInvitePreview?.competition.title || 'Competition invite'}
-                                    </h3>
-                                    <p className="mt-2 text-sm leading-relaxed text-[#7A756E]">
-                                        {competitionInvitePreview?.competition.description || 'This invite will be applied after your Oura account connects.'}
-                                    </p>
-                                    {competitionInvitePreview ? (
-                                        <p className="mt-3 text-xs text-[#6B9E8A]">
-                                            Starts {formatISODateForDisplay(competitionInvitePreview.competition.startDate, 'en-US', { month: 'short', day: 'numeric' })} and runs through {formatISODateForDisplay(competitionInvitePreview.competition.endDate, 'en-US', { month: 'short', day: 'numeric' })}.
-                                        </p>
-                                    ) : null}
-                                </div>
-                            ) : null}
-
-                            <p className="mt-6 max-w-xl text-xs leading-relaxed text-[#A8A29E]">
-                                Connecting adds your data to this shared leaderboard. Selecting an existing profile only changes the local view on this browser.
-                            </p>
-                        </div>
-                    </section>
-
-                    <div className="space-y-4">
-                        {firebaseError && (
-                            <button
-                                onClick={retryFirebaseConnection}
-                                className="w-full rounded-[1.25rem] border border-[rgba(212,137,123,0.25)] bg-[rgba(212,137,123,0.06)] p-4 text-left"
-                            >
-                                <p className="text-sm font-medium text-[#D4897B]">Connection issue</p>
-                                <p className="mt-1 text-xs text-[#B8897E]">{firebaseError}</p>
-                            </button>
-                        )}
-
-                        <section className="rounded-[1.5rem] border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] p-5">
-                            <div className="flex items-center justify-between gap-3">
-                                <div>
-                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Returning members</p>
-                                    <h2 className="mt-2 text-lg font-semibold text-[#2D2A26]">Choose a profile</h2>
-                                </div>
-                                <div className="rounded-full border border-[rgba(0,0,0,0.06)] px-3 py-1 text-[11px] uppercase tracking-[0.12em] text-[#7A756E]">
-                                    {profiles.length} total
-                                </div>
-                            </div>
-
-                            {isLoadingProfiles && !firebaseError ? (
-                                <div className="mt-5 flex items-center justify-center gap-3 rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white p-6">
-                                    <div className="h-4 w-4 rounded-full border-2 border-[rgba(0,0,0,0.10)] border-t-[#6B9E8A] animate-spin" />
-                                    <span className="text-sm text-[#7A756E]">Loading profiles...</span>
-                                </div>
-                            ) : profiles.length > 0 ? (
-                                <div className="mt-5 space-y-3">
-                                    {profiles.map((profile) => (
-                                        <div key={profile.id} className="flex gap-2">
-                                            <button
-                                                onClick={() => setActiveProfileId(profile.id)}
-                                                className="flex min-h-12 flex-1 items-center justify-between rounded-2xl border border-[rgba(0,0,0,0.06)] bg-[#F2EDE8] px-4 py-3 text-left transition-colors hover:border-[rgba(0,0,0,0.10)] hover:bg-[#FAF7F4]"
-                                            >
-                                                <div className="min-w-0">
-                                                    <p className="truncate text-sm font-medium text-[#2D2A26]">
-                                                        {getProfileDisplayName(profile)}
-                                                    </p>
-                                                    <p
-                                                        className={`mt-1 text-[11px] ${profileHealthById.get(profile.id)?.level === 'error'
-                                                                ? 'text-[#D4897B]'
-                                                                : profileHealthById.get(profile.id)?.level === 'warning'
-                                                                    ? 'text-[#D4B87B]'
-                                                                    : 'text-[#6B9E8A]'
-                                                            }`}
-                                                    >
-                                                        {profileHealthById.get(profile.id)?.label || 'Up to date'}
-                                                    </p>
-                                                </div>
-                                                <span className="ml-3 text-xs font-mono text-[#C8C2BB]">
-                                                    {profile.lastSuccessfulSyncAt
-                                                        ? new Date(profile.lastSuccessfulSyncAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                                                        : ''}
-                                                </span>
-                                            </button>
-                                            <button
-                                                onClick={(event) => {
-                                                    event.stopPropagation();
-                                                    handleOpenRemoveProfileDialog(profile);
-                                                }}
-                                                className="inline-flex min-h-12 min-w-12 items-center justify-center rounded-2xl border border-[rgba(0,0,0,0.06)] bg-[#F2EDE8] text-[#A8A29E] transition-colors hover:border-[#D4897B]/30 hover:text-[#D4897B]"
-                                                title={`Remove ${getProfileDisplayName(profile)}`}
-                                            >
-                                                <X className="h-4 w-4" />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="mt-5 rounded-2xl border border-dashed border-[rgba(0,0,0,0.1)] bg-[#FAF7F4] p-5 text-sm text-[#A8A29E]">
-                                    No profiles yet. Connect the first Oura account to create the board.
-                                </div>
-                            )}
-                        </section>
-
-                        {profiles.length > 0 && !inviteLanding ? (
-                            <InviteLinkCard
-                                title="Invite the next friend"
-                                description="Send this link to anyone new. They land on the join screen and can add themselves with a single Oura sign-in."
-                                memberCount={profiles.length}
-                            />
-                        ) : null}
-                    </div>
-                </div>
-
-                <AppDialog
-                    isOpen={Boolean(profilePendingRemoval)}
-                    title="Remove Profile"
-                    message={profilePendingRemoval ? `Remove ${profilePendingRemoval.name} for everyone using this shared leaderboard? This cannot be undone.` : ''}
-                    intent="destructive"
-                    confirmText={isRemovingProfile ? 'Removing...' : 'Remove'}
-                    cancelText="Keep Profile"
-                    confirmDisabled={isRemovingProfile}
-                    onConfirm={handleConfirmRemoveProfile}
-                    onCancel={() => !isRemovingProfile && setProfilePendingRemoval(null)}
-                />
-
-                <AppDialog
-                    isOpen={Boolean(removeProfileError)}
-                    title="Could Not Remove Profile"
-                    message={removeProfileError || ''}
-                    confirmText="Dismiss"
-                    onConfirm={() => setRemoveProfileError(null)}
-                />
-            </div>
-        );
-    }
 
     // ============================================
     // LOADING STATE
@@ -3373,30 +3143,29 @@ const Dashboard: React.FC = () => {
     if (!activeData && activeQueryError) {
         const errorState = getDashboardErrorState(activeQueryError.error);
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#F2EDE8]">
+            <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-canvas">
                 <div className="w-full max-w-sm text-center">
-                    <div className="w-16 h-16 bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl flex items-center justify-center mx-auto mb-6">
-                        <Settings className="w-8 h-8 text-[#D4897B]" />
+                    <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border border-line bg-surface shadow-sm">
+                        <Settings className="w-8 h-8 text-error" />
                     </div>
-                    <h2 className="text-xl font-bold tracking-tight text-[#2D2A26] mb-2">{errorState.title}</h2>
-                    <p className="text-[#A8A29E] text-sm mb-8">
+                    <h1 className="text-xl font-bold tracking-tight text-ink mb-2">{errorState.title}</h1>
+                    <p className="text-ink-muted text-sm mb-8">
                         {errorState.message}
                     </p>
-                    <button onClick={login} className="w-full py-3.5 bg-[#6B9E8A] text-white font-semibold rounded-lg hover:opacity-90 transition-opacity text-sm mb-4">
-                        Reconnect Oura Ring
-                    </button>
                     <button
-                        onClick={() => {
-                            if (!activeProfile) return;
-                            removeProfile(activeProfile.id).catch((error) => {
-                                const message = error instanceof Error ? error.message : 'Failed to remove profile.';
-                                setRemoveProfileError(message);
-                            });
-                        }}
-                        className="text-[#A8A29E] hover:text-[#2D2A26] text-sm transition-colors"
+                        onClick={() => errorState.requiresReconnect ? login() : activeQueryError.refetch()}
+                        className="w-full py-3.5 bg-accent text-white font-semibold rounded-lg hover:opacity-90 transition-opacity text-sm mb-4"
                     >
-                        Remove Profile
+                        {errorState.requiresReconnect ? 'Reconnect Oura' : 'Try Sync Again'}
                     </button>
+                    {errorState.requiresReconnect ? (
+                        <button
+                            onClick={() => navigateToView('more')}
+                            className="text-ink-muted hover:text-ink text-sm transition-colors"
+                        >
+                            Manage profile
+                        </button>
+                    ) : null}
                 </div>
             </div>
         );
@@ -3404,170 +3173,218 @@ const Dashboard: React.FC = () => {
 
     if (!activeData && userQueries.some(q => q.isLoading)) {
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center bg-[#F2EDE8] animate-fade-in">
-                <div className="relative w-10 h-10 mb-5">
-                    <svg viewBox="0 0 40 40" className="w-full h-full transform -rotate-90">
-                        <circle cx="20" cy="20" r="17" fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="2.5" />
-                        <circle cx="20" cy="20" r="17" fill="none" stroke="#6B9E8A" strokeWidth="2.5" strokeDasharray="107" strokeDashoffset="80" strokeLinecap="round" className="animate-spin origin-center" style={{ animationDuration: '1.2s' }} />
-                    </svg>
+            <div className="min-h-screen bg-canvas px-4 py-6" aria-label="Loading your Oura dashboard" role="status">
+                <div className="mx-auto max-w-5xl">
+                    <div className="flex items-center justify-between border-b border-line pb-5">
+                        <Skeleton className="h-8 w-32" />
+                        <Skeleton className="h-11 w-28 rounded-full" />
+                    </div>
+                    <div className="mt-8 grid gap-4">
+                        <Skeleton className="h-8 w-44" />
+                        <Skeleton className="h-4 w-64 max-w-full" />
+                        <Skeleton className="mt-3 h-48 w-full rounded-xl" />
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                            <Skeleton className="h-28 rounded-xl" />
+                            <Skeleton className="h-28 rounded-xl" />
+                            <Skeleton className="hidden h-28 rounded-xl sm:block" />
+                        </div>
+                    </div>
                 </div>
-                <p className="text-[#C8C2BB] text-sm">Loading your data</p>
             </div>
         );
     }
+
+    const isTogetherView = viewMode === 'compare' || viewMode === 'compete';
+    const isProgressView = viewMode === 'trends' || viewMode === 'streaks' || viewMode === 'insights';
+    const isMoreView = viewMode === 'more' || viewMode === 'export';
+    const primaryNavigation: Array<{
+        key: 'today' | 'together' | 'progress' | 'more';
+        label: string;
+        target: ViewMode;
+        active: boolean;
+        icon: React.ReactNode;
+    }> = [
+        { key: 'today', label: 'Today', target: 'today', active: viewMode === 'today', icon: <CalendarDays /> },
+        { key: 'together', label: 'Leaderboard', target: profiles.length > 1 ? 'compare' : 'compete', active: isTogetherView, icon: <Trophy /> },
+        { key: 'progress', label: 'Trends', target: 'trends', active: isProgressView, icon: <BarChart3 /> },
+        { key: 'more', label: 'More', target: 'more', active: isMoreView, icon: <Settings /> },
+    ];
 
     // ============================================
     // MAIN DASHBOARD
     // ============================================
     return (
-        <div className="min-h-screen text-[#2D2A26]">
+        <div className="min-h-screen text-ink">
             <SyncModal isOpen={showSyncModal} progress={syncProgress} onClose={() => setShowSyncModal(false)} />
             <InviteLinkModal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} />
-            <ScoreBreakdownModal
-                isOpen={scoreBreakdownModal.isOpen}
-                onClose={() => setScoreBreakdownModal({ isOpen: false, scoreType: null })}
-                scoreType={scoreBreakdownModal.scoreType || 'readiness'}
-                scoreData={scoreBreakdownModal.scoreType === 'readiness' ? currentReadiness : scoreBreakdownModal.scoreType === 'sleep' ? currentSleep : scoreBreakdownModal.scoreType === 'activity' ? currentActivity : null}
-                sessionData={currentSession}
-                historyData={scoreHistoryData}
-            />
-            <MetricDetailModal
-                isOpen={metricDetailModal.isOpen}
-                onClose={() => setMetricDetailModal({ isOpen: false, metricType: null, currentValue: null, currentTimestamp: undefined, historyData: [] })}
-                metricType={metricDetailModal.metricType || 'hrv'}
-                currentValue={metricDetailModal.currentValue}
-                currentTimestamp={metricDetailModal.currentTimestamp}
-                historyData={metricDetailModal.historyData}
-                unit={metricDetailModal.unit} color={metricDetailModal.color} date={metricDetailModal.date}
-            />
-            <LeaderboardUserDetailModal
-                isOpen={leaderboardUserDetail.isOpen}
-                user={leaderboardUserDetail.user}
-                onClose={() => setLeaderboardUserDetail({ isOpen: false, user: null })}
-            />
+            {scoreBreakdownModal.isOpen ? (
+                <Suspense fallback={null}>
+                    <ScoreBreakdownModal
+                        isOpen
+                        onClose={() => setScoreBreakdownModal({ isOpen: false, scoreType: null })}
+                        scoreType={scoreBreakdownModal.scoreType || 'readiness'}
+                        scoreData={scoreBreakdownModal.scoreType === 'readiness' ? currentReadiness : scoreBreakdownModal.scoreType === 'sleep' ? currentSleep : scoreBreakdownModal.scoreType === 'activity' ? currentActivity : null}
+                        sessionData={currentSession}
+                        historyData={scoreHistoryData}
+                    />
+                </Suspense>
+            ) : null}
+            {metricDetailModal.isOpen ? (
+                <Suspense fallback={null}>
+                    <MetricDetailModal
+                        isOpen
+                        onClose={() => setMetricDetailModal({ isOpen: false, metricType: null, currentValue: null, currentTimestamp: undefined, historyData: [] })}
+                        metricType={metricDetailModal.metricType || 'hrv'}
+                        currentValue={metricDetailModal.currentValue}
+                        currentTimestamp={metricDetailModal.currentTimestamp}
+                        historyData={metricDetailModal.historyData}
+                        unit={metricDetailModal.unit} color={metricDetailModal.color} date={metricDetailModal.date}
+                    />
+                </Suspense>
+            ) : null}
+            {leaderboardUserDetail.isOpen ? (
+                <Suspense fallback={null}>
+                    <LeaderboardUserDetailModal
+                        isOpen
+                        user={leaderboardUserDetail.user}
+                        onClose={() => setLeaderboardUserDetail({ isOpen: false, user: null })}
+                    />
+                </Suspense>
+            ) : null}
 
-            {/* Top Bar */}
-            <nav className="sticky top-0 z-40 bg-[#F2EDE8]/90 backdrop-blur-md border-b border-[rgba(0,0,0,0.06)]">
-                <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <h1 className="text-sm font-medium tracking-tight text-[#7A756E]">
-                            {getTimeGreeting()}, <span className="font-semibold text-[#6B9E8A]">{userName}</span>
-                        </h1>
-                        <span className="text-[#A8A29E] text-[11px] font-mono hidden sm:inline">{formatLastSync(lastSyncTime)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <PrimaryProfileSwitcher
-                            className="hidden sm:block"
-                            selectClassName="h-8 text-xs min-w-[9.5rem]"
-                        />
-                        <button
+            <header className="app-header">
+                <div className="app-header__bar">
+                    <button type="button" className="app-brand" onClick={() => navigateToView('today')} aria-label="Davis Watches You Sleep home">
+                        <span className="app-brand__mark" aria-hidden="true">D</span>
+                        <span>
+                            <strong>Davis Watches You Sleep</strong>
+                            <small>{formatLastSync(activeProfileLastSuccessfulSyncAt)}</small>
+                        </span>
+                    </button>
+                    <div className="app-header__actions">
+                        <PrimaryProfileSwitcher className="app-header__profile" />
+                        <Button
+                            variant="quiet"
+                            size="icon"
+                            onClick={handleSyncAllData}
+                            disabled={isSyncing}
+                            aria-label={isSyncing ? 'Refreshing Oura data' : 'Refresh Oura data'}
+                        >
+                            <RefreshCw className={isSyncing ? 'animate-spin' : ''} aria-hidden="true" />
+                        </Button>
+                        <Button
+                            variant="quiet"
+                            size="icon"
                             onClick={() => setIsInviteModalOpen(true)}
-                            className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-[rgba(107,158,138,0.2)] bg-[rgba(107,158,138,0.06)] px-3 text-xs font-medium text-[#6B9E8A] transition-colors hover:bg-[rgba(107,158,138,0.1)]"
-                            title="Invite a friend"
+                            aria-label="Invite a friend"
+                            className="hidden sm:inline-flex"
                         >
-                            <Users className="h-4 w-4" />
-                            <span className="hidden md:inline">Invite</span>
-                        </button>
-                        <button onClick={handleSyncAllData} disabled={isSyncing} className="p-2 rounded-xl hover:bg-[#FAF7F4] text-[#A8A29E] hover:text-[#2D2A26] transition-colors disabled:opacity-40" title="Refresh data">
-                            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                        </button>
-                        <button onClick={login} className="p-2 rounded-xl hover:bg-[#FAF7F4] text-[#A8A29E] hover:text-[#2D2A26] transition-colors" title="Add profile">
-                            <Plus className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => { window.history.pushState({}, '', '/settings'); window.dispatchEvent(new PopStateEvent('popstate')); }} className="p-2 rounded-xl hover:bg-[#FAF7F4] text-[#A8A29E] hover:text-[#2D2A26] transition-colors" title="Settings">
-                            <Settings className="w-4 h-4" />
-                        </button>
+                            <Users aria-hidden="true" />
+                        </Button>
                     </div>
                 </div>
-                <div className="max-w-5xl mx-auto px-4 pb-2 sm:hidden">
-                    <PrimaryProfileSwitcher selectClassName="w-full h-9 text-xs" />
-                </div>
-                {/* Desktop/tablet tab bar — hidden on mobile */}
-                <div className="max-w-5xl mx-auto px-4 gap-1 -mb-px overflow-x-auto pb-1 hidden sm:flex">
-                    {[
-                        { key: 'today', label: 'Today', icon: <CalendarDays className="w-4 h-4" /> },
-                        ...(profiles.length > 1 ? [{ key: 'compare', label: 'Compare', icon: <GitCompareArrows className="w-4 h-4" /> }] : []),
-                        { key: 'compete', label: 'Compete', icon: <Swords className="w-4 h-4" /> },
-                        { key: 'trends', label: 'Trends', icon: <BarChart3 className="w-4 h-4" /> },
-                        { key: 'streaks', label: 'Streaks', icon: <Flame className="w-4 h-4" /> },
-                        { key: 'insights', label: 'Insights', icon: <Sparkles className="w-4 h-4" /> },
-                        { key: 'export', label: 'Export', icon: <Download className="w-4 h-4" /> },
-                    ].map(tab => (
+                <nav className="primary-nav" aria-label="Primary navigation">
+                    {primaryNavigation.map((item) => (
                         <button
-                            key={tab.key}
-                            onClick={() => setViewMode(tab.key as any)}
-                            className={`nav-tab-v2 ${viewMode === tab.key ? 'active' : ''}`}
+                            key={item.key}
+                            type="button"
+                            onClick={() => navigateToView(item.target)}
+                            className={item.active ? 'is-active' : ''}
+                            aria-current={item.active ? 'page' : undefined}
                         >
-                            {tab.icon}
-                            <span>{tab.label}</span>
+                            {React.cloneElement(item.icon as React.ReactElement<{ 'aria-hidden'?: boolean }>, { 'aria-hidden': true })}
+                            <span>{item.label}</span>
                         </button>
                     ))}
-                </div>
-            </nav>
+                </nav>
+            </header>
 
-            {/* Mobile bottom tab bar */}
-            <nav className="mobile-bottom-nav sm:hidden">
-                {[
-                    { key: 'today', label: 'Today', icon: <CalendarDays className="w-5 h-5" /> },
-                    ...(profiles.length > 1 ? [{ key: 'compare', label: 'Compare', icon: <GitCompareArrows className="w-5 h-5" /> }] : []),
-                    { key: 'compete', label: 'Compete', icon: <Swords className="w-5 h-5" /> },
-                    { key: 'trends', label: 'Trends', icon: <BarChart3 className="w-5 h-5" /> },
-                    { key: 'streaks', label: 'Streaks', icon: <Flame className="w-5 h-5" /> },
-                    { key: 'insights', label: 'Insights', icon: <Sparkles className="w-5 h-5" /> },
-                    { key: 'export', label: 'Export', icon: <Download className="w-5 h-5" /> },
-                ].map(tab => (
+            <nav className="mobile-bottom-nav sm:hidden" aria-label="Primary navigation">
+                {primaryNavigation.map((item) => (
                     <button
-                        key={tab.key}
-                        onClick={() => setViewMode(tab.key as any)}
-                        className={`mobile-bottom-tab ${viewMode === tab.key ? 'active' : ''}`}
-                        aria-current={viewMode === tab.key ? 'page' : undefined}
+                        key={item.key}
+                        type="button"
+                        onClick={() => navigateToView(item.target)}
+                        className={`mobile-bottom-tab ${item.active ? 'active' : ''}`}
+                        aria-current={item.active ? 'page' : undefined}
                     >
-                        {tab.icon}
-                        <span>{tab.label}</span>
+                        {React.cloneElement(item.icon as React.ReactElement<{ 'aria-hidden'?: boolean }>, { 'aria-hidden': true })}
+                        <span>{item.label}</span>
                     </button>
                 ))}
             </nav>
 
-            <main className="max-w-5xl mx-auto px-4 pb-24 sm:pb-8">
+            <main className="mx-auto max-w-5xl px-4 pb-28 sm:pb-10">
+                {isTogetherView ? (
+                    <div className="section-switcher">
+                        <SegmentedControl
+                            label="Leaderboard views"
+                            value={viewMode as 'compare' | 'compete'}
+                            options={[
+                                ...(profiles.length > 1 ? [{ value: 'compare' as const, label: 'Compare', icon: <GitCompareArrows /> }] : []),
+                                { value: 'compete' as const, label: 'Competitions', icon: <Swords /> },
+                            ]}
+                            onChange={navigateToView}
+                        />
+                    </div>
+                ) : null}
+                {isProgressView ? (
+                    <div className="section-switcher">
+                        <SegmentedControl
+                            label="Trend views"
+                            value={viewMode as 'trends' | 'streaks' | 'insights'}
+                            options={[
+                                { value: 'trends', label: 'Overview', icon: <BarChart3 /> },
+                                { value: 'streaks', label: 'Streaks', icon: <Flame /> },
+                                { value: 'insights', label: 'Explore', icon: <Search /> },
+                            ]}
+                            onChange={navigateToView}
+                        />
+                    </div>
+                ) : null}
                 {profilesNeedingAttention.length > 0 && (
-                    <div className="mt-6 p-4 bg-[#FAF7F4] border border-[rgba(0,0,0,0.08)] rounded-2xl shadow-clay-sm">
-                        <p className="text-[#2D2A26] text-sm font-medium mb-2">Sync attention needed</p>
+                    <div className="mt-6 p-4 bg-surface-raised border border-line rounded-2xl shadow-sm">
+                        <p className="text-ink text-sm font-medium mb-2">Sync attention needed</p>
                         <div className="space-y-1">
                             {profilesNeedingAttention.map((profile) => {
                                 const status = profileHealthById.get(profile.id);
                                 const name = getProfileDisplayName(profile);
                                 const isReconnect = status?.level === 'error';
                                 return (
-                                    <p key={profile.id} className={`text-xs ${isReconnect ? 'text-[#D4897B]' : 'text-[#D4B87B]'}`}>
+                                    <p key={profile.id} className={`text-xs ${isReconnect ? 'text-error' : 'text-warning'}`}>
                                         {name}: {status?.label || 'Needs attention'}
                                     </p>
                                 );
                             })}
                         </div>
                         <button
-                            onClick={login}
-                            className="mt-3 inline-flex min-h-9 items-center rounded-md bg-[#6B9E8A] px-3 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+                            onClick={() => profilesNeedingAttention.some((profile) => profileHealthById.get(profile.id)?.level === 'error')
+                                ? login()
+                                : handleSyncAllData()}
+                            className="mt-3 inline-flex min-h-11 items-center rounded-md bg-accent px-3 text-xs font-semibold text-white transition-opacity hover:opacity-90"
                         >
-                            Reconnect Oura Ring
+                            {profilesNeedingAttention.some((profile) => profileHealthById.get(profile.id)?.level === 'error')
+                                ? 'Reconnect Oura'
+                                : 'Try Sync Again'}
                         </button>
                     </div>
                 )}
 
                 {/* ======== TODAY VIEW ======== */}
                 {viewMode === 'today' && (
-                    <div className="pt-8 animate-fade-in">
-                        {/* ── Greeting & Date Navigation ── */}
-                        <div className="mb-10">
-                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="pt-6 animate-fade-in sm:pt-8">
+                        <div className="mb-6">
+                            <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
                                 <div className="min-w-0">
-                                    <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-1.5">
+                                    <p className="ui-eyebrow">{getTimeGreeting()}, {userName}</p>
+                                    <h1 className="page-title mt-2 text-3xl sm:text-4xl">
                                         {formatDayLabel(referenceDay)}
-                                    </h2>
-                                    <p className="text-[#7A756E] text-sm leading-relaxed">
+                                    </h1>
+                                    <p className="mt-2 max-w-xl text-sm leading-relaxed text-ink-secondary">
                                         {getDailyInsight()}
                                     </p>
                                     {hasIncompleteTodayCoverage && (
-                                        <p className="mt-2 text-xs text-[#7A756E]">
+                                        <p className="mt-2 text-xs text-warning">
                                             {referenceDay === todayIsoDay
                                                 ? 'This Oura day is still syncing. Some metrics may not be available yet.'
                                                 : 'The latest Oura day is still syncing. Showing your latest complete day.'}
@@ -3587,77 +3404,39 @@ const Dashboard: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* ── Scores ── */}
-                        <div className="grid grid-cols-3 gap-3 sm:gap-5 mb-10">
-                            {([
-                                { type: 'readiness' as const, label: 'Readiness', score: currentReadiness?.score, color: '#7BC4A0' },
-                                { type: 'sleep' as const, label: 'Sleep', score: currentSleep?.score, color: '#7BA8D4' },
-                                { type: 'activity' as const, label: 'Activity', score: currentActivity?.score, color: '#D4B87B' },
-                            ]).map(({ type, label, score, color }) => {
-                                const s = score ?? 0;
-                                const radius = 34;
-                                const circumference = 2 * Math.PI * radius;
-                                const progress = (s / 100) * circumference;
-                                const quality = getScoreQuality(score);
-                                return (
-                                    <button
-                                        key={type}
-                                        onClick={() => handleScoreCardClick(type)}
-                                        className="score-card-v2 group"
-                                    >
-                                        <div className="relative w-[60px] h-[60px] sm:w-[88px] sm:h-[88px] mx-auto mb-1 sm:mb-3">
-                                            <svg viewBox="0 0 76 76" className="w-full h-full transform -rotate-90">
-                                                <circle cx="38" cy="38" r={radius} fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="3" />
-                                                <circle cx="38" cy="38" r={radius} fill="none" stroke={color} strokeWidth="3" strokeDasharray={circumference} strokeDashoffset={circumference - progress} strokeLinecap="round" className="transition-all duration-1000 ease-out" style={{ filter: `drop-shadow(0 0 4px ${color}22)` }} />
-                                            </svg>
-                                            <span className="absolute inset-0 flex items-center justify-center text-base sm:text-2xl font-bold font-mono tabular-nums" style={{ color }}>
-                                                {score ?? '—'}
-                                            </span>
-                                        </div>
-                                        <span className="text-xs text-[#888] font-medium tracking-wide">{label}</span>
-                                        {quality && <span className="text-[10px] text-[#C8C2BB] mt-0.5 opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">{quality}</span>}
-                                    </button>
-                                );
-                            })}
-                        </div>
-
-                        {/* ── Personal Records (Quick Access) ── */}
-                        <PersonalRecordsStrip
-                            sessionHistory={allTimeSessionHistory}
-                            activityHistory={allTimeActivityHistory}
-                            readinessHistory={allTimeReadinessHistory}
-                            sleepHistory={allTimeSleepHistory}
-                            spo2History={allTimeSpo2History}
-                            stressHistory={allTimeStressHistory}
-                            resilienceHistory={allTimeResilienceHistory}
-                            workoutHistory={allTimeWorkoutHistory}
-                            cardiovascularAgeHistory={allTimeCardiovascularAgeHistory}
-                            vo2MaxHistory={allTimeVo2MaxHistory}
-                            onNavigateToDay={handleSelectReferenceDay}
+                        <DailyRankSummary
+                            rank={activeReferenceRank}
+                            participantCount={referenceLeaderboardData.length}
+                            average={activeReferenceAverage}
+                            freshnessLabel={formatLastSync(activeProfileLastSuccessfulSyncAt)}
+                            scores={[
+                                { type: 'readiness', label: 'Readiness', value: currentReadiness?.score, color: 'var(--color-readiness)' },
+                                { type: 'sleep', label: 'Sleep', value: currentSleep?.score, color: 'var(--color-sleep)' },
+                                { type: 'activity', label: 'Activity', value: currentActivity?.score, color: 'var(--color-activity)' },
+                            ]}
+                            onSelectScore={handleScoreCardClick}
                         />
 
-                        {/* ── Friend Trends (Quick Access) ── */}
-                        {leaderboardData.length > 1 && (
-                            <FriendTrendsStrip
-                                leaderboardData={leaderboardData}
-                                profiles={profiles}
-                                userQueries={analysisUserQueries}
-                                onViewCompare={() => setViewMode('compare')}
-                                onViewTrends={() => setViewMode('trends')}
-                            />
-                        )}
-
                         {/* ── Sleep ── */}
-                        <section className="mb-14">
+                        <section className="mt-10 mb-12">
                             <div className="section-header-v2">
-                                <Moon className="w-4 h-4 text-[#7BA8D4]" />
-                                <h3>Sleep</h3>
+                                <Moon className="w-4 h-4 text-metric-sleep" />
+                                <h2>Sleep</h2>
                             </div>
                             {/* Featured */}
                             <div className="grid grid-cols-2 gap-3 mb-3">
-                                <MetricCard title="Total Sleep" value={formatDuration(currentSession?.total_sleep_duration)} color="#7BA8D4" showDrillDownIndicator onClick={() => handleMetricCardClick('sleep_duration', currentSession?.total_sleep_duration ?? null, 'hours', '#7BA8D4')} />
-                                <MetricCard title="Efficiency" value={currentSession?.efficiency} unit="%" color="#7BC4A0" showDrillDownIndicator onClick={() => handleMetricCardClick('efficiency', currentSession?.efficiency ?? null, '%', '#7BC4A0')} />
+                                <MetricCard title="Total Sleep" value={formatDuration(currentSession?.total_sleep_duration)} color="var(--color-sleep)" showDrillDownIndicator onClick={() => handleMetricCardClick('sleep_duration', currentSession?.total_sleep_duration ?? null, 'hours', 'var(--color-sleep)')} />
+                                <MetricCard title="Efficiency" value={currentSession?.efficiency} unit="%" color="var(--color-readiness)" showDrillDownIndicator onClick={() => handleMetricCardClick('efficiency', currentSession?.efficiency ?? null, '%', 'var(--color-readiness)')} />
                             </div>
+                            <details
+                                className="metric-disclosure"
+                                onToggle={(event) => handleDeferredSectionToggle('sleep', event.currentTarget.open)}
+                            >
+                                <summary>
+                                    <span>More sleep detail</span>
+                                    <small>Stages, timing, and 14-day history</small>
+                                </summary>
+                                <div className="metric-disclosure__body">
                             {/* Sleep stages */}
                             <div className="grid grid-cols-3 gap-3 mb-3">
                                 <MetricCard title="Deep Sleep" value={formatDuration(currentSession?.deep_sleep_duration)} color="#7BA8D4" showDrillDownIndicator onClick={() => handleMetricCardClick('deep_sleep', currentSession?.deep_sleep_duration ?? null, 'hours', '#7BA8D4')} />
@@ -3671,31 +3450,44 @@ const Dashboard: React.FC = () => {
                                 <MetricCard title="Latency" value={currentSession?.latency ? `${Math.round(currentSession.latency / 60)}` : null} unit="min" subtext="Time to fall asleep" showDrillDownIndicator onClick={() => handleMetricCardClick('latency', currentSession?.latency ?? null, 'min', '#7BC4A0')} />
                                 <MetricCard title="Awake Time" value={formatDuration(currentSession?.awake_time)} subtext="During sleep" showDrillDownIndicator onClick={() => handleMetricCardClick('awake_time', currentSession?.awake_time ?? null, 'hours', '#D4897B')} />
                             </div>
-                            {sessionHistory.length > 0 && (
+                            {expandedDeferredSections.has('sleep') && sessionHistory.length > 0 && (
                                 <div className="chart-container" style={{ height: 260 }}>
-                                    <h4 className="chart-label">Sleep Architecture · 14 Days</h4>
-                                    <SleepStagesChart data={(() => {
-                                        const seen = new Set<string>();
-                                        return sessionHistory
-                                            .filter(s => { if (seen.has(s.day)) return false; seen.add(s.day); return true; })
-                                            .slice(0, 14)
-                                            .reverse();
-                                    })()} />
+                                    <h3 className="chart-label">Sleep Architecture · 14 Days</h3>
+                                    <Suspense fallback={<Skeleton className="h-full w-full rounded-xl" />}>
+                                        <SleepStagesChart data={(() => {
+                                            const seen = new Set<string>();
+                                            return sessionHistory
+                                                .filter(s => { if (seen.has(s.day)) return false; seen.add(s.day); return true; })
+                                                .slice(0, 14)
+                                                .reverse();
+                                        })()} />
+                                    </Suspense>
                                 </div>
                             )}
+                                </div>
+                            </details>
                         </section>
 
                         {/* ── Heart & Body ── */}
                         <section className="mb-14">
                             <div className="section-header-v2">
-                                <Heart className="w-4 h-4 text-[#D4897B]" />
-                                <h3>Heart & Body</h3>
+                                <Heart className="w-4 h-4 text-error" />
+                                <h2>Heart & Body</h2>
                             </div>
                             {/* Hero vitals */}
                             <div className="grid grid-cols-2 gap-3 mb-3">
-                                <MetricCard title="HRV" value={currentSession?.average_hrv} unit="ms" color="#A08BBE" subtext="Heart rate variability" showDrillDownIndicator onClick={() => handleMetricCardClick('hrv', currentSession?.average_hrv ?? null, 'ms', '#A08BBE')} />
-                                <MetricCard title="Resting HR" value={currentSession?.lowest_heart_rate} unit="bpm" color="#D4897B" subtext="Lowest during sleep" showDrillDownIndicator onClick={() => handleMetricCardClick('lowest_hr', currentSession?.lowest_heart_rate ?? null, 'bpm', '#D4897B')} />
+                                <MetricCard title="HRV" value={currentSession?.average_hrv} unit="ms" color="var(--color-insight)" subtext="Heart rate variability" showDrillDownIndicator onClick={() => handleMetricCardClick('hrv', currentSession?.average_hrv ?? null, 'ms', 'var(--color-insight)')} />
+                                <MetricCard title="Resting HR" value={currentSession?.lowest_heart_rate} unit="bpm" color="var(--color-error)" subtext="Lowest during sleep" showDrillDownIndicator onClick={() => handleMetricCardClick('lowest_hr', currentSession?.lowest_heart_rate ?? null, 'bpm', 'var(--color-error)')} />
                             </div>
+                            <details
+                                className="metric-disclosure"
+                                onToggle={(event) => handleDeferredSectionToggle('heart', event.currentTarget.open)}
+                            >
+                                <summary>
+                                    <span>More heart &amp; body detail</span>
+                                    <small>Vitals, temperature, and 30-day history</small>
+                                </summary>
+                                <div className="metric-disclosure__body">
                             {/* Supporting vitals */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                                 <MetricCard title="Avg HR" value={currentSession?.average_heart_rate?.toFixed(0)} unit="bpm" color="#D4897B" showDrillDownIndicator onClick={() => handleMetricCardClick('heart_rate', currentSession?.average_heart_rate ?? null, 'bpm', '#D4897B')} />
@@ -3724,43 +3516,42 @@ const Dashboard: React.FC = () => {
                                 />
                             </div>
 
-                            {hrData && hrData.length > 0 && (
+                            {expandedDeferredSections.has('heart') && hrData && hrData.length > 0 && (
                                 <div className="chart-container mb-4" style={{ height: 200 }}>
-                                    <HeartRateChart data={hrData} showLabels />
+                                    <Suspense fallback={<Skeleton className="h-full w-full rounded-xl" />}>
+                                        <HeartRateChart data={hrData} showLabels />
+                                    </Suspense>
                                 </div>
                             )}
-                            {sessionHistory.length > 0 && (
+                            {expandedDeferredSections.has('heart') && sessionHistory.length > 0 && (
                                 <div className="chart-container" style={{ height: 180 }}>
-                                    <h4 className="chart-label">HRV Trend · 30 Days</h4>
-                                    <ResponsiveContainer
-                                        width="100%"
-                                        height="100%"
-                                        minWidth={0}
-                                        minHeight={100}
-                                        initialDimension={{ width: 480, height: 100 }}
-                                    >
-                                        <LineChart data={sessionHistory.slice(0, 30).reverse()}>
-                                            <XAxis dataKey="day" tick={{ fill: '#A8A29E', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(val) => val.slice(5)} />
-                                            <YAxis domain={['dataMin - 2', 'dataMax + 2']} tick={{ fill: '#A8A29E', fontSize: 10 }} axisLine={false} tickLine={false} unit=" ms" />
-                                            <Tooltip contentStyle={CLAY_TOOLTIP_STYLE} formatter={(value: number) => [`${value} ms`, 'HRV']} />
-                                            <Line type="monotone" dataKey="average_hrv" stroke="#A08BBE" dot={false} strokeWidth={1.5} connectNulls />
-                                        </LineChart>
-                                    </ResponsiveContainer>
+                                    <h3 className="chart-label">HRV Trend · 30 Days</h3>
+                                    <Suspense fallback={<Skeleton className="h-full w-full rounded-xl" />}>
+                                        <HrvTrendChart data={sessionHistory.slice(0, 30).reverse()} />
+                                    </Suspense>
                                 </div>
                             )}
+                                </div>
+                            </details>
                         </section>
 
                         {/* ── Activity ── */}
                         <section className="mb-14">
                             <div className="section-header-v2">
-                                <Flame className="w-4 h-4 text-[#D4B87B]" />
-                                <h3>Activity</h3>
+                                <Flame className="w-4 h-4 text-warning" />
+                                <h2>Activity</h2>
                             </div>
                             {/* Featured */}
                             <div className="grid grid-cols-2 gap-3 mb-3">
-                                <MetricCard title="Steps" value={currentActivity?.steps?.toLocaleString()} color="#D4B87B" showDrillDownIndicator onClick={() => handleMetricCardClick('steps', currentActivity?.steps ?? null, 'steps', '#D4B87B')} />
-                                <MetricCard title="Active Calories" value={currentActivity?.active_calories?.toLocaleString()} unit="kcal" color="#D4B87B" showDrillDownIndicator onClick={() => handleMetricCardClick('calories', currentActivity?.active_calories ?? null, 'kcal', '#D4B87B')} />
+                                <MetricCard title="Steps" value={currentActivity?.steps?.toLocaleString()} color="var(--color-activity)" showDrillDownIndicator onClick={() => handleMetricCardClick('steps', currentActivity?.steps ?? null, 'steps', 'var(--color-activity)')} />
+                                <MetricCard title="Active Calories" value={currentActivity?.active_calories?.toLocaleString()} unit="kcal" color="var(--color-activity)" showDrillDownIndicator onClick={() => handleMetricCardClick('calories', currentActivity?.active_calories ?? null, 'kcal', 'var(--color-activity)')} />
                             </div>
+                            <details className="metric-disclosure">
+                                <summary>
+                                    <span>More activity detail</span>
+                                    <small>Distance, intensity, and sedentary time</small>
+                                </summary>
+                                <div className="metric-disclosure__body">
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                                 <MetricCard title="Total Calories" value={currentActivity?.total_calories?.toLocaleString()} unit="kcal" showDrillDownIndicator onClick={() => handleMetricCardClick('total_calories', currentActivity?.total_calories ?? null, 'kcal', '#D4897B')} />
                                 <MetricCard title="Distance" value={distanceMiles} unit="mi" showDrillDownIndicator onClick={() => handleMetricCardClick('distance', distanceMilesValue, 'mi', '#7BA8D4')} />
@@ -3771,36 +3562,45 @@ const Dashboard: React.FC = () => {
                                 <MetricCard title="Low Activity" value={formatDuration(currentActivity?.low_activity_time)} color="#7BC4A0" showDrillDownIndicator onClick={() => handleMetricCardClick('low_activity_time', currentActivity?.low_activity_time ?? null, 'hours', '#7BC4A0')} />
                                 <MetricCard title="Sedentary" value={formatDuration(currentActivity?.sedentary_time)} color="#64748B" showDrillDownIndicator onClick={() => handleMetricCardClick('sedentary_time', currentActivity?.sedentary_time ?? null, 'hours', '#64748B')} />
                             </div>
+                                </div>
+                            </details>
                         </section>
 
                         {/* ── Score Contributors ── */}
-                        <section className="mb-8">
-                            <div className="section-header-v2">
-                                <Brain className="w-4 h-4 text-[#777]" />
-                                <h3>Score Contributors</h3>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                                <ContributorsBreakdown title="Readiness" contributors={readinessContributors} />
-                                <ContributorsBreakdown title="Sleep" contributors={sleepContributors} />
-                                <ContributorsBreakdown title="Activity" contributors={activityContributors} />
-                            </div>
-                        </section>
+                        <details
+                            className="metric-disclosure mb-8"
+                            onToggle={(event) => handleDeferredSectionToggle('contributors', event.currentTarget.open)}
+                        >
+                            <summary>
+                                <span className="inline-flex items-center gap-2"><Brain className="h-4 w-4" aria-hidden="true" /> Score contributors</span>
+                                <small>See what shaped each score</small>
+                            </summary>
+                            {expandedDeferredSections.has('contributors') ? (
+                                <Suspense fallback={<Skeleton className="mt-4 h-48 w-full rounded-xl" />}>
+                                    <div className="metric-disclosure__body grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                                        <ContributorsBreakdown title="Readiness" contributors={readinessContributors} />
+                                        <ContributorsBreakdown title="Sleep" contributors={sleepContributors} />
+                                        <ContributorsBreakdown title="Activity" contributors={activityContributors} />
+                                    </div>
+                                </Suspense>
+                            ) : null}
+                        </details>
                     </div>
                 )}
 
                 {/* ======== COMPARE VIEW ======== */}
                 {viewMode === 'compare' && compareParticipantPool.length >= 2 && (
                     <div className="space-y-6 pt-6">
-                        <section className="rounded-[1.5rem] border border-[rgba(0,0,0,0.06)] bg-white p-5">
+                        <section className="rounded-[1.5rem] border border-line bg-surface p-5 shadow-sm">
                             <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
                                 <div className="min-w-0">
-                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Compare together</p>
-                                    <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[#2D2A26]">
+                                    <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Compare together</p>
+                                    <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink">
                                         {compareDay
                                             ? formatISODateForDisplay(compareDay, 'en-US', { weekday: 'short', month: 'short', day: 'numeric' })
                                             : 'Choose a shared date'}
-                                    </h2>
-                                    <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#7A756E]">
+                                    </h1>
+                                    <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-secondary">
                                         Compare any two or more people on the same Oura day. If the selected group has no shared day yet, remove one person or sync more recent data.
                                     </p>
                                 </div>
@@ -3813,7 +3613,7 @@ const Dashboard: React.FC = () => {
                                         todayIsoDay={todayIsoDay}
                                     />
                                 ) : (
-                                    <div className="rounded-xl border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] px-4 py-3 text-sm text-[#777]">
+                                    <div className="rounded-xl border border-line bg-surface-raised px-4 py-3 text-sm text-[#777]">
                                         No shared compare dates yet
                                     </div>
                                 )}
@@ -3830,9 +3630,9 @@ const Dashboard: React.FC = () => {
                                             type="button"
                                             onClick={() => toggleCompareParticipant(participant.id)}
                                             disabled={isLocked}
-                                            className={`rounded-full border px-3 py-2 text-sm transition-colors ${isSelected
-                                                    ? 'border-[rgba(107,158,138,0.25)] bg-[rgba(107,158,138,0.08)] text-[#6B9E8A]'
-                                                    : 'border-[rgba(0,0,0,0.08)] bg-[#FAF7F4] text-[#7A756E] hover:border-[rgba(0,0,0,0.12)] hover:text-[#2D2A26]'
+                                            className={`min-h-11 rounded-full border px-3 py-2 text-sm transition-colors ${isSelected
+                                                    ? 'border-accent/30 bg-accent-soft text-accent'
+                                                    : 'border-line bg-surface-raised text-ink-secondary hover:border-[rgba(0,0,0,0.12)] hover:text-ink'
                                                 } ${isLocked ? 'cursor-not-allowed opacity-80' : ''}`}
                                         >
                                             {getProfileDisplayName(participant.profile)}
@@ -3843,7 +3643,7 @@ const Dashboard: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={() => setSelectedCompareIds(availableCompareIds)}
-                                        className="rounded-full border border-[rgba(0,0,0,0.08)] bg-[#FAF7F4] px-3 py-2 text-sm text-[#7A756E] transition-colors hover:border-[rgba(0,0,0,0.12)] hover:text-[#2D2A26]"
+                                        className="min-h-11 rounded-full border border-line bg-surface-raised px-3 py-2 text-sm text-ink-secondary transition-colors hover:border-[rgba(0,0,0,0.12)] hover:text-ink"
                                     >
                                         Select everyone
                                     </button>
@@ -3869,7 +3669,7 @@ const Dashboard: React.FC = () => {
                                         return (
                                             <article
                                                 key={snapshot.id}
-                                                className="rounded-[1.25rem] border bg-white p-5 shadow-clay-sm transition-shadow hover:shadow-clay"
+                                                className="rounded-[1.25rem] border bg-surface p-5 shadow-sm transition-shadow hover:shadow-card"
                                                 style={{ borderColor: `${snapshot.color}30` }}
                                             >
                                                 {/* Rank & name */}
@@ -3885,15 +3685,15 @@ const Dashboard: React.FC = () => {
                                                         )}
                                                     </div>
                                                     <div className="min-w-0 flex-1">
-                                                        <h3 className="text-base font-semibold text-[#2D2A26] leading-tight" style={{ wordBreak: 'break-word' }}>{snapshot.name}</h3>
-                                                        <p className="text-[10px] uppercase tracking-[0.14em] text-[#C8C2BB] mt-0.5">{snapshot.availableScoreCount}/3 scores</p>
+                                                        <h3 className="text-base font-semibold text-ink leading-tight" style={{ wordBreak: 'break-word' }}>{snapshot.name}</h3>
+                                                        <p className="mt-0.5 text-xs uppercase tracking-[0.12em] text-ink-muted">{snapshot.availableScoreCount}/3 scores</p>
                                                     </div>
                                                 </div>
 
                                                 {/* Daily average - large */}
                                                 <div className="flex items-baseline gap-1.5 mb-4">
-                                                    <span className="font-mono text-3xl font-bold text-[#2D2A26]">{snapshot.compareAverage ?? '--'}</span>
-                                                    <span className="text-xs text-[#C8C2BB] font-medium">avg</span>
+                                                    <span className="font-mono text-3xl font-bold text-ink">{snapshot.compareAverage ?? '--'}</span>
+                                                    <span className="text-xs font-medium text-ink-muted">avg</span>
                                                     <span className="ml-auto w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: snapshot.color }} />
                                                 </div>
 
@@ -3905,14 +3705,14 @@ const Dashboard: React.FC = () => {
                                                         return (
                                                             <div key={s.label} className="rounded-xl px-2 py-2 text-center" style={{ backgroundColor: `${s.color}${Math.round(opacity * 255).toString(16).padStart(2, '0')}` }}>
                                                                 <p className="text-[10px] font-medium" style={{ color: s.color }}>{s.label}</p>
-                                                                <p className="font-mono text-sm font-semibold text-[#2D2A26] mt-0.5">{s.value ?? '--'}</p>
+                                                                <p className="font-mono text-sm font-semibold text-ink mt-0.5">{s.value ?? '--'}</p>
                                                             </div>
                                                         );
                                                     })}
                                                 </div>
 
                                                 {/* Bottom stats */}
-                                                <div className="mt-3 flex items-center justify-between text-[11px] text-[#A8A29E]">
+                                                <div className="mt-3 flex items-center justify-between text-[11px] text-ink-muted">
                                                     <span>{formatDuration(snapshot.session?.total_sleep_duration)} sleep</span>
                                                     <span>{snapshot.activity?.steps?.toLocaleString() || '--'} steps</span>
                                                 </div>
@@ -3921,61 +3721,65 @@ const Dashboard: React.FC = () => {
                                     })}
                                 </div>
 
-                                <div className="space-y-4">
-                                    <MultiProfileComparisonTable
-                                        title="Readiness"
-                                        subtitle="Daily readiness scores plus the supporting recovery metrics behind them."
-                                        columns={compareColumns.map((column, index) => ({
-                                            ...column,
-                                            score: compareSnapshots[index]?.readiness?.score ?? null,
-                                        }))}
-                                        rows={readinessCompareRows}
-                                    />
-                                    <MultiProfileComparisonTable
-                                        title="Sleep"
-                                        subtitle="Sleep score context for everyone on the selected day."
-                                        columns={compareColumns.map((column, index) => ({
-                                            ...column,
-                                            score: compareSnapshots[index]?.sleep?.score ?? null,
-                                        }))}
-                                        rows={sleepCompareRows}
-                                    />
-                                    <MultiProfileComparisonTable
-                                        title="Activity"
-                                        subtitle="Activity totals and contribution scores across the selected group."
-                                        columns={compareColumns.map((column, index) => ({
-                                            ...column,
-                                            score: compareSnapshots[index]?.activity?.score ?? null,
-                                        }))}
-                                        rows={activityCompareRows}
-                                    />
-                                </div>
+                                <Suspense fallback={<ViewLoadingFallback />}>
+                                    <div className="space-y-4">
+                                        <MultiProfileComparisonTable
+                                            title="Readiness"
+                                            subtitle="Daily readiness scores plus the supporting recovery metrics behind them."
+                                            columns={compareColumns.map((column, index) => ({
+                                                ...column,
+                                                score: compareSnapshots[index]?.readiness?.score ?? null,
+                                            }))}
+                                            rows={readinessCompareRows}
+                                        />
+                                        <MultiProfileComparisonTable
+                                            title="Sleep"
+                                            subtitle="Sleep score context for everyone on the selected day."
+                                            columns={compareColumns.map((column, index) => ({
+                                                ...column,
+                                                score: compareSnapshots[index]?.sleep?.score ?? null,
+                                            }))}
+                                            rows={sleepCompareRows}
+                                        />
+                                        <MultiProfileComparisonTable
+                                            title="Activity"
+                                            subtitle="Activity totals and contribution scores across the selected group."
+                                            columns={compareColumns.map((column, index) => ({
+                                                ...column,
+                                                score: compareSnapshots[index]?.activity?.score ?? null,
+                                            }))}
+                                            rows={activityCompareRows}
+                                        />
+                                    </div>
+                                </Suspense>
 
                                 {hasCompareHeartRateData ? (
-                                    <div className="rounded-[1.25rem] border border-[rgba(0,0,0,0.06)] bg-white p-4">
-                                        <h4 className="text-xs uppercase tracking-[0.14em] text-[#A8A29E]">Heart Rate (48h)</h4>
+                                    <div className="rounded-[1.25rem] border border-line bg-surface p-4 shadow-sm">
+                                        <h4 className="text-xs uppercase tracking-[0.14em] text-ink-muted">Heart Rate (48h)</h4>
                                         <div className="mt-3 h-64">
-                                            <ComparisonHeartRateChart series={compareHeartRateSeries} />
+                                            <Suspense fallback={<Skeleton className="h-full w-full rounded-xl" />}>
+                                                <ComparisonHeartRateChart series={compareHeartRateSeries} />
+                                            </Suspense>
                                         </div>
                                     </div>
                                 ) : null}
                             </>
                         ) : (
-                            <div className="rounded-[1.25rem] border border-[rgba(0,0,0,0.06)] bg-white p-5 text-sm text-[#7A756E]">
-                                The current selection does not share a comparable Oura day yet. Remove one person from the selection or sync more recent data to unlock the multi-user comparison tables.
+                            <div className="rounded-[1.25rem] border border-line bg-surface p-5 text-sm text-ink-secondary shadow-sm">
+                                The current selection does not share a comparable Oura day yet. Remove one person from the selection or sync more recent data to view the multi-user comparison tables.
                             </div>
                         )}
                     </div>
                 )}
                 {viewMode === 'compare' && profiles.length < 2 && (
                     <div className="pt-16 text-center">
-                        <p className="text-[#A8A29E] mb-4">Add a second profile to compare metrics</p>
-                        <button onClick={login} className="px-4 py-2 bg-[#6B9E8A] text-white font-medium rounded-md text-sm hover:opacity-90 transition-opacity">Add Profile</button>
+                        <p className="text-ink-muted mb-4">Add a second profile to compare metrics</p>
+                        <button onClick={login} className="min-h-11 px-4 py-2 bg-accent text-white font-medium rounded-md text-sm hover:opacity-90 transition-opacity">Add Profile</button>
                     </div>
                 )}
                 {viewMode === 'compare' && profiles.length >= 2 && compareParticipantPool.length < 2 && (
                     <div className="pt-16 text-center">
-                        <p className="text-[#A8A29E]">Waiting for enough synced data to compare everyone.</p>
+                        <p className="text-ink-muted">Waiting for enough synced data to compare everyone.</p>
                     </div>
                 )}
 
@@ -3995,10 +3799,15 @@ const Dashboard: React.FC = () => {
                 {/* ======== TRENDS VIEW ======== */}
                 {viewMode === 'trends' && (
                     <div className="pt-6 space-y-4">
+                        <header className="mb-6 max-w-2xl">
+                            <p className="ui-eyebrow">Trends</p>
+                            <h1 className="page-title mt-2">How the scores are changing</h1>
+                            <p className="mt-2 text-sm leading-6 text-ink-secondary">Compare recent results with the longer view.</p>
+                        </header>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                             <div>
-                                <p className="text-[11px] uppercase tracking-[0.14em] text-[#A8A29E]">Date Scope</p>
-                                <p className="text-sm text-[#7A756E]">{formatRangeLabel(effectiveTrendsRange)}</p>
+                                <p className="text-[11px] uppercase tracking-[0.14em] text-ink-muted">Date Scope</p>
+                                <p className="text-sm text-ink-secondary">{formatRangeLabel(effectiveTrendsRange)}</p>
                             </div>
                             <DateRangePicker
                                 mode="range"
@@ -4010,6 +3819,38 @@ const Dashboard: React.FC = () => {
                                 todayIsoDay={todayIsoDay}
                             />
                         </div>
+                        <details className="metric-disclosure">
+                            <summary>
+                                <span>Records &amp; group movement</span>
+                                <small>Personal bests and seven-day comparisons</small>
+                            </summary>
+                            <div className="metric-disclosure__body">
+                                <PersonalRecordsStrip
+                                    sessionHistory={allTimeSessionHistory}
+                                    activityHistory={allTimeActivityHistory}
+                                    readinessHistory={allTimeReadinessHistory}
+                                    sleepHistory={allTimeSleepHistory}
+                                    spo2History={allTimeSpo2History}
+                                    stressHistory={allTimeStressHistory}
+                                    resilienceHistory={allTimeResilienceHistory}
+                                    workoutHistory={allTimeWorkoutHistory}
+                                    cardiovascularAgeHistory={allTimeCardiovascularAgeHistory}
+                                    vo2MaxHistory={allTimeVo2MaxHistory}
+                                    onNavigateToDay={(day) => {
+                                        handleSelectReferenceDay(day);
+                                        navigateToView('today');
+                                    }}
+                                />
+                                {leaderboardData.length > 1 ? (
+                                    <FriendTrendsStrip
+                                        leaderboardData={leaderboardData}
+                                        profiles={profiles}
+                                        userQueries={analysisUserQueries}
+                                        onViewCompare={() => navigateToView('compare')}
+                                    />
+                                ) : null}
+                            </div>
+                        </details>
                         <TrendInsightsPanel profiles={profiles} userQueries={scopedAllTimeQueriesForHistory} />
                         <Suspense fallback={<ViewLoadingFallback />}>
                             <AllTimeHistory profiles={profiles} userQueries={scopedAllTimeQueriesForHistory} />
@@ -4020,6 +3861,11 @@ const Dashboard: React.FC = () => {
                 {/* ======== STREAKS VIEW ======== */}
                 {viewMode === 'streaks' && (
                     <div className="pt-6">
+                        <header className="mb-6 max-w-2xl">
+                            <p className="ui-eyebrow">Streaks</p>
+                            <h1 className="page-title mt-2">Runs, records, and badges</h1>
+                            <p className="mt-2 text-sm leading-6 text-ink-secondary">See what has lasted and which record is closest to falling.</p>
+                        </header>
                         <Suspense fallback={<ViewLoadingFallback />}>
                             <StreakTracker
                                 profiles={profiles.map(p => ({ id: p.id, firstName: p.firstName, lastName: p.lastName, email: p.email }))}
@@ -4032,9 +3878,57 @@ const Dashboard: React.FC = () => {
                 {/* ======== INSIGHTS VIEW ======== */}
                 {viewMode === 'insights' && <InsightsView profiles={profiles} userQueries={analysisUserQueries} allTimeQueries={analysisAllTimeQueries} />}
 
+                {/* ======== MORE VIEW ======== */}
+                {viewMode === 'more' && (
+                    <section className="more-hub">
+                        <div className="more-hub__intro">
+                            <p className="ui-eyebrow">Davis’s control panel</p>
+                            <h1 className="page-title">Settings and tools</h1>
+                            <p>Invite someone, sync now, manage profiles, or export your data.</p>
+                        </div>
+                        <div className="more-hub__grid">
+                            <button type="button" className="more-action" onClick={() => setIsInviteModalOpen(true)}>
+                                <Users aria-hidden="true" />
+                                <span><strong>Recruit a sleeper</strong><small>Share the leaderboard join link</small></span>
+                                <ArrowRight aria-hidden="true" />
+                            </button>
+                            <button type="button" className="more-action" onClick={handleSyncAllData} disabled={isSyncing}>
+                                <RefreshCw className={isSyncing ? 'animate-spin' : ''} aria-hidden="true" />
+                                <span><strong>{isSyncing ? 'Refreshing data' : 'Refresh Oura data'}</strong><small>{formatLastSync(activeProfileLastSuccessfulSyncAt)}</small></span>
+                                <ArrowRight aria-hidden="true" />
+                            </button>
+                            <button type="button" className="more-action" onClick={login}>
+                                <Plus aria-hidden="true" />
+                                <span><strong>Add another sleeper</strong><small>Connect another Oura member</small></span>
+                                <ArrowRight aria-hidden="true" />
+                            </button>
+                            <button
+                                type="button"
+                                className="more-action"
+                                onClick={() => {
+                                    window.history.pushState({}, '', '/settings');
+                                    window.dispatchEvent(new PopStateEvent('popstate'));
+                                }}
+                            >
+                                <Settings aria-hidden="true" />
+                                <span><strong>Settings</strong><small>Profiles, exclusions, and diagnostics</small></span>
+                                <ArrowRight aria-hidden="true" />
+                            </button>
+                            <button type="button" className="more-action" onClick={() => navigateToView('export')}>
+                                <Download aria-hidden="true" />
+                                <span><strong>Export data</strong><small>Download selected history as CSV</small></span>
+                                <ArrowRight aria-hidden="true" />
+                            </button>
+                        </div>
+                    </section>
+                )}
+
                 {/* ======== EXPORT VIEW ======== */}
                 {viewMode === 'export' && (
                     <div className="pt-6">
+                        <Button variant="quiet" onClick={() => navigateToView('more')} className="mb-4">
+                            <ChevronLeft aria-hidden="true" /> Back to more
+                        </Button>
                         <Suspense fallback={<ViewLoadingFallback />}>
                             <DataExport />
                         </Suspense>
@@ -4047,34 +3941,58 @@ const Dashboard: React.FC = () => {
 
 // Insights sub-view
 const InsightsView: React.FC<{ profiles: any[]; userQueries: any[]; allTimeQueries: any[] }> = ({ profiles, userQueries, allTimeQueries }) => {
-    const [tab, setTab] = useState<'rhythm' | 'timeline' | 'correlation' | 'whatif' | 'streaks' | 'patterns' | 'milestones' | 'snapshot'>('rhythm');
+    type InsightTab = 'rhythm' | 'timeline' | 'correlation' | 'whatif' | 'patterns' | 'milestones' | 'snapshot';
+    const insightTabs: Array<{ key: InsightTab; label: string }> = [
+        { key: 'rhythm', label: 'Sleep rhythm' },
+        { key: 'timeline', label: '24h timeline' },
+        { key: 'correlation', label: 'Relationships' },
+        { key: 'whatif', label: 'What-if' },
+        { key: 'patterns', label: 'Patterns' },
+        { key: 'milestones', label: 'Milestones' },
+        { key: 'snapshot', label: 'Snapshot' },
+    ];
+    const getInsightFromLocation = (): InsightTab => {
+        const requested = new URLSearchParams(window.location.search).get('insight') as InsightTab | null;
+        return requested && insightTabs.some((candidate) => candidate.key === requested) ? requested : 'rhythm';
+    };
+    const [tab, setTab] = useState<InsightTab>(getInsightFromLocation);
     const recentUsersData = userQueries.map((q: any) => ({ data: q.data as DailyStats | undefined }));
     const historicalUsersData = profiles.map((_: any, idx: number) => ({
         data: (allTimeQueries[idx]?.data as DailyStats | undefined) ?? (userQueries[idx]?.data as DailyStats | undefined)
     }));
 
+    const selectInsight = (next: InsightTab) => {
+        setTab(next);
+        const url = new URL(window.location.href);
+        url.searchParams.set('insight', next);
+        window.history.replaceState({ insight: next }, '', `${url.pathname}${url.search}`);
+    };
+
     return (
         <div className="pt-6 space-y-6">
-            <div className="relative">
-                <div className="flex gap-1.5 overflow-x-auto pb-1 hide-scrollbar">
-                    {([
-                        { key: 'rhythm', label: 'Sleep Rhythm' },
-                        { key: 'timeline', label: '24h Timeline' }, { key: 'correlation', label: 'Correlations' },
-                        { key: 'whatif', label: 'What-If' },
-                        { key: 'streaks', label: 'Streaks' }, { key: 'patterns', label: 'Patterns' },
-                        { key: 'milestones', label: 'Milestones' }, { key: 'snapshot', label: 'Snapshot' },
-                    ] as const).map(t => (
-                        <button key={t.key} onClick={() => setTab(t.key)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${tab === t.key ? 'bg-[#6B9E8A]/15 text-[#6B9E8A]' : 'text-[#A8A29E] hover:text-[#7A756E] hover:bg-[#FAF7F4]'}`}>{t.label}</button>
-                    ))}
+            <header className="max-w-2xl">
+                <p className="ui-eyebrow">Explore</p>
+                <h1 className="page-title mt-2">Look for relationships</h1>
+                <p className="mt-2 text-sm leading-6 text-ink-secondary">Check sleep rhythms, metric correlations, milestones, and what-if estimates.</p>
+            </header>
+            <div className="insight-tabs" role="group" aria-label="Explore health insights">
+                {insightTabs.map((item) => (
+                    <button
+                        key={item.key}
+                        type="button"
+                        aria-pressed={tab === item.key}
+                        onClick={() => selectInsight(item.key)}
+                        className={tab === item.key ? 'is-active' : ''}
+                    >
+                        {item.label}
+                    </button>
+                ))}
                 </div>
-                <div className="pointer-events-none absolute right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-[var(--bg-base)] to-transparent rounded-r" />
-            </div>
             <Suspense fallback={<ViewLoadingFallback />}>
                 {tab === 'rhythm' && <SleepRhythm profiles={profiles} usersData={historicalUsersData} />}
                 {tab === 'timeline' && <TimelineView profiles={profiles} usersData={recentUsersData} />}
                 {tab === 'correlation' && <CorrelationExplorer profiles={profiles} usersData={recentUsersData} />}
                 {tab === 'whatif' && <WhatIfSimulator profiles={profiles} usersData={historicalUsersData} />}
-                {tab === 'streaks' && <StreakTracker profiles={profiles} usersData={recentUsersData} />}
                 {tab === 'patterns' && <PatternDetector profiles={profiles} usersData={recentUsersData} />}
                 {tab === 'milestones' && <MilestoneTracker profiles={profiles} usersData={historicalUsersData} />}
                 {tab === 'snapshot' && <DailySnapshot profiles={profiles} usersData={recentUsersData} />}

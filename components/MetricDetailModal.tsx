@@ -19,7 +19,7 @@ import {
 import { IOSModal, IOSListItem, IOSButton } from './ios';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatISODateForDisplay } from '../utils/date';
-import { CLAY_TOOLTIP_STYLE, CLAY_GRID_STROKE, CLAY_AXIS_STYLE } from '../utils/chartStyles';
+import { CHART_TOOLTIP_STYLE } from '../utils/chartStyles';
 import { formatRecordLocalClockTime, getLocalMinutesOfDayFromIso } from '../utils/temporal';
 
 interface MetricDataPoint {
@@ -74,7 +74,6 @@ type MetricConfig = {
     title: string;
     icon: React.ReactNode;
     description: string;
-    optimalRange?: string;
     unit: string;
     color: string;
     valueFormat: MetricValueFormat;
@@ -153,8 +152,7 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
     hrv: {
         title: 'Heart Rate Variability',
         icon: <Heart className="w-4 h-4" />,
-        description: 'HRV measures the variation in time intervals between consecutive heartbeats during sleep. Higher HRV usually reflects better recovery and stronger parasympathetic activity, so your own baseline matters more than any universal target.',
-        optimalRange: '50-100 ms (varies by age and fitness)',
+        description: 'Nightly HRV varies widely by person. Compare this value with your own baseline and longer-term pattern.',
         unit: 'ms',
         color: '#A08BBE',
         valueFormat: 'number',
@@ -170,8 +168,7 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
     heart_rate: {
         title: 'Average Heart Rate',
         icon: <Activity className="w-4 h-4" />,
-        description: 'Your average sleeping heart rate shows how much effort your cardiovascular system needed overnight. Lower values usually indicate stronger recovery and less physiological strain.',
-        optimalRange: '40-60 bpm during sleep',
+        description: 'Average heart rate recorded during sleep. Compare it with your own baseline and recent trend.',
         unit: 'bpm',
         color: '#D4897B',
         valueFormat: 'number',
@@ -187,8 +184,7 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
     lowest_hr: {
         title: 'Lowest Heart Rate',
         icon: <Heart className="w-4 h-4" />,
-        description: 'The minimum heart rate reached overnight often lines up with your deepest recovery. Lower values tend to suggest better cardiovascular efficiency and calmer overnight load.',
-        optimalRange: '35-45 bpm',
+        description: 'Lowest heart rate recorded during the sleep period. Compare it with your own baseline and recent trend.',
         unit: 'bpm',
         color: '#D4897B',
         valueFormat: 'number',
@@ -204,8 +200,7 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
     spo2: {
         title: 'Blood Oxygen (SpO2)',
         icon: <Droplets className="w-4 h-4" />,
-        description: 'SpO2 reflects how effectively oxygen is circulating through your blood during sleep. Consistently high readings generally point to steady overnight breathing.',
-        optimalRange: '95-100%',
+        description: 'Average blood-oxygen estimate recorded during sleep. Wearable readings are not medical measurements.',
         unit: '%',
         color: '#7BA8D4',
         valueFormat: 'number',
@@ -222,7 +217,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'High Stress Time',
         icon: <Brain className="w-4 h-4" />,
         description: 'This tracks how long Oura detected you in high-stress states across the day. Lower totals usually mean your day included more balance between load and recovery.',
-        optimalRange: 'Under 1 hour of high stress',
         unit: '',
         color: '#D4A574',
         valueFormat: 'duration',
@@ -244,8 +238,7 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
     resilience: {
         title: 'Resilience Score',
         icon: <Zap className="w-4 h-4" />,
-        description: 'Resilience reflects how well you recover from strain over time. Higher values mean stronger recovery support and better ability to absorb physical or mental stress.',
-        optimalRange: '75+',
+        description: 'Oura Resilience summarizes recent stress and recovery signals over time. Compare changes with your own baseline.',
         unit: 'score',
         color: '#7BC4A0',
         valueFormat: 'number',
@@ -263,7 +256,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'Daily Steps',
         icon: <Activity className="w-4 h-4" />,
         description: 'Steps capture total daily movement, from deliberate workouts to incidental walking. Higher counts generally mean a more active day overall.',
-        optimalRange: '7,000-10,000 steps',
         unit: 'steps',
         color: '#D4B87B',
         valueFormat: 'number',
@@ -280,7 +272,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'Active Calories',
         icon: <Zap className="w-4 h-4" />,
         description: 'Active calories represent the energy you burned through movement beyond baseline metabolism. Higher values typically reflect more total exercise or activity load.',
-        optimalRange: '400-800+ kcal',
         unit: 'kcal',
         color: '#D4A574',
         valueFormat: 'number',
@@ -297,7 +288,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'Total Calories',
         icon: <Flame className="w-4 h-4" />,
         description: 'Total calories combine your resting metabolic burn with activity. This reflects the full amount of energy your body used that day.',
-        optimalRange: 'Varies by size and activity level',
         unit: 'kcal',
         color: '#D4897B',
         valueFormat: 'number',
@@ -314,7 +304,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'Walking Distance',
         icon: <Activity className="w-4 h-4" />,
         description: 'Equivalent walking distance is Oura’s estimate of how far your daily movement adds up to. It is a simple way to compare activity volume across days.',
-        optimalRange: '4-6+ miles',
         unit: 'mi',
         color: '#7BA8D4',
         valueFormat: 'number',
@@ -331,7 +320,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'Total Sleep Duration',
         icon: <Moon className="w-4 h-4" />,
         description: 'Total sleep duration measures the time you were actually asleep, excluding time awake in bed. Consistent sleep quantity is one of the clearest recovery signals on the board.',
-        optimalRange: '7-9 hours',
         unit: '',
         color: '#7BA8D4',
         valueFormat: 'duration',
@@ -341,7 +329,7 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
             { label: 'Low', range: [0, 18000], color: '#D4897B' },
             { label: 'Fair', range: [18000, 21600], color: '#D4A574' },
             { label: 'Good', range: [21600, 25200], color: '#7BA8D4' },
-            { label: 'Optimal', range: [25200, 32400], color: '#7BC4A0' },
+            { label: 'Reference', range: [25200, 32400], color: '#7BC4A0' },
             { label: 'Extended', range: [32400, 999999], color: '#7BC4A0' },
         ],
     },
@@ -349,7 +337,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'Deep Sleep Duration',
         icon: <Wind className="w-4 h-4" />,
         description: 'Deep sleep is the most physically restorative phase of sleep. More time here usually points to stronger overnight repair and recovery.',
-        optimalRange: '1-2 hours',
         unit: '',
         color: '#7BA8D4',
         valueFormat: 'duration',
@@ -366,7 +353,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'REM Sleep Duration',
         icon: <Brain className="w-4 h-4" />,
         description: 'REM sleep supports memory, learning, and emotional processing. More REM usually means you gave yourself enough time for the later sleep cycles to unfold.',
-        optimalRange: '1.5-2 hours',
         unit: '',
         color: '#A08BBE',
         valueFormat: 'duration',
@@ -383,7 +369,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'Light Sleep Duration',
         icon: <Moon className="w-4 h-4" />,
         description: 'Light sleep makes up the largest share of most nights. It helps transition between wakefulness, deep sleep, and REM, so the main value here is comparing against your own baseline.',
-        optimalRange: 'Typically 3-5 hours',
         unit: '',
         color: '#7BA8D4',
         valueFormat: 'duration',
@@ -408,7 +393,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'Sleep Efficiency',
         icon: <Activity className="w-4 h-4" />,
         description: 'Sleep efficiency is the percentage of time in bed that you were actually asleep. Higher efficiency usually means you fell asleep faster and spent less time awake overnight.',
-        optimalRange: '85-95%',
         unit: '%',
         color: '#7BC4A0',
         valueFormat: 'number',
@@ -425,7 +409,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'Bedtime',
         icon: <Moon className="w-4 h-4" />,
         description: 'Bedtime tracks when your main sleep session started. The biggest value here is seeing how consistent your timing is from night to night.',
-        optimalRange: 'Roughly 9:00 PM to midnight, consistently',
         unit: '',
         color: '#A08BBE',
         valueFormat: 'clock',
@@ -452,7 +435,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'Wake Time',
         icon: <Activity className="w-4 h-4" />,
         description: 'Wake time tracks when your main sleep session ended. The chart is most useful for spotting consistency and drift across your recent schedule.',
-        optimalRange: 'Roughly 6:00 AM to 8:30 AM, consistently',
         unit: '',
         color: '#D4B87B',
         valueFormat: 'clock',
@@ -479,7 +461,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'Sleep Latency',
         icon: <Moon className="w-4 h-4" />,
         description: 'Sleep latency is how long it took to fall asleep after getting into bed. Lower values generally mean you were ready for sleep and settled quickly.',
-        optimalRange: 'Under 15 minutes',
         unit: '',
         color: '#7BC4A0',
         valueFormat: 'duration',
@@ -502,7 +483,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'Awake Time',
         icon: <Moon className="w-4 h-4" />,
         description: 'Awake time measures the amount of time you were awake during your main sleep session. Lower values usually mean more continuous sleep with fewer disruptions.',
-        optimalRange: 'Under 30 minutes',
         unit: '',
         color: '#D4897B',
         valueFormat: 'duration',
@@ -525,7 +505,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'Breathing Rate',
         icon: <Wind className="w-4 h-4" />,
         description: 'Average breathing rate during sleep can highlight changes in strain, illness, or sleep quality. The most useful comparison is usually your own normal range.',
-        optimalRange: 'About 12-16 br/min',
         unit: 'br/min',
         color: '#7BC4A0',
         valueFormat: 'number',
@@ -547,8 +526,7 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
     body_temperature: {
         title: 'Body Temperature Deviation',
         icon: <Thermometer className="w-4 h-4" />,
-        description: 'This shows how far your overnight temperature was from baseline. Values closer to zero usually mean your body was operating within its normal range.',
-        optimalRange: 'Near 0.0°F from baseline',
+        description: 'Difference from your overnight temperature baseline. Trends across several nights matter more than one value.',
         unit: '°F',
         color: '#D4897B',
         valueFormat: 'signed',
@@ -575,7 +553,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'High Activity Time',
         icon: <Flame className="w-4 h-4" />,
         description: 'High activity time reflects your most intense movement blocks during the day. More time here usually means a harder training load.',
-        optimalRange: '45+ minutes on active days',
         unit: '',
         color: '#D4897B',
         valueFormat: 'duration',
@@ -592,7 +569,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'Medium Activity Time',
         icon: <Activity className="w-4 h-4" />,
         description: 'Medium activity time captures sustained everyday movement and moderate exercise. It is a good proxy for how much of the day you stayed meaningfully active.',
-        optimalRange: '1-2+ hours',
         unit: '',
         color: '#D4A574',
         valueFormat: 'duration',
@@ -609,7 +585,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'Low Activity Time',
         icon: <Activity className="w-4 h-4" />,
         description: 'Low activity time represents easy movement such as walking around the house or doing errands. It is best read as part of your overall activity balance, not a score to maximize in isolation.',
-        optimalRange: 'Use as a baseline trend',
         unit: '',
         color: '#7BC4A0',
         valueFormat: 'duration',
@@ -634,7 +609,6 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         title: 'Sedentary Time',
         icon: <Activity className="w-4 h-4" />,
         description: 'Sedentary time is how long the day was dominated by inactivity. Lower values usually mean you broke up sitting time more effectively.',
-        optimalRange: 'Under 5-8 hours',
         unit: '',
         color: '#64748B',
         valueFormat: 'duration',
@@ -864,17 +838,8 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
 
     const getPercentile = (value: number) => {
         if (historyData.length === 0) return 0;
-
-        let betterOrEqualCount = 0;
-        if (config.evaluation === 'higher_better') {
-            betterOrEqualCount = historyData.filter((point) => point.value <= value).length;
-        } else if (config.evaluation === 'lower_better') {
-            betterOrEqualCount = historyData.filter((point) => point.value >= value).length;
-        } else {
-            betterOrEqualCount = historyData.filter((point) => Math.abs(point.value) >= Math.abs(value)).length;
-        }
-
-        return Math.round((betterOrEqualCount / historyData.length) * 100);
+        const atOrBelowCount = historyData.filter((point) => point.value <= value).length;
+        return Math.round((atOrBelowCount / historyData.length) * 100);
     };
 
     const getInsights = () => {
@@ -885,20 +850,16 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
 
         if (percentile !== null) {
             if (percentile >= 75) {
-                insights.push(`Your ${config.title} is in the strongest quarter of your personal history.`);
+                insights.push(`This value is higher than ${percentile}% of saved values for ${config.title}.`);
             } else if (percentile <= 25) {
-                insights.push(`Your ${config.title} is weaker than your usual range and worth checking in on.`);
+                insights.push(`This value is lower than ${100 - percentile}% of saved values for ${config.title}.`);
             }
         }
 
-        if (trend) {
-            if (trend.direction === 'up' && config.evaluation === 'higher_better') {
-                insights.push(`Your ${config.title} has been trending up recently, which is a positive sign.`);
-            } else if (trend.direction === 'down' && config.evaluation === 'lower_better') {
-                insights.push(`Your ${config.title} has been trending down recently, which is a positive sign.`);
-            } else if (trend.direction !== 'stable') {
-                insights.push(`Your ${config.title} moved ${trend.direction === 'up' ? 'up' : 'down'} versus the previous segment of this range.`);
-            }
+        if (trend && trend.direction !== 'stable') {
+            insights.push(
+                `${config.title} moved ${trend.direction === 'up' ? 'up' : 'down'} ${Math.abs(trend.change).toFixed(1)}% between the two segments of this range.`
+            );
         }
 
         return insights;
@@ -922,18 +883,18 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
         {
             title: 'Average',
             subtitle: averageValue !== null ? formatMetricValue(averageValue) : '--',
-            icon: <div className="text-[#6B9E8A]"><Minus className="w-4 h-4" /></div>,
+            icon: <div className="text-accent"><Minus className="w-4 h-4" /></div>,
         },
         {
             title: bestLabel,
             subtitle: bestValue !== null ? formatMetricValue(bestValue) : '--',
-            icon: <div className="text-[#7BC4A0]"><Trophy className="w-4 h-4" /></div>,
+            icon: <div className="text-success"><Trophy className="w-4 h-4" /></div>,
             onClick: () => setSelectedStatistic(selectedStatistic === 'best' ? null : 'best'),
         },
         {
             title: worstLabel,
             subtitle: worstValue !== null ? formatMetricValue(worstValue) : '--',
-            icon: <div className="text-[#D4897B]"><TrendingDown className="w-4 h-4" /></div>,
+            icon: <div className="text-error"><TrendingDown className="w-4 h-4" /></div>,
             onClick: () => setSelectedStatistic(selectedStatistic === 'worst' ? null : 'worst'),
         },
         ...(showPercentile
@@ -942,7 +903,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                 subtitle: resolvedCurrentValue !== null && resolvedCurrentValue !== undefined
                     ? `${getPercentile(resolvedCurrentValue)}th compared to history`
                     : '--',
-                icon: <div className="text-[#7BA8D4]"><TrendingUp className="w-4 h-4" /></div>,
+                icon: <div className="text-metric-sleep"><TrendingUp className="w-4 h-4" /></div>,
             }]
             : []),
     ];
@@ -952,7 +913,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
             <div className="space-y-6">
                 <div className="flex items-center justify-between py-2">
                     <div>
-                        <p className="text-[#A8A29E] text-sm">
+                        <p className="text-ink-muted text-sm">
                             {date ? formatISODateForDisplay(date) : 'Latest'}
                         </p>
                     </div>
@@ -962,10 +923,10 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                 </div>
 
                 <div className="overflow-y-auto ios-scroll max-h-[70vh] space-y-6">
-                    <div className="bg-[#FAF7F4] p-4 rounded-xl border border-[rgba(0,0,0,0.06)]">
+                    <div className="bg-surface-raised p-4 rounded-xl border border-line">
                         <div className="flex items-end justify-between gap-4">
                             <div>
-                                <p className="text-[#A8A29E] text-sm mb-1">Current Value</p>
+                                <p className="text-ink-muted text-sm mb-1">Current Value</p>
                                 <div className="flex items-baseline gap-2">
                                     <span className="text-4xl font-bold font-mono" style={{ color: effectiveColor }}>
                                         {formatCurrentMetricValue()}
@@ -976,10 +937,10 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                 <div
                                     className={`flex items-center gap-1 text-sm font-medium ${
                                         trend.direction === 'stable'
-                                            ? 'text-[#A8A29E]'
+                                            ? 'text-ink-muted'
                                             : isTrendImproving
-                                                ? 'text-[#7BC4A0]'
-                                                : 'text-[#D4897B]'
+                                                ? 'text-success'
+                                                : 'text-error'
                                     }`}
                                 >
                                     {trend.direction === 'up'
@@ -988,7 +949,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                             ? <TrendingDown className="w-4 h-4" />
                                             : <Minus className="w-4 h-4" />}
                                     <span>{Math.abs(trend.change).toFixed(1)}%</span>
-                                    <span className="text-[#A8A29E] text-xs">
+                                    <span className="text-ink-muted text-xs">
                                         vs last {selectedTimeRange === '7d' ? '3.5 days' : selectedTimeRange === '14d' ? '7 days' : '15 days'}
                                     </span>
                                 </div>
@@ -1000,30 +961,32 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                 className="mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium"
                                 style={{ backgroundColor: `${currentCategory.color}20`, color: currentCategory.color }}
                             >
-                                {currentCategory.label}
+                                Reference: {currentCategory.label}
                             </div>
                         )}
                     </div>
 
-                    <div className="flex gap-2 p-4 bg-[#FAF7F4] rounded-xl border border-[rgba(0,0,0,0.06)]">
-                        <Info className="w-5 h-5 text-[#7BA8D4] flex-shrink-0 mt-0.5" />
+                    <div className="flex gap-2 p-4 bg-surface-raised rounded-xl border border-line">
+                        <Info className="w-5 h-5 text-metric-sleep flex-shrink-0 mt-0.5" />
                         <div>
-                            <p className="text-sm text-[#7A756E]">{config.description}</p>
-                            <p className="text-xs text-[#A8A29E] mt-2">
-                                <span className="font-medium">Optimal range:</span> {config.optimalRange}
+                            <p className="text-sm text-ink-secondary">{config.description}</p>
+                            <p className="mt-2 text-xs text-ink-muted">
+                                General reference bands are approximate, not medical targets. Your personal baseline matters more.
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-2" role="group" aria-label="Metric history time range">
                         {(['7d', '14d', '30d'] as const).map((range) => (
                             <button
                                 key={range}
+                                type="button"
+                                aria-pressed={selectedTimeRange === range}
                                 onClick={() => setSelectedTimeRange(range)}
-                                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                                className={`min-h-11 flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
                                     selectedTimeRange === range
-                                        ? 'bg-[#6B9E8A]/20 text-[#6B9E8A] border border-[#6B9E8A]/30'
-                                        : 'bg-[#FAF7F4] text-[#A8A29E] border border-[rgba(0,0,0,0.06)] hover:border-[rgba(0,0,0,0.12)]'
+                                        ? 'bg-accent/20 text-accent border border-[#6B9E8A]/30'
+                                        : 'bg-surface-raised text-ink-muted border border-line hover:border-[rgba(0,0,0,0.12)]'
                                 }`}
                             >
                                 {range === '7d' ? '7 Days' : range === '14d' ? '14 Days' : '30 Days'}
@@ -1032,8 +995,8 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                     </div>
 
                     {filteredData.length > 0 && (
-                        <div className="bg-[#FAF7F4] p-4 rounded-xl border border-[rgba(0,0,0,0.06)]">
-                            <h4 className="text-sm font-medium text-[#2D2A26] mb-4 flex items-center gap-2">
+                        <div className="bg-surface-raised p-4 rounded-xl border border-line">
+                            <h4 className="text-sm font-medium text-ink mb-4 flex items-center gap-2">
                                 <Calendar className="w-4 h-4" />
                                 {config.title} History
                             </h4>
@@ -1065,7 +1028,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                             tickFormatter={(value: number) => formatMetricValue(value)}
                                         />
                                         <Tooltip
-                                            contentStyle={CLAY_TOOLTIP_STYLE}
+                                            contentStyle={CHART_TOOLTIP_STYLE}
                                             formatter={(value: number) => [formatMetricValue(value), config.title]}
                                             labelFormatter={(label) => formatISODateForDisplay(label, undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                                         />
@@ -1082,11 +1045,11 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                         </div>
                     )}
 
-                    <div className="bg-[#FAF7F4] p-4 rounded-xl border border-[rgba(0,0,0,0.06)]">
+                    <div className="bg-surface-raised p-4 rounded-xl border border-line">
                         <div className="flex items-start justify-between gap-4 mb-3">
-                            <h4 className="text-sm font-medium text-[#2D2A26]">Category Ranges</h4>
+                            <h4 className="text-sm font-medium text-ink">Category Ranges</h4>
                             {resolvedCurrentValue !== null && resolvedCurrentValue !== undefined && (
-                                <span className="text-[11px] text-[#A8A29E] font-mono">
+                                <span className="text-[11px] text-ink-muted font-mono">
                                     Current: {formatCurrentMetricValue()}
                                 </span>
                             )}
@@ -1097,7 +1060,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                 {axisTickValues.map((tick, idx) => (
                                     <span
                                         key={`${tick}-${idx}`}
-                                        className="absolute top-0 text-[10px] text-[#A8A29E] font-mono whitespace-nowrap"
+                                        className="absolute top-0 text-[10px] text-ink-muted font-mono whitespace-nowrap"
                                         style={{ left: `${toAxisPercent(tick)}%`, transform: 'translateX(-50%)' }}
                                     >
                                         {formatThresholdValue(tick)}
@@ -1113,7 +1076,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                         {formatCurrentMetricValue()}
                                     </span>
                                 )}
-                                <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-[#F0EBE5] rounded-full overflow-hidden">
+                                <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-surface-subtle rounded-full overflow-hidden">
                                     {axisTickValues.map((tick, idx) => (
                                         <span
                                             key={`tick-${tick}-${idx}`}
@@ -1145,12 +1108,12 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                         <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: category.color }} />
                                         <div className="flex-1 min-w-0">
                                             <div className="flex justify-between items-center mb-1 gap-3">
-                                                <span className="text-sm text-[#7A756E]">{category.label}</span>
-                                                <span className="text-xs text-[#A8A29E] font-mono whitespace-nowrap">
+                                                <span className="text-sm text-ink-secondary">{category.label}</span>
+                                                <span className="text-xs text-ink-muted font-mono whitespace-nowrap">
                                                     {formatCategoryRangeLabel(category.range)}
                                                 </span>
                                             </div>
-                                            <div className="relative h-2 bg-[#F0EBE5] rounded-full overflow-hidden">
+                                            <div className="relative h-2 bg-surface-subtle rounded-full overflow-hidden">
                                                 <span
                                                     className="absolute top-0 h-full rounded-full"
                                                     style={{ left: `${leftPct}%`, width: `${widthPct}%`, backgroundColor: category.color }}
@@ -1167,30 +1130,30 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                 );
                             })}
                         </div>
-                        <p className="text-[11px] text-[#A8A29E] mt-3">
+                        <p className="text-[11px] text-ink-muted mt-3">
                             Shared axis: colored segments show each category band, and the white marker shows your current value.
                         </p>
                     </div>
 
                     {getInsights().length > 0 && (
-                        <div className="bg-[#FAF7F4] p-4 rounded-xl border border-[rgba(0,0,0,0.06)]">
-                            <h4 className="text-sm font-medium text-[#2D2A26] mb-3 flex items-center gap-2">
+                        <div className="bg-surface-raised p-4 rounded-xl border border-line">
+                            <h4 className="text-sm font-medium text-ink mb-3 flex items-center gap-2">
                                 <TrendingUp className="w-4 h-4" />
                                 Insights
                             </h4>
                             <div className="space-y-2">
                                 {getInsights().map((insight, idx) => (
-                                    <p key={idx} className="text-sm text-[#7A756E]">{insight}</p>
+                                    <p key={idx} className="text-sm text-ink-secondary">{insight}</p>
                                 ))}
                             </div>
                         </div>
                     )}
 
                     {historyData.length > 0 && (
-                        <div className="bg-[#FAF7F4] p-4 rounded-xl border border-[rgba(0,0,0,0.06)]">
+                        <div className="bg-surface-raised p-4 rounded-xl border border-line">
                             <div className="mb-4">
-                                <h4 className="text-sm font-medium text-[#2D2A26]">Historical Statistics</h4>
-                                <p className="text-xs text-[#A8A29E] mt-1">
+                                <h4 className="text-sm font-medium text-ink">Historical Statistics</h4>
+                                <p className="text-xs text-ink-muted mt-1">
                                     Average uses your {selectedTimeRange === '7d' ? '7-day' : selectedTimeRange === '14d' ? '14-day' : '30-day'} data. Tap the other rows to inspect the all-time extremes.
                                 </p>
                             </div>
@@ -1207,11 +1170,11 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                             </div>
 
                             {selectedStatistic && (
-                                <div className="mt-4 pt-4 border-t border-[rgba(0,0,0,0.06)]">
-                                    <h5 className="text-sm font-medium text-[#2D2A26] mb-3 flex items-center gap-2">
+                                <div className="mt-4 pt-4 border-t border-line">
+                                    <h5 className="text-sm font-medium text-ink mb-3 flex items-center gap-2">
                                         {selectedStatistic === 'best'
-                                            ? <Trophy className="w-4 h-4 text-[#7BC4A0]" />
-                                            : <TrendingDown className="w-4 h-4 text-[#D4897B]" />}
+                                            ? <Trophy className="w-4 h-4 text-success" />
+                                            : <TrendingDown className="w-4 h-4 text-error" />}
                                         Top 10 {selectedStatistic === 'best' ? topListBestLabel : topListWorstLabel} Days (All Time)
                                     </h5>
                                     <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar">
@@ -1219,7 +1182,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                             <div
                                                 key={`${entry.date}-${idx}`}
                                                 className={`flex items-center justify-between p-3 rounded-lg ${
-                                                    idx === 0 ? 'bg-[#7BC4A0]/10' : 'bg-[#F0EBE5]'
+                                                    idx === 0 ? 'bg-[#7BC4A0]/10' : 'bg-surface-subtle'
                                                 }`}
                                             >
                                                 <div className="flex items-center gap-3">
@@ -1230,12 +1193,12 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                                                 ? 'bg-[#C0C0C0] text-white'
                                                                 : idx === 2
                                                                     ? 'bg-[#CD7F32] text-white'
-                                                                    : 'bg-[rgba(0,0,0,0.08)] text-[#A8A29E]'
+                                                                    : 'bg-[rgba(0,0,0,0.08)] text-ink-muted'
                                                     }`}>
                                                         {idx + 1}
                                                     </div>
                                                     <div>
-                                                        <p className="text-sm font-medium text-[#2D2A26]">
+                                                        <p className="text-sm font-medium text-ink">
                                                             {formatISODateForDisplay(entry.date, undefined, {
                                                                 weekday: 'short',
                                                                 month: 'short',
@@ -1244,7 +1207,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                                             })}
                                                         </p>
                                                         {entry.label && (
-                                                            <p className="text-xs text-[#A8A29E]">{entry.label}</p>
+                                                            <p className="text-xs text-ink-muted">{entry.label}</p>
                                                         )}
                                                     </div>
                                                 </div>
@@ -1253,7 +1216,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                                         {formatMetricValue(entry.value)}
                                                     </p>
                                                     {idx === 0 && (
-                                                        <p className={`text-xs ${selectedStatistic === 'best' ? 'text-[#7BC4A0]' : 'text-[#D4897B]'}`}>
+                                                        <p className={`text-xs ${selectedStatistic === 'best' ? 'text-success' : 'text-error'}`}>
                                                             {selectedStatistic === 'best' ? bestBadge : worstBadge}
                                                         </p>
                                                     )}

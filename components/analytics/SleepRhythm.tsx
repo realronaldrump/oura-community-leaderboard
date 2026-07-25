@@ -186,7 +186,7 @@ const durationColor = (seconds: number): string => {
     const hours = seconds / 3600;
     if (hours < 6) return '#C66F5F';      // short — warm red
     if (hours < 7) return '#D4A574';      // a little short — amber
-    if (hours <= 9) return '#6B9E8A';     // healthy — accent green
+    if (hours <= 9) return '#6B9E8A';     // middle duration band — accent green
     return '#7BA8D4';                      // long — calm blue
 };
 
@@ -532,17 +532,17 @@ const SleepRaster: React.FC<{ nights: Night[] }> = ({ nights }) => {
             {/* hover tooltip */}
             {hovered && (
                 <div
-                    className="pointer-events-none absolute z-20 -translate-x-1/2 rounded-xl border border-[rgba(0,0,0,0.1)] bg-white px-3 py-2 shadow-[4px_4px_8px_rgba(0,0,0,0.06)]"
+                    className="pointer-events-none absolute z-20 -translate-x-1/2 rounded-xl border border-line bg-surface-raised px-3 py-2 shadow-card"
                     style={{
                         left: `${(hover!.x / width) * 100}%`,
                         top: 6,
                     }}
                 >
-                    <div className="text-[11px] font-semibold text-[#2D2A26] whitespace-nowrap">
+                    <div className="text-[11px] font-semibold text-ink whitespace-nowrap">
                         {formatISODateForDisplay(hovered.day, undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                     </div>
-                    <div className="mt-1 flex items-center gap-3 text-[11px] text-[#7A756E] whitespace-nowrap">
-                        <span className="flex items-center gap-1"><Moon className="w-3 h-3 text-[#A08BBE]" />{formatClockFromMinutes(hovered.bedMinutes)}</span>
+                    <div className="mt-1 flex items-center gap-3 text-[11px] text-ink-secondary whitespace-nowrap">
+                        <span className="flex items-center gap-1"><Moon className="w-3 h-3 text-metric-insight" />{formatClockFromMinutes(hovered.bedMinutes)}</span>
                         <span className="flex items-center gap-1"><Sunrise className="w-3 h-3 text-[#D4A574]" />{formatClockFromMinutes(hovered.wakeMinutes)}</span>
                     </div>
                     <div className="mt-0.5 text-[11px] font-medium whitespace-nowrap" style={{ color: durationColor(hovered.durationSec) }}>
@@ -558,23 +558,19 @@ const SleepRaster: React.FC<{ nights: Night[] }> = ({ nights }) => {
 // Stat tile — bedtime / wake / duration with consistency + trend
 // ============================================================================
 
-const TrendPill: React.FC<{ deltaMinutes: number; goodWhenLater?: boolean; suffix: string }> = ({
-    deltaMinutes, goodWhenLater, suffix,
-}) => {
+const TrendPill: React.FC<{ deltaMinutes: number; suffix: string }> = ({ deltaMinutes, suffix }) => {
     const rounded = Math.round(deltaMinutes);
     if (Math.abs(rounded) < 3) {
         return (
-            <span className="inline-flex items-center gap-1 text-[11px] text-[#A8A29E]">
+            <span className="inline-flex items-center gap-1 text-[11px] text-ink-muted">
                 <Minus className="w-3 h-3" /> steady
             </span>
         );
     }
     const later = rounded > 0;
-    const isGood = goodWhenLater === undefined ? true : (later === goodWhenLater);
-    const color = isGood ? '#6B9E8A' : '#C66F5F';
     const Icon = later ? TrendingUp : TrendingDown;
     return (
-        <span className="inline-flex items-center gap-1 text-[11px] font-medium" style={{ color }}>
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-secondary">
             <Icon className="w-3 h-3" />
             {formatSignedMinutes(deltaMinutes)} {suffix}
         </span>
@@ -589,17 +585,17 @@ const StatTile: React.FC<{
     consistency?: string;
     trend?: React.ReactNode;
 }> = ({ icon, label, value, accent, consistency, trend }) => (
-    <div className="rounded-2xl border border-[rgba(0,0,0,0.06)] bg-[var(--bg-elevated)] p-4">
+    <div className="rounded-2xl border border-line bg-[var(--bg-elevated)] p-4">
         <div className="flex items-center gap-2 mb-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-full" style={{ backgroundColor: `${accent}22`, color: accent }}>
                 {icon}
             </span>
-            <span className="text-[11px] font-medium uppercase tracking-wide text-[#A8A29E]">{label}</span>
+            <span className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">{label}</span>
         </div>
-        <div className="text-2xl font-bold text-[#2D2A26] leading-none">{value}</div>
+        <div className="text-2xl font-bold text-ink leading-none">{value}</div>
         <div className="mt-2 flex items-center justify-between gap-2">
             {consistency
-                ? <span className="text-[11px] text-[#7A756E]">{consistency} typical</span>
+                ? <span className="text-[11px] text-ink-secondary">{consistency} typical</span>
                 : <span />}
             {trend}
         </div>
@@ -684,7 +680,8 @@ const SleepRhythm: React.FC<SleepRhythmProps> = ({ profiles, usersData }) => {
                     <select
                         value={safeIdx}
                         onChange={(e) => setSelectedProfileIdx(Number(e.target.value))}
-                        className="h-9 rounded-lg border border-[rgba(0,0,0,0.1)] bg-[var(--bg-elevated)] px-3 text-sm text-[#2D2A26] focus:outline-none focus:ring-2 focus:ring-[#6B9E8A]/30"
+                        aria-label="Sleep-rhythm profile"
+                        className="min-h-11 rounded-lg border border-[rgba(0,0,0,0.1)] bg-[var(--bg-elevated)] px-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-[#6B9E8A]/30"
                     >
                         {profiles.map((p, idx) => (
                             <option key={p.id} value={idx}>{getProfileDisplayName(p)}</option>
@@ -694,15 +691,17 @@ const SleepRhythm: React.FC<SleepRhythmProps> = ({ profiles, usersData }) => {
             </div>
 
             {/* Timeframe segmented control */}
-            <div className="flex gap-1.5 overflow-x-auto pb-1 hide-scrollbar">
+            <div className="flex gap-1.5 overflow-x-auto pb-1 hide-scrollbar" role="group" aria-label="Sleep-rhythm timeframe">
                 {PRESETS.map((p) => (
                     <button
                         key={p.key}
+                        type="button"
+                        aria-pressed={preset === p.key}
                         onClick={() => setPreset(p.key)}
-                        className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${
+                        className={`min-h-11 px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${
                             preset === p.key
-                                ? 'bg-[#6B9E8A] text-white shadow-sm'
-                                : 'text-[#A8A29E] hover:text-[#7A756E] bg-[var(--bg-elevated)] hover:bg-[#F0EBE5]'
+                                ? 'bg-accent text-white shadow-sm'
+                                : 'text-ink-muted hover:text-ink-secondary bg-[var(--bg-elevated)] hover:bg-surface-subtle'
                         }`}
                     >
                         {p.label}
@@ -741,7 +740,7 @@ const SleepRhythm: React.FC<SleepRhythmProps> = ({ profiles, usersData }) => {
                                     value={current.bed ? formatClockFromMinutes(current.bed.meanMinutes) : '--'}
                                     consistency={current.bed ? formatSpread(current.bed.spreadMinutes) : undefined}
                                     trend={bedTrend != null
-                                        ? <TrendPill deltaMinutes={bedTrend} goodWhenLater={false} suffix={bedTrend > 0 ? 'later' : 'earlier'} />
+                                        ? <TrendPill deltaMinutes={bedTrend} suffix={bedTrend > 0 ? 'later' : 'earlier'} />
                                         : undefined}
                                 />
                                 <StatTile
@@ -761,7 +760,7 @@ const SleepRhythm: React.FC<SleepRhythmProps> = ({ profiles, usersData }) => {
                                     value={current.duration != null ? formatDurationShort(current.duration) : '--'}
                                     consistency={`${windowNights.length} ${windowNights.length === 1 ? 'night' : 'nights'}`}
                                     trend={durationTrend != null
-                                        ? <TrendPill deltaMinutes={durationTrend} goodWhenLater suffix={durationTrend > 0 ? 'more' : 'less'} />
+                                        ? <TrendPill deltaMinutes={durationTrend} suffix={durationTrend > 0 ? 'more' : 'less'} />
                                         : undefined}
                                 />
                             </div>
@@ -772,12 +771,12 @@ const SleepRhythm: React.FC<SleepRhythmProps> = ({ profiles, usersData }) => {
                     <div className="card p-5 sm:p-6">
                         <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
                             <div>
-                                <h4 className="text-sm font-bold text-[#2D2A26]">Night by night</h4>
+                                <h4 className="text-sm font-bold text-ink">Night by night</h4>
                                 <p className="text-xs text-[var(--text-muted)]">Each bar is one night, noon to noon · color shows duration</p>
                             </div>
                             <div className="flex items-center gap-3 flex-wrap">
                                 {DURATION_LEGEND.map((item) => (
-                                    <span key={item.label} className="inline-flex items-center gap-1.5 text-[11px] text-[#7A756E]">
+                                    <span key={item.label} className="inline-flex items-center gap-1.5 text-[11px] text-ink-secondary">
                                         <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                                         {item.label}
                                     </span>
@@ -789,11 +788,11 @@ const SleepRhythm: React.FC<SleepRhythmProps> = ({ profiles, usersData }) => {
 
                     {/* Averages across every preset window */}
                     <div className="card p-5 sm:p-6">
-                        <h4 className="text-sm font-bold text-[#2D2A26] mb-3">Averages by window</h4>
+                        <h4 className="text-sm font-bold text-ink mb-3">Averages by window</h4>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead>
-                                    <tr className="text-[11px] uppercase tracking-wide text-[#A8A29E]">
+                                    <tr className="text-[11px] uppercase tracking-wide text-ink-muted">
                                         <th className="text-left font-medium pb-2">Window</th>
                                         <th className="text-center font-medium pb-2">Nights</th>
                                         <th className="text-center font-medium pb-2">Bedtime</th>
@@ -807,20 +806,29 @@ const SleepRhythm: React.FC<SleepRhythmProps> = ({ profiles, usersData }) => {
                                         return (
                                             <tr
                                                 key={p.key}
+                                                role="button"
+                                                tabIndex={0}
+                                                aria-pressed={isActive}
                                                 onClick={() => setPreset(p.key)}
+                                                onKeyDown={(event) => {
+                                                    if (event.key === 'Enter' || event.key === ' ') {
+                                                        event.preventDefault();
+                                                        setPreset(p.key);
+                                                    }
+                                                }}
                                                 className={`cursor-pointer border-t border-[rgba(0,0,0,0.05)] transition-colors ${
-                                                    isActive ? 'bg-[#6B9E8A]/8' : 'hover:bg-[var(--bg-hover)]'
+                                                    isActive ? 'bg-accent/8' : 'hover:bg-[var(--bg-hover)]'
                                                 }`}
                                             >
-                                                <td className="py-2.5 text-left font-medium text-[#2D2A26]">
+                                                <td className="py-2.5 text-left font-medium text-ink">
                                                     <span className="inline-flex items-center gap-2">
-                                                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${isActive ? 'bg-[#6B9E8A]' : 'bg-transparent'}`} />
+                                                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${isActive ? 'bg-accent' : 'bg-transparent'}`} />
                                                         {p.label}
                                                     </span>
                                                 </td>
-                                                <td className="py-2.5 text-center text-[#7A756E] font-mono">{count}</td>
-                                                <td className="py-2.5 text-center text-[#2D2A26] font-mono">{bed ? formatClockFromMinutes(bed.meanMinutes) : '--'}</td>
-                                                <td className="py-2.5 text-center text-[#2D2A26] font-mono">{wake ? formatClockFromMinutes(wake.meanMinutes) : '--'}</td>
+                                                <td className="py-2.5 text-center text-ink-secondary font-mono">{count}</td>
+                                                <td className="py-2.5 text-center text-ink font-mono">{bed ? formatClockFromMinutes(bed.meanMinutes) : '--'}</td>
+                                                <td className="py-2.5 text-center text-ink font-mono">{wake ? formatClockFromMinutes(wake.meanMinutes) : '--'}</td>
                                                 <td className="py-2.5 text-right font-mono font-medium" style={{ color: duration != null ? durationColor(duration) : '#A8A29E' }}>
                                                     {duration != null ? formatDurationShort(duration) : '--'}
                                                 </td>

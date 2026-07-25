@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId, useLayoutEffect } from 'react';
 import { Info } from 'lucide-react';
 
 interface InfoTooltipProps {
@@ -19,8 +19,37 @@ const InfoTooltip: React.FC<InfoTooltipProps> = ({
     className = ''
 }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const tooltipId = useId();
     const tooltipRef = useRef<HTMLDivElement>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
+    const [horizontalOffset, setHorizontalOffset] = useState(0);
+    const horizontalOffsetRef = useRef(0);
+
+    useLayoutEffect(() => {
+        if (!isOpen) {
+            horizontalOffsetRef.current = 0;
+            setHorizontalOffset(0);
+            return undefined;
+        }
+
+        const clampToViewport = () => {
+            const tooltip = tooltipRef.current;
+            if (!tooltip) return;
+            const margin = 16;
+            const rect = tooltip.getBoundingClientRect();
+            let adjustment = 0;
+            if (rect.left < margin) adjustment += margin - rect.left;
+            if (rect.right > window.innerWidth - margin) adjustment -= rect.right - (window.innerWidth - margin);
+            if (Math.abs(adjustment) > 0.5) {
+                horizontalOffsetRef.current += adjustment;
+                setHorizontalOffset(horizontalOffsetRef.current);
+            }
+        };
+
+        clampToViewport();
+        window.addEventListener('resize', clampToViewport);
+        return () => window.removeEventListener('resize', clampToViewport);
+    }, [isOpen]);
 
     // Close tooltip when clicking outside
     useEffect(() => {
@@ -59,34 +88,36 @@ const InfoTooltip: React.FC<InfoTooltipProps> = ({
         <div className={`relative inline-flex ${className}`}>
             <button
                 ref={buttonRef}
+                type="button"
                 onClick={() => setIsOpen(!isOpen)}
                 onMouseEnter={() => setIsOpen(true)}
                 onMouseLeave={() => setIsOpen(false)}
-                className="p-1 rounded-full hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/50"
+                className="grid min-h-11 min-w-11 place-items-center rounded-full transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/50"
                 aria-label={`Info about ${title}`}
                 aria-expanded={isOpen}
+                aria-controls={isOpen ? tooltipId : undefined}
             >
-                <Info className="w-4 h-4 text-[var(--text-muted)] hover:text-[var(--text-secondary)]" />
+                <Info className="w-4 h-4 text-[var(--text-muted)] hover:text-[var(--text-secondary)]" aria-hidden="true" />
             </button>
 
-            {/* Tooltip content */}
-            <div
+            {/* Do not leave a visually hidden wide box in document geometry. */}
+            {isOpen ? <div
+                id={tooltipId}
                 ref={tooltipRef}
-                className={`absolute z-50 transition-all duration-200 ${isOpen
-                        ? 'opacity-100 translate-y-0 pointer-events-auto'
-                        : 'opacity-0 translate-y-1 pointer-events-none'
-                    }`}
+                role="tooltip"
+                className="absolute z-50 pointer-events-auto"
                 style={{
                     top: 'calc(100% + 8px)',
                     left: '50%',
-                    transform: `translateX(-50%) ${isOpen ? 'translateY(0)' : 'translateY(4px)'}`,
-                    minWidth: '240px',
+                    transform: `translateX(calc(-50% + ${horizontalOffset}px))`,
+                    width: 'min(240px, calc(100vw - 32px))',
                     maxWidth: '320px'
                 }}
             >
                 {/* Arrow */}
                 <div
-                    className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 bg-[var(--bg-elevated)] border-l border-t border-[var(--border-default)]"
+                    className="absolute -top-1.5 -translate-x-1/2 w-3 h-3 rotate-45 bg-[var(--bg-elevated)] border-l border-t border-[var(--border-default)]"
+                    style={{ left: `calc(50% - ${horizontalOffset}px)` }}
                 />
 
                 {/* Content */}
@@ -110,7 +141,7 @@ const InfoTooltip: React.FC<InfoTooltipProps> = ({
                         )}
                     </div>
                 </div>
-            </div>
+            </div> : null}
         </div>
     );
 };

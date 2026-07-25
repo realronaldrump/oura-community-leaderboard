@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { DailyStats } from '../../types';
 import { WhatIfResult, WhatIfScenario, WhatIfTargetScore } from '../../types/analyticsTypes';
 import { simulateWhatIf } from '../../services/analyticsService';
-import { Sparkles, BedDouble, Footprints, Heart, Moon, Lightbulb } from 'lucide-react';
+import { Calculator, BedDouble, Footprints, Heart, Moon, Lightbulb } from 'lucide-react';
 import { getProfileDisplayName } from '../../utils/profileName';
 
 interface WhatIfSimulatorProps {
@@ -35,7 +35,7 @@ const SCENARIO_OPTIONS: MetricOption[] = [
         step: 15,
         defaultAdjustment: 30,
         Icon: BedDouble,
-        color: 'text-[#7BA8D4]'
+        color: 'text-metric-sleep'
     },
     {
         metric: 'steps',
@@ -46,7 +46,7 @@ const SCENARIO_OPTIONS: MetricOption[] = [
         step: 1000,
         defaultAdjustment: 2000,
         Icon: Footprints,
-        color: 'text-[#7BC4A0]'
+        color: 'text-success'
     },
     {
         metric: 'hrv',
@@ -57,7 +57,7 @@ const SCENARIO_OPTIONS: MetricOption[] = [
         step: 5,
         defaultAdjustment: 5,
         Icon: Heart,
-        color: 'text-[#D4897B]'
+        color: 'text-error'
     },
     {
         metric: 'sleep_duration',
@@ -68,7 +68,7 @@ const SCENARIO_OPTIONS: MetricOption[] = [
         step: 15,
         defaultAdjustment: 30,
         Icon: Moon,
-        color: 'text-[#A08BBE]'
+        color: 'text-metric-insight'
     }
 ];
 
@@ -96,19 +96,19 @@ const DEFAULT_OUTLIER_TRIM = 0.05;
 
 const RELIABILITY_UI: Record<'high' | 'medium' | 'low', { label: string; badge: string; hint: string }> = {
     high: {
-        label: 'High confidence',
-        badge: 'bg-[#7BC4A0]/20 text-[#7BC4A0] border border-[#7BC4A0]/40',
-        hint: 'This model has enough consistent history to trust as a strong directional signal.'
+        label: 'Stronger fit',
+        badge: 'bg-[#7BC4A0]/20 text-success border border-[#7BC4A0]/40',
+        hint: 'This historical line fit is stronger than the other models shown. It still does not establish cause.'
     },
     medium: {
-        label: 'Medium confidence',
-        badge: 'bg-[#D4B87B]/20 text-[#D4B87B] border border-[#D4B87B]/40',
-        hint: 'Useful signal, but expect normal day-to-day variation around the estimate.'
+        label: 'Moderate fit',
+        badge: 'bg-[#D4B87B]/20 text-warning border border-[#D4B87B]/40',
+        hint: 'The historical line has a moderate fit, with day-to-day variation around the estimate.'
     },
     low: {
-        label: 'Low confidence',
-        badge: 'bg-[#D4897B]/20 text-[#D4897B] border border-[#D4897B]/40',
-        hint: 'Treat as exploratory. Use this for experimentation, not firm planning.'
+        label: 'Weaker fit',
+        badge: 'bg-error/20 text-error border border-[#D4897B]/40',
+        hint: 'The historical line has a weak fit. Treat the estimate as exploratory.'
     }
 };
 
@@ -170,9 +170,9 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
         return (
             <div className="card p-8 text-center">
                 <div className="flex justify-center mb-4">
-                    <Sparkles className="w-12 h-12 text-[var(--text-muted)]" />
+                    <Calculator className="w-12 h-12 text-[var(--text-muted)]" />
                 </div>
-                <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">No Data Available</h3>
+                <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">No data yet</h3>
                 <p className="text-[var(--text-muted)] text-sm">
                     Sync your data to run what-if simulations.
                 </p>
@@ -184,21 +184,25 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
         <div className="space-y-6">
             <div>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
-                    <h3 className="section-header mb-0">What-If Simulator</h3>
-                    <div className="inline-flex rounded-xl p-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)]">
+                    <h3 className="section-header mb-0">What-if estimate</h3>
+                    <div className="inline-flex rounded-xl p-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)]" role="group" aria-label="Simulator mode">
                         <button
+                            type="button"
                             onClick={() => setMode('simple')}
+                            aria-pressed={mode === 'simple'}
                             className={`px-3 min-h-[44px] rounded-lg text-xs font-medium transition-all ${mode === 'simple'
-                                ? 'bg-[var(--accent)] text-black'
+                                ? 'bg-[var(--accent)] text-white'
                                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                                 }`}
                         >
                             Simple
                         </button>
                         <button
+                            type="button"
                             onClick={() => setMode('advanced')}
+                            aria-pressed={mode === 'advanced'}
                             className={`px-3 min-h-[44px] rounded-lg text-xs font-medium transition-all ${mode === 'advanced'
-                                ? 'bg-[var(--accent)] text-black'
+                                ? 'bg-[var(--accent)] text-white'
                                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                                 }`}
                         >
@@ -207,16 +211,15 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                     </div>
                 </div>
                 <p className="text-sm text-[var(--text-secondary)]">
-                    {mode === 'simple'
-                        ? 'Pick one behavior change and see the likely next-day impact.'
-                        : 'Tune model settings while keeping the same clear forecast cards.'}
+                    This is a one-variable estimate from historical association, not a causal prediction.
+                    {mode === 'advanced' ? ' Adjust the time window and outlier trimming below.' : ''}
                 </p>
             </div>
 
             <div className="card p-5 sm:p-6 space-y-5">
                 <div>
                     <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2 block">
-                        Change This Habit
+                        Adjust this metric
                     </label>
                     <div className="flex gap-2 flex-wrap">
                         {SCENARIO_OPTIONS.map(option => {
@@ -225,12 +228,14 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                             return (
                                 <button
                                     key={option.metric}
+                                    type="button"
+                                    aria-pressed={isActive}
                                     onClick={() => {
                                         setSelectedMetric(option);
                                         setAdjustment(option.defaultAdjustment);
                                     }}
                                     className={`px-4 min-h-[44px] rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${isActive
-                                        ? 'bg-[var(--accent)] text-black'
+                                        ? 'bg-[var(--accent)] text-white'
                                         : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                                         }`}
                                 >
@@ -244,15 +249,17 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
 
                 <div>
                     <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2 block">
-                        Predict This Score
+                        Estimate this score
                     </label>
-                    <div className="inline-flex rounded-xl p-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)]">
+                    <div className="inline-flex rounded-xl p-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)]" role="group" aria-label="Score to estimate">
                         {TARGET_SCORE_OPTIONS.map((option) => (
                             <button
                                 key={option.key}
+                                type="button"
+                                aria-pressed={selectedTargetScore === option.key}
                                 onClick={() => setSelectedTargetScore(option.key)}
                                 className={`px-3 min-h-[44px] rounded-lg text-xs font-medium transition-all ${selectedTargetScore === option.key
-                                    ? 'bg-[var(--accent)] text-black'
+                                    ? 'bg-[var(--accent)] text-white'
                                     : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                                     }`}
                             >
@@ -267,12 +274,13 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                         <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider block">
                             Change Amount
                         </label>
-                        <p className={`text-lg font-bold font-mono ${adjustment >= 0 ? 'text-[#7BC4A0]' : 'text-[#D4897B]'}`}>
+                        <p className={`text-lg font-bold font-mono ${adjustment >= 0 ? 'text-success' : 'text-error'}`}>
                             {formatAdjustment(adjustment, selectedMetric.unit)}
                         </p>
                     </div>
                     <input
                         type="range"
+                        aria-label={`Change amount for ${selectedMetric.label}`}
                         min={selectedMetric.min}
                         max={selectedMetric.max}
                         step={selectedMetric.step}
@@ -293,13 +301,15 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                             <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2 block">
                                 Model Window
                             </label>
-                            <div className="inline-flex rounded-xl p-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)]">
+                            <div className="inline-flex rounded-xl p-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)]" role="group" aria-label="Model window">
                                 {LOOKBACK_OPTIONS.map((option) => (
                                     <button
                                         key={String(option.key)}
+                                        type="button"
+                                        aria-pressed={lookbackDays === option.key}
                                         onClick={() => setLookbackDays(option.key)}
                                         className={`px-3 min-h-[44px] rounded-lg text-xs font-medium transition-all ${lookbackDays === option.key
-                                            ? 'bg-[var(--accent)] text-black'
+                                            ? 'bg-[var(--accent)] text-white'
                                             : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                                             }`}
                                     >
@@ -313,10 +323,12 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                             <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2 block">
                                 Outlier Handling
                             </label>
-                            <div className="flex gap-2 flex-wrap">
+                            <div className="flex gap-2 flex-wrap" role="group" aria-label="Outlier handling">
                                 {OUTLIER_OPTIONS.map((option) => (
                                     <button
                                         key={option.label}
+                                        type="button"
+                                        aria-pressed={outlierTrimPercent === option.value}
                                         onClick={() => setOutlierTrimPercent(option.value)}
                                         className={`px-3 min-h-[44px] rounded-lg text-xs font-medium border transition-all ${outlierTrimPercent === option.value
                                             ? 'border-[var(--accent)]/50 bg-[var(--accent)]/15 text-[var(--accent)]'
@@ -336,7 +348,7 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                                 onChange={(e) => setHideLowReliability(e.target.checked)}
                                 className="rounded border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--accent)] focus:ring-[var(--accent)]"
                             />
-                            Hide low-confidence models
+                            Hide weaker-fit models
                         </label>
                     </div>
                 )}
@@ -347,38 +359,38 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                     If I {adjustment >= 0 ? 'increase' : 'decrease'} my{' '}
                     <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{selectedMetric.label.toLowerCase()}</span> by{' '}
                     <span className="font-bold text-[var(--accent)]">{formatAdjustment(Math.abs(adjustment), selectedMetric.unit)}</span>,
-                    what is the likely effect on next-day {selectedTargetLabel.toLowerCase()} score?
+                    what does the historical trend line estimate for next-day {selectedTargetLabel.toLowerCase()} score?
                 </p>
             </div>
 
             {summary && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="card p-4">
-                        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Average Impact</p>
-                        <p className={`text-2xl font-mono font-bold mt-1 ${summary.averageChange >= 0 ? 'text-[#7BC4A0]' : 'text-[#D4897B]'}`}>
+                        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Average estimate</p>
+                        <p className={`text-2xl font-mono font-bold mt-1 ${summary.averageChange >= 0 ? 'text-success' : 'text-error'}`}>
                             {formatSigned(summary.averageChange)}
                         </p>
                     </div>
                     <div className="card p-4">
-                        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Top Responder</p>
+                        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Largest estimate</p>
                         <p className="text-lg font-semibold text-[var(--text-primary)] mt-1">{summary.topResponder.userName}</p>
-                        <p className={`text-sm font-mono ${summary.topResponder.projectedChange >= 0 ? 'text-[#7BC4A0]' : 'text-[#D4897B]'}`}>
+                        <p className={`text-sm font-mono ${summary.topResponder.projectedChange >= 0 ? 'text-success' : 'text-error'}`}>
                             {formatSigned(summary.topResponder.projectedChange)}
                         </p>
                     </div>
                     <div className="card p-4">
-                        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Usable Models</p>
+                        <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Models shown</p>
                         {summary.reliableCount > 0 ? (
                             <>
                                 <p className="text-2xl font-mono font-bold text-[var(--text-primary)] mt-1">
                                     {summary.reliableCount}/{summary.total}
                                 </p>
-                                <p className="text-xs text-[var(--text-muted)] mt-1">medium/high confidence</p>
+                                <p className="text-xs text-[var(--text-muted)] mt-1">moderate/stronger fit</p>
                             </>
                         ) : (
                             <>
                                 <p className="text-sm text-[var(--text-muted)] mt-1 leading-relaxed">
-                                    Insufficient data to build prediction models — sync more days of data to improve estimates.
+                                    Not enough matched history to calculate this estimate.
                                 </p>
                             </>
                         )}
@@ -396,11 +408,11 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                                     <div>
                                         <h5 className="font-semibold text-[var(--text-primary)]">{result.userName}</h5>
                                         <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                                            Likely range: {formatSigned(result.confidenceLow)} to {formatSigned(result.confidenceHigh)} points
+                                            Model range: {formatSigned(result.confidenceLow)} to {formatSigned(result.confidenceHigh)} points
                                         </p>
                                     </div>
                                     <div className="text-right">
-                                        <p className={`text-2xl font-bold font-mono ${result.projectedChange >= 0 ? 'text-[#7BC4A0]' : 'text-[#D4897B]'}`}>
+                                        <p className={`text-2xl font-bold font-mono ${result.projectedChange >= 0 ? 'text-success' : 'text-error'}`}>
                                             {formatSigned(result.projectedChange)}
                                         </p>
                                         <span className={`inline-block mt-1 text-xs px-2 py-1 rounded-full font-medium ${reliability.badge}`}>
@@ -451,7 +463,7 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                     <p className="text-[var(--text-muted)]">
                         {results.length === 0
                             ? 'Not enough matched history to model this scenario yet. Keep tracking for at least 2 weeks.'
-                            : 'No models match your current Advanced filters. Try showing low-confidence models or widening the model window.'}
+                            : 'No models match the current filters. Show weaker fits or widen the model window.'}
                     </p>
                 </div>
             )}
@@ -459,16 +471,16 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
             {visibleResults.length > 1 && (
                 <div className="card p-4 bg-[var(--bg-elevated)]">
                     <div className="flex items-start gap-3">
-                        <Lightbulb className="w-5 h-5 text-[#D4B87B] flex-shrink-0 mt-0.5" />
+                        <Lightbulb className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
                         <p className="text-sm text-[var(--text-secondary)]">
-                            Focus on changes that are both positive and medium/high confidence, then validate over the next week.
+                            Compare the estimate with its fit label and model range. Other factors from the same period may explain the relationship.
                         </p>
                     </div>
                 </div>
             )}
 
             <p className="text-xs text-[var(--text-muted)] text-center">
-                Predictions use historical patterns in your data. They help guide experiments, not guarantee outcomes.
+                Estimates use historical associations in your data. They do not establish cause or guarantee an outcome.
             </p>
         </div>
     );

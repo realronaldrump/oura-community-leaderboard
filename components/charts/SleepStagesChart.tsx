@@ -1,8 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell, ReferenceLine } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { SleepSession } from '../../types';
-import { IOSModal, IOSButton, IOSListItem } from '../ios';
-import { Moon, Zap, Wind, Activity, Info } from 'lucide-react';
+import { IOSModal, IOSButton } from '../ios';
 import { formatISODateForDisplay } from '../../utils/date';
 
 // Custom tooltip component with total
@@ -27,11 +26,9 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label })
         return sum + (entry.value || 0);
     }, 0);
 
-    const totalWithAwake = payload.reduce((sum, entry) => sum + (entry.value || 0), 0);
-
     return (
-        <div className="bg-white border border-[rgba(0,0,0,0.10)] rounded-lg p-3 shadow-lg">
-            <p className="text-[#7A756E] text-xs mb-2">{label}</p>
+        <div className="rounded-lg border border-line-strong bg-surface-raised p-3 shadow-lg">
+            <p className="text-ink-secondary text-xs mb-2">{label}</p>
             {payload.map((entry, index) => (
                 <div key={index} className="flex items-center justify-between gap-4 text-sm">
                     <div className="flex items-center gap-2">
@@ -39,123 +36,75 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label })
                             className="w-2 h-2 rounded-full"
                             style={{ backgroundColor: entry.color }}
                         />
-                        <span className="text-[#7A756E]">{entry.name}</span>
+                        <span className="text-ink-secondary">{entry.name}</span>
                     </div>
-                    <span className="text-[#2D2A26] font-mono">{formatDuration(entry.value)}</span>
+                    <span className="text-ink font-mono">{formatDuration(entry.value)}</span>
                 </div>
             ))}
-            <div className="border-t border-[rgba(0,0,0,0.08)] mt-2 pt-2">
+            <div className="border-t border-line mt-2 pt-2">
                 <div className="flex items-center justify-between gap-4 text-sm font-semibold">
-                    <span className="text-[#6B9E8A]">Total Sleep</span>
-                    <span className="text-[#6B9E8A] font-mono">{formatDuration(totalSleep)}</span>
+                    <span className="text-accent">Total Sleep</span>
+                    <span className="text-accent font-mono">{formatDuration(totalSleep)}</span>
                 </div>
             </div>
         </div>
     );
 };
 
+type StageKey = 'deep' | 'rem' | 'light' | 'awake';
+type StageDurationKey = 'deep_sleep_duration' | 'rem_sleep_duration' | 'light_sleep_duration' | 'awake_time';
+
 interface Props {
     data: SleepSession[];
-    onStageClick?: (stage: 'deep' | 'rem' | 'light' | 'awake', session: SleepSession) => void;
+    onStageClick?: (stage: StageKey, session: SleepSession) => void;
 }
 
 type StageDetail = {
     name: string;
     color: string;
     description: string;
-    optimalRange: string;
-    benefits: string[];
-    tips: string[];
-    dataKey: keyof SleepSession;
+    dataKey: StageDurationKey;
 };
 
-const STAGE_DETAILS: Record<string, StageDetail> = {
+const STAGE_DETAILS: Record<StageKey, StageDetail> = {
     deep: {
         name: 'Deep Sleep',
         color: '#7BA8D4',
-        description: 'Deep sleep is the most restorative sleep stage where the body repairs tissues, builds muscle and bone, and strengthens the immune system.',
-        optimalRange: '15-20% of total sleep (1-2 hours)',
-        benefits: [
-            'Physical recovery and tissue repair',
-            'Muscle growth and bone strengthening',
-            'Immune system support',
-            'Memory consolidation and learning',
-            'Energy restoration for next day'
-        ],
-        tips: [
-            'Exercise regularly (increases deep sleep)',
-            'Avoid alcohol before bed (disrupts deep sleep)',
-            'Keep bedroom cool (60-67°F is optimal)',
-            'Maintain consistent sleep schedule',
-            'Reduce stress before bedtime'
-        ],
-        dataKey: 'deep_sleep_duration'
+        description: 'Slow-wave sleep recorded by Oura. Compare the duration with your own nights and longer-term baseline.',
+        dataKey: 'deep_sleep_duration',
     },
     rem: {
         name: 'REM Sleep',
         color: '#A08BBE',
-        description: 'REM (Rapid Eye Movement) sleep is crucial for emotional regulation, creativity, and memory consolidation. This is when most vivid dreaming occurs.',
-        optimalRange: '20-25% of total sleep (1.5-2 hours)',
-        benefits: [
-            'Memory consolidation and learning',
-            'Emotional processing and regulation',
-            'Creativity enhancement',
-            'Problem-solving ability',
-            'Brain development and maintenance'
-        ],
-        tips: [
-            'Aim for 7-9 hours total sleep (REM comes later)',
-            'Avoid alcohol before bed (reduces REM)',
-            'Manage stress through relaxation techniques',
-            'Limit screen time before bed',
-            'Maintain consistent sleep schedule'
-        ],
-        dataKey: 'rem_sleep_duration'
+        description: 'Rapid-eye-movement sleep recorded by Oura. Compare the duration with your own nights and longer-term baseline.',
+        dataKey: 'rem_sleep_duration',
     },
     light: {
         name: 'Light Sleep',
         color: '#7BA8D4',
-        description: 'Light sleep serves as a transition between wakefulness and deeper sleep stages. It\'s easier to be awakened from light sleep.',
-        optimalRange: '50-60% of total sleep (3.5-5.5 hours)',
-        benefits: [
-            'Memory processing',
-            'Physical restoration',
-            'Energy conservation',
-            'Preparation for deep sleep',
-            'Body temperature regulation'
-        ],
-        tips: [
-            'Practice good sleep hygiene',
-            'Minimize disruptions in sleep environment',
-            'Use white noise to mask sudden sounds',
-            'Keep bedroom dark and cool',
-            'Avoid caffeine and heavy meals before bed'
-        ],
-        dataKey: 'light_sleep_duration'
+        description: 'The lighter non-REM stages recorded by Oura during this sleep period.',
+        dataKey: 'light_sleep_duration',
     },
     awake: {
         name: 'Awake Time',
         color: '#6b7280',
-        description: 'Time spent awake during sleep period. Occasional awakenings are normal, but excessive awake time can impact sleep quality.',
-        optimalRange: '<5% of total sleep',
-        benefits: [
-            'Natural sleep cycles include brief awakenings',
-            'Allows body adjustments for comfort',
-            'May indicate need for better sleep environment'
-        ],
-        tips: [
-            'Address factors causing awakenings (noise, temperature, light)',
-            'Limit fluids before bed to reduce bathroom trips',
-            'Avoid caffeine and alcohol before sleep',
-            'Use blackout curtains or eye mask',
-            'Consider earplugs if noise is an issue'
-        ],
-        dataKey: 'awake_time'
+        description: 'Time Oura estimated you were awake during the sleep period. Brief awakenings are common.',
+        dataKey: 'awake_time',
     },
 };
 
+const STAGE_KEYS: StageKey[] = ['deep', 'light', 'rem', 'awake'];
+
+const formatSecondsDuration = (seconds?: number | null) => {
+    if (seconds == null) return '--';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+};
+
 const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
-    const [selectedStage, setSelectedStage] = useState<{ stage: 'deep' | 'rem' | 'light' | 'awake'; session: SleepSession } | null>(null);
+    const [selectedStage, setSelectedStage] = useState<{ stage: StageKey; session: SleepSession } | null>(null);
+    const [selectedDay, setSelectedDay] = useState<SleepSession | null>(null);
     const [hoveredDay, setHoveredDay] = useState<string | null>(null);
 
     // Transform data for chart
@@ -195,19 +144,9 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
         return h > 0 ? `${h}h ${m}m` : `${m}m`;
     };
 
-    const getStageDetail = (stage: string): StageDetail | undefined => {
-        const stageMap: Record<string, 'deep' | 'rem' | 'light' | 'awake'> = {
-            'Deep': 'deep',
-            'REM': 'rem',
-            'Light': 'light',
-            'Awake': 'awake',
-        };
-        return STAGE_DETAILS[stageMap[stage] || 'light'];
-    };
-
     const handleBarClick = (data: any) => {
         const stageName = data.name;
-        const stageMap: Record<string, 'deep' | 'rem' | 'light' | 'awake'> = {
+        const stageMap: Record<string, StageKey> = {
             'Deep': 'deep',
             'REM': 'rem',
             'Light': 'light',
@@ -236,84 +175,164 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
                     transition: opacity 0.2s ease-in-out;
                 }
             `}</style>
-            <ResponsiveContainer
-                width="100%"
-                height="100%"
-                minWidth={0}
-                minHeight={100}
-                initialDimension={{ width: 640, height: 180 }}
-            >
-                <BarChart
-                    data={chartData}
-                    margin={{ top: 24, right: 10, left: 0, bottom: 0 }}
-                    barSize={16}
-                    onMouseMove={handleMouseMove}
-                    onMouseLeave={handleMouseLeave}
-                >
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
-                    <XAxis
-                        dataKey="day"
-                        stroke="#A8A29E"
-                        fontSize={11}
-                        tickFormatter={(val) => val.slice(5)}
-                        axisLine={false}
-                        tickLine={false}
-                    />
-                    <YAxis
-                        stroke="#A8A29E"
-                        fontSize={11}
-                        unit="h"
-                        axisLine={false}
-                        tickLine={false}
-                    />
-                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.05)' }} />
-                    <Legend
-                        verticalAlign="top"
-                        height={32}
-                        iconType="circle"
-                        iconSize={8}
-                        wrapperStyle={{ fontSize: '11px', cursor: 'pointer' }}
-                    />
-                    <Bar dataKey="Deep" stackId="a" fill="#7BA8D4" name="Deep" radius={[0, 0, 4, 4]} onClick={handleBarClick} className="cursor-pointer" />
-                    <Bar dataKey="Light" stackId="a" fill="#7BA8D4" name="Light" onClick={handleBarClick} className="cursor-pointer" />
-                    <Bar dataKey="REM" stackId="a" fill="#A08BBE" name="REM" onClick={handleBarClick} className="cursor-pointer" />
-                    <Bar
-                        dataKey="Awake"
-                        stackId="a"
-                        fill="#6b7280"
-                        name="Awake"
-                        radius={[4, 4, 0, 0]}
-                        onClick={handleBarClick}
-                        className="cursor-pointer"
-                        label={(props: any) => {
-                            const { x, y, width, payload } = props;
-                            if (!payload || !payload.day) return null;
+            <div className="flex h-full min-h-0 flex-col">
+                <div className="min-h-[6.25rem] flex-1">
+                    <ResponsiveContainer
+                        width="100%"
+                        height="100%"
+                        minWidth={0}
+                        minHeight={100}
+                        initialDimension={{ width: 640, height: 180 }}
+                    >
+                        <BarChart
+                            data={chartData}
+                            margin={{ top: 24, right: 10, left: 0, bottom: 0 }}
+                            barSize={16}
+                            onMouseMove={handleMouseMove}
+                            onMouseLeave={handleMouseLeave}
+                        >
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
+                            <XAxis
+                                dataKey="day"
+                                stroke="#A8A29E"
+                                fontSize={11}
+                                tickFormatter={(val) => val.slice(5)}
+                                axisLine={false}
+                                tickLine={false}
+                            />
+                            <YAxis
+                                stroke="#A8A29E"
+                                fontSize={11}
+                                unit="h"
+                                axisLine={false}
+                                tickLine={false}
+                            />
+                            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.05)' }} />
+                            <Legend
+                                verticalAlign="top"
+                                height={32}
+                                iconType="circle"
+                                iconSize={8}
+                                wrapperStyle={{ fontSize: '11px', cursor: 'pointer' }}
+                            />
+                            <Bar dataKey="Deep" stackId="a" fill="#7BA8D4" name="Deep" radius={[0, 0, 4, 4]} onClick={handleBarClick} className="cursor-pointer" />
+                            <Bar dataKey="Light" stackId="a" fill="#7BA8D4" name="Light" onClick={handleBarClick} className="cursor-pointer" />
+                            <Bar dataKey="REM" stackId="a" fill="#A08BBE" name="REM" onClick={handleBarClick} className="cursor-pointer" />
+                            <Bar
+                                dataKey="Awake"
+                                stackId="a"
+                                fill="#6b7280"
+                                name="Awake"
+                                radius={[4, 4, 0, 0]}
+                                onClick={handleBarClick}
+                                className="cursor-pointer"
+                                label={(props: any) => {
+                                    const { x, y, width, payload } = props;
+                                    if (!payload || !payload.day) return null;
 
-                            const isHovered = payload.day === hoveredDay;
-                            const total = payload.totalSleep;
+                                    const isHovered = payload.day === hoveredDay;
+                                    const total = payload.totalSleep;
+
+                                    return (
+                                        <text
+                                            x={x + width / 2}
+                                            y={y - 6}
+                                            textAnchor="middle"
+                                            fill="#6B9E8A"
+                                            fontSize={10}
+                                            fontWeight={600}
+                                            fontFamily="monospace"
+                                            className="total-label"
+                                            style={{
+                                                opacity: isHovered ? 1 : 0,
+                                                pointerEvents: 'none'
+                                            }}
+                                        >
+                                            {formatTotalDuration(total)}
+                                        </text>
+                                    );
+                                }}
+                            />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+
+                <div
+                    className="mt-2 flex shrink-0 gap-2 overflow-x-auto pb-1"
+                    role="group"
+                    aria-label="Sleep stage details by day"
+                >
+                    {chartData.map(({ day, sessionData }) => {
+                        const fullDate = formatISODateForDisplay(day, undefined, {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                        });
+
+                        return (
+                            <button
+                                key={day}
+                                type="button"
+                                aria-label={`View sleep stage details for ${fullDate}`}
+                                className="min-h-11 min-w-11 shrink-0 rounded-lg border border-line bg-surface-raised px-3 text-xs font-medium text-ink-secondary transition-colors hover:border-accent hover:text-ink"
+                                onClick={() => setSelectedDay(sessionData)}
+                            >
+                                <time dateTime={day}>
+                                    {formatISODateForDisplay(day, undefined, { month: 'short', day: 'numeric' })}
+                                </time>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {selectedDay && (
+                <IOSModal
+                    isOpen={!!selectedDay}
+                    onClose={() => setSelectedDay(null)}
+                    title={`Sleep stage details for ${formatISODateForDisplay(selectedDay.day, undefined, {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                    })}`}
+                >
+                    <div className="space-y-3 overflow-y-auto ios-scroll max-h-[70vh]">
+                        {STAGE_KEYS.map((stage) => {
+                            const detail = STAGE_DETAILS[stage];
+                            const duration = selectedDay[detail.dataKey];
 
                             return (
-                                <text
-                                    x={x + width / 2}
-                                    y={y - 6}
-                                    textAnchor="middle"
-                                    fill="#6B9E8A"
-                                    fontSize={10}
-                                    fontWeight={600}
-                                    fontFamily="monospace"
-                                    className="total-label"
-                                    style={{
-                                        opacity: isHovered ? 1 : 0,
-                                        pointerEvents: 'none'
-                                    }}
-                                >
-                                    {formatTotalDuration(total)}
-                                </text>
+                                <div key={stage} className="rounded-xl border border-line bg-canvas p-4">
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div className="flex min-w-0 items-center gap-3">
+                                            <span
+                                                className="h-3 w-3 shrink-0 rounded-full"
+                                                style={{ backgroundColor: detail.color }}
+                                                aria-hidden="true"
+                                            />
+                                            <h3 className="font-medium text-ink">{detail.name}</h3>
+                                        </div>
+                                        <span className="shrink-0 font-mono font-semibold text-ink">
+                                            {formatSecondsDuration(duration)}
+                                        </span>
+                                    </div>
+                                    <p className="mt-2 text-sm text-ink-secondary">{detail.description}</p>
+                                </div>
                             );
-                        }}
-                    />
-                </BarChart>
-            </ResponsiveContainer>
+                        })}
+
+                        <IOSButton
+                            onClick={() => setSelectedDay(null)}
+                            className="w-full"
+                            variant="secondary"
+                        >
+                            Close
+                        </IOSButton>
+                    </div>
+                </IOSModal>
+            )}
 
             {/* Stage Detail Modal */}
             {selectedStage && (
@@ -344,67 +363,21 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
                                     })}
                                 </p>
                                 <p className="text-2xl font-mono font-bold mt-1" style={{ color: STAGE_DETAILS[selectedStage.stage].color }}>
-                                    {selectedStage.session[STAGE_DETAILS[selectedStage.stage].dataKey] != null
-                                        ? (() => {
-                                            const seconds = selectedStage.session[STAGE_DETAILS[selectedStage.stage].dataKey]! as number;
-                                            const hours = Math.floor(seconds / 3600);
-                                            const minutes = Math.floor((seconds % 3600) / 60);
-                                            return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-                                        })()
-                                        : '--'}
+                                    {formatSecondsDuration(
+                                        selectedStage.session[STAGE_DETAILS[selectedStage.stage].dataKey],
+                                    )}
                                 </p>
                             </div>
                         </div>
 
                         {/* Description */}
-                        <div className="bg-[#F2EDE8] p-4 rounded-xl border border-[rgba(0,0,0,0.06)]">
-                            <p className="text-sm text-[#7A756E]">{STAGE_DETAILS[selectedStage.stage].description}</p>
+                        <div className="bg-canvas p-4 rounded-xl border border-line">
+                            <p className="text-sm text-ink-secondary">{STAGE_DETAILS[selectedStage.stage].description}</p>
                         </div>
+                        <p className="text-xs leading-5 text-ink-muted">
+                            Sleep stages are wearable estimates, not medical measurements or universal targets.
+                        </p>
 
-                        {/* Optimal Range */}
-                        <div>
-                            <h4 className="text-xs text-text-muted uppercase tracking-wider mb-2">Optimal Range</h4>
-                            <div className="bg-[#F2EDE8] p-4 rounded-xl border border-[rgba(0,0,0,0.06)]">
-                                <p className="text-sm text-[#2D2A26]">{STAGE_DETAILS[selectedStage.stage].optimalRange}</p>
-                            </div>
-                        </div>
-
-                        {/* Benefits */}
-                        {STAGE_DETAILS[selectedStage.stage].benefits && STAGE_DETAILS[selectedStage.stage].benefits.length > 0 && (
-                            <div>
-                                <h4 className="text-xs text-text-muted uppercase tracking-wider mb-3">Key Benefits</h4>
-                                <div className="space-y-2">
-                                    {STAGE_DETAILS[selectedStage.stage].benefits.map((benefit, idx) => (
-                                        <div key={idx} className="flex gap-3 items-start">
-                                            <div
-                                                className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs"
-                                                style={{ backgroundColor: `${STAGE_DETAILS[selectedStage.stage].color}20`, color: STAGE_DETAILS[selectedStage.stage].color }}
-                                            >
-                                                <Activity className="w-3 h-3" />
-                                            </div>
-                                            <p className="text-sm text-[#7A756E]">{benefit}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Tips */}
-                        {STAGE_DETAILS[selectedStage.stage].tips && STAGE_DETAILS[selectedStage.stage].tips.length > 0 && (
-                            <div>
-                                <h4 className="text-xs text-text-muted uppercase tracking-wider mb-3">Tips to Improve</h4>
-                                <div className="space-y-2">
-                                    {STAGE_DETAILS[selectedStage.stage].tips.map((tip, idx) => (
-                                        <div key={idx} className="flex gap-3">
-                                            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-[#6B9E8A]/20 text-[#6B9E8A] flex items-center justify-center text-xs font-bold">
-                                                {idx + 1}
-                                            </div>
-                                            <p className="text-sm text-[#7A756E]">{tip}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
 
                         <IOSButton
                             onClick={() => setSelectedStage(null)}

@@ -60,7 +60,7 @@ const InviteLinkModal: React.FC<InviteLinkModalProps> = ({ isOpen, onClose }) =>
     const statusPanel = (() => {
         if (status === 'shared') {
             return (
-                <div className="rounded-xl border border-[#C5D8CE] bg-[#EBF3EE] px-3 py-2 text-sm text-[#6B9E8A]">
+                <div className="rounded-xl border border-[#C5D8CE] bg-[#EBF3EE] px-3 py-2 text-sm text-accent">
                     Invite shared.
                 </div>
             );
@@ -68,7 +68,7 @@ const InviteLinkModal: React.FC<InviteLinkModalProps> = ({ isOpen, onClose }) =>
 
         if (status === 'copied') {
             return (
-                <div className="rounded-xl border border-[#C5D8CE] bg-[#EBF3EE] px-3 py-2 text-sm text-[#6B9E8A]">
+                <div className="rounded-xl border border-[#C5D8CE] bg-[#EBF3EE] px-3 py-2 text-sm text-accent">
                     Invite link copied. Paste it into a text, email, or group chat.
                 </div>
             );
@@ -76,7 +76,7 @@ const InviteLinkModal: React.FC<InviteLinkModalProps> = ({ isOpen, onClose }) =>
 
         if (status === 'error') {
             return (
-                <div className="rounded-xl border border-[#E8C5C5] bg-[#F3EBEB] px-3 py-2 text-sm text-[#D4897B]">
+                <div className="rounded-xl border border-[#E8C5C5] bg-[#F3EBEB] px-3 py-2 text-sm text-error">
                     <div className="flex items-start gap-2">
                         <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
                         <span>Sharing failed on this browser. Use the visible link below and copy it manually if needed.</span>
@@ -91,13 +91,13 @@ const InviteLinkModal: React.FC<InviteLinkModalProps> = ({ isOpen, onClose }) =>
     return (
         <IOSModal isOpen={isOpen} onClose={onClose} title="Invite a Friend">
             <div className="space-y-4">
-                <p className="text-sm leading-relaxed text-[#7A756E]">
-                    Send this link to a friend. They land on the join screen and can add themselves with a single Oura sign-in.
+                <p className="text-sm leading-relaxed text-ink-secondary">
+                    They can connect Oura and add themselves to the board. Anyone with this app link can open the shared board, so only send it to someone you trust.
                 </p>
 
-                <div className="rounded-2xl border border-[rgba(0,0,0,0.06)] bg-[#F2EDE8] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Join URL</p>
-                    <code className="mt-3 block overflow-x-auto whitespace-nowrap font-mono text-sm text-[#6B9E8A]">
+                <div className="rounded-2xl border border-line bg-canvas p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Join URL</p>
+                    <code className="mt-3 block overflow-x-auto whitespace-nowrap font-mono text-sm text-accent">
                         {inviteLink}
                     </code>
                 </div>

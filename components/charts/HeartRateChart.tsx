@@ -3,7 +3,7 @@ import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, ReferenceL
 import { HeartRate } from '../../types';
 import { IOSModal, IOSButton, IOSListItem } from '../ios';
 import { Clock, Info } from 'lucide-react';
-import { CLAY_TOOLTIP_STYLE, CLAY_TOOLTIP_LABEL_STYLE } from '../../utils/chartStyles';
+import { CHART_TOOLTIP_STYLE, CHART_TOOLTIP_LABEL_STYLE } from '../../utils/chartStyles';
 import {
     extractLocalHourMinuteFromIso,
     extractIsoDayFromTimestamp,
@@ -32,12 +32,6 @@ type HeartRateChartPoint = {
 const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
     const [timeRange, setTimeRange] = useState<TimeRange>('24h');
     const [selectedPoint, setSelectedPoint] = useState<HeartRateChartPoint | null>(null);
-
-    const handleDataPointClick = (data: any) => {
-        if (data?.payload) {
-            setSelectedPoint(data.payload);
-        }
-    };
 
     const getTimeRangeHours = (range: TimeRange): number => {
         switch (range) {
@@ -102,14 +96,16 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                 {/* Time Range Selector */}
                 {showLabels && (
                     <div className="flex items-center justify-between mb-2">
-                        <div className="flex gap-2">
+                        <div className="flex gap-2" role="group" aria-label="Heart-rate chart time range">
                             {(['6h', '12h', '24h', '48h'] as TimeRange[]).map((range) => (
                                 <button
                                     key={range}
+                                    type="button"
                                     onClick={() => setTimeRange(range)}
-                                    className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${timeRange === range
-                                        ? 'bg-[#D4897B] text-white'
-                                        : 'bg-[#F2EDE8] text-text-muted hover:text-text-primary'
+                                    aria-pressed={timeRange === range}
+                                    className={`min-h-11 px-3 py-1 rounded-lg text-xs font-medium transition-all ${timeRange === range
+                                        ? 'bg-error text-white'
+                                        : 'bg-canvas text-text-muted hover:text-text-primary'
                                         }`}
                                 >
                                     {range}
@@ -161,8 +157,8 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                             />
                         )}
                         <Tooltip
-                            contentStyle={CLAY_TOOLTIP_STYLE}
-                            labelStyle={CLAY_TOOLTIP_LABEL_STYLE}
+                            contentStyle={CHART_TOOLTIP_STYLE}
+                            labelStyle={CHART_TOOLTIP_LABEL_STYLE}
                             labelFormatter={(timestamp: number) => new Date(timestamp).toLocaleTimeString('en-US', {
                                 hour: 'numeric',
                                 minute: '2-digit',
@@ -194,7 +190,7 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                         <IOSListItem
                             title="Heart Rate"
                             subtitle={`${selectedPoint.bpm} bpm`}
-                            icon={<div className="text-[#D4897B]"><Clock className="w-4 h-4" /></div>}
+                            icon={<div className="text-error"><Clock className="w-4 h-4" /></div>}
                             rightElement={<div className="text-xs text-text-muted">
                                 {formatRecordLocalClockTime(selectedPoint.fullData?.timestamp)}
                             </div>}
@@ -212,7 +208,7 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                         <IOSListItem
                             title="Source"
                             subtitle={selectedPoint.source}
-                            icon={<div className="text-[#7BA8D4]"><Clock className="w-4 h-4" /></div>}
+                            icon={<div className="text-metric-sleep"><Clock className="w-4 h-4" /></div>}
                         />
                         <IOSButton onClick={() => setSelectedPoint(null)} className="w-full" variant="secondary">
                             Close

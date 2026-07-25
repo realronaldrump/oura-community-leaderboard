@@ -446,8 +446,8 @@ const DataExport: React.FC = () => {
         {
             label: 'Sleep Scores',
             description: 'Daily score + 7 contributing factors',
-            icon: <Moon className="w-5 h-5 text-accent-cyan" />,
-            color: 'bg-accent-cyan/20',
+            icon: <Moon className="w-5 h-5 text-metric-sleep" />,
+            color: 'bg-metric-sleep/20',
             count: sleepRows.length,
             onClick: generateSleepCSV,
             filename: 'sleep_scores.csv',
@@ -455,8 +455,8 @@ const DataExport: React.FC = () => {
         {
             label: 'Readiness Scores',
             description: 'Daily score + contributor scores + temperature',
-            icon: <TrendingUp className="w-5 h-5 text-accent-purple" />,
-            color: 'bg-accent-purple/20',
+            icon: <TrendingUp className="w-5 h-5 text-metric-readiness" />,
+            color: 'bg-metric-readiness/20',
             count: readinessRows.length,
             onClick: generateReadinessCSV,
             filename: 'readiness_scores.csv',
@@ -464,8 +464,8 @@ const DataExport: React.FC = () => {
         {
             label: 'Activity Scores',
             description: 'Daily score + contributors + steps/calories',
-            icon: <Activity className="w-5 h-5 text-accent-orange" />,
-            color: 'bg-accent-orange/20',
+            icon: <Activity className="w-5 h-5 text-metric-activity" />,
+            color: 'bg-metric-activity/20',
             count: activityRows.length,
             onClick: generateActivityCSV,
             filename: 'activity_scores.csv',
@@ -473,8 +473,8 @@ const DataExport: React.FC = () => {
         {
             label: 'Sleep Sessions',
             description: 'Raw sleep periods with lowest HR, HRV, stages',
-            icon: <Moon className="w-5 h-5 text-accent-cyan" />,
-            color: 'bg-accent-cyan/10',
+            icon: <Moon className="w-5 h-5 text-metric-sleep" />,
+            color: 'bg-metric-sleep/10',
             count: sleepSessionRows.length,
             onClick: generateSleepSessionsCSV,
             filename: 'sleep_sessions.csv',
@@ -482,8 +482,8 @@ const DataExport: React.FC = () => {
         {
             label: 'Nightly Resting HR',
             description: 'One row per night with resting heart rate only',
-            icon: <Heart className="w-5 h-5 text-accent-rose" />,
-            color: 'bg-accent-rose/20',
+            icon: <Heart className="w-5 h-5 text-error" />,
+            color: 'bg-error/20',
             count: nightlyRestingHeartRateRows.length,
             onClick: generateNightlyRestingHeartRateCSV,
             filename: 'nightly_resting_heart_rate.csv',
@@ -491,8 +491,8 @@ const DataExport: React.FC = () => {
         {
             label: 'Nightly Vitals',
             description: 'One row per day with resting HR, HRV, breathing',
-            icon: <Heart className="w-5 h-5 text-accent-rose" />,
-            color: 'bg-accent-rose/10',
+            icon: <Heart className="w-5 h-5 text-error" />,
+            color: 'bg-error/10',
             count: nightlyVitalsRows.length,
             onClick: generateNightlyVitalsCSV,
             filename: 'nightly_vitals.csv',
@@ -500,8 +500,8 @@ const DataExport: React.FC = () => {
         {
             label: 'Heart Rate',
             description: 'Time-series HR readings (5-min intervals)',
-            icon: <Heart className="w-5 h-5 text-accent-rose" />,
-            color: 'bg-accent-rose/20',
+            icon: <Heart className="w-5 h-5 text-error" />,
+            color: 'bg-error/20',
             count: heartrateRows.length,
             onClick: generateHeartrateCSV,
             filename: 'heart_rate.csv',
@@ -509,8 +509,8 @@ const DataExport: React.FC = () => {
         {
             label: 'SpO2',
             description: 'Daily blood oxygen average',
-            icon: <Wind className="w-5 h-5 text-accent-cyan" />,
-            color: 'bg-accent-cyan/10',
+            icon: <Wind className="w-5 h-5 text-metric-sleep" />,
+            color: 'bg-metric-sleep/10',
             count: spo2Rows.length,
             onClick: generateSpO2CSV,
             filename: 'spo2.csv',
@@ -518,8 +518,8 @@ const DataExport: React.FC = () => {
         {
             label: 'Daily Stress',
             description: 'High stress and recovery minutes per day',
-            icon: <Zap className="w-5 h-5 text-accent-orange" />,
-            color: 'bg-accent-orange/10',
+            icon: <Zap className="w-5 h-5 text-metric-activity" />,
+            color: 'bg-metric-activity/10',
             count: stressRows.length,
             onClick: generateStressCSV,
             filename: 'daily_stress.csv',
@@ -527,8 +527,8 @@ const DataExport: React.FC = () => {
         {
             label: 'Resilience',
             description: 'Resilience level + sleep/daytime contributors',
-            icon: <TrendingUp className="w-5 h-5 text-accent-green" />,
-            color: 'bg-accent-green/20',
+            icon: <TrendingUp className="w-5 h-5 text-metric-readiness" />,
+            color: 'bg-metric-readiness/20',
             count: resilienceRows.length,
             onClick: generateResilienceCSV,
             filename: 'resilience.csv',
@@ -536,8 +536,8 @@ const DataExport: React.FC = () => {
         {
             label: 'Cardiovascular Age',
             description: 'Estimated cardiovascular age per day',
-            icon: <Heart className="w-5 h-5 text-accent-purple" />,
-            color: 'bg-accent-purple/10',
+            icon: <Heart className="w-5 h-5 text-metric-insight" />,
+            color: 'bg-metric-insight/10',
             count: cardiovascularAgeRows.length,
             onClick: generateCardiovascularAgeCSV,
             filename: 'cardiovascular_age.csv',
@@ -545,8 +545,8 @@ const DataExport: React.FC = () => {
         {
             label: 'VO2 Max',
             description: 'Cardio capacity estimates',
-            icon: <Activity className="w-5 h-5 text-accent-green" />,
-            color: 'bg-accent-green/10',
+            icon: <Activity className="w-5 h-5 text-metric-readiness" />,
+            color: 'bg-metric-readiness/10',
             count: vo2MaxRows.length,
             onClick: generateVO2MaxCSV,
             filename: 'vo2_max.csv',
@@ -554,8 +554,8 @@ const DataExport: React.FC = () => {
         {
             label: 'Workouts',
             description: 'Logged workouts with type, duration, distance',
-            icon: <Activity className="w-5 h-5 text-accent-orange" />,
-            color: 'bg-accent-orange/20',
+            icon: <Activity className="w-5 h-5 text-metric-activity" />,
+            color: 'bg-metric-activity/20',
             count: workoutRows.length,
             onClick: generateWorkoutsCSV,
             filename: 'workouts.csv',
@@ -564,7 +564,7 @@ const DataExport: React.FC = () => {
             label: 'Tags',
             description: "Enhanced tags and notes you've logged",
             icon: <FileText className="w-5 h-5 text-text-secondary" />,
-            color: 'bg-[var(--bg-card)]',
+            color: 'bg-surface-raised',
             count: enhancedTagRows.length + tagRows.length,
             onClick: generateTagsCSV,
             filename: 'tags.csv',
@@ -572,12 +572,12 @@ const DataExport: React.FC = () => {
     ] : [];
 
     return (
-        <div className="min-h-screen bg-void p-8">
+        <div className="py-2 sm:py-4">
             <div className="max-w-4xl mx-auto">
                 {/* Header */}
-                <div className="mb-8">
-                    <h1 className="text-3xl font-bold text-text-primary mb-2 flex items-center gap-3">
-                        <Database className="w-8 h-8 text-accent-cyan" />
+                <div className="mb-6">
+                    <h1 className="page-title mb-2 flex items-center gap-3 text-3xl text-text-primary">
+                        <Database className="w-8 h-8 text-accent" />
                         Data Export
                     </h1>
                     <p className="text-text-secondary">
@@ -587,29 +587,29 @@ const DataExport: React.FC = () => {
 
                 {/* Loading */}
                 {isLoading && (
-                    <div className="glass-card p-6 mb-8 flex items-center gap-3">
-                        <div className="w-5 h-5 border-2 border-accent-cyan/30 border-t-accent-cyan rounded-full animate-spin" />
+                    <div className="ui-card ui-card--default mb-5 flex items-center gap-3 p-4 sm:p-6">
+                        <div className="w-5 h-5 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
                         <p className="text-text-secondary">Loading synced data...</p>
                     </div>
                 )}
 
                 {/* Error */}
                 {error && (
-                    <div className="glass-card p-6 mb-8">
+                    <div className="ui-card ui-card--default mb-5 p-4 sm:p-6">
                         <div className="flex items-center gap-3">
-                            <AlertCircle className="w-5 h-5 text-accent-rose flex-shrink-0" />
-                            <p className="text-accent-rose">{error}</p>
+                            <AlertCircle className="w-5 h-5 text-error flex-shrink-0" />
+                            <p className="text-error">{error}</p>
                         </div>
                     </div>
                 )}
 
                 {/* No data yet */}
                 {!isLoading && !error && !data && (
-                    <div className="glass-card p-8 mb-8 text-center">
+                    <div className="ui-card ui-card--default mb-5 p-6 text-center sm:p-8">
                         <RefreshCw className="w-12 h-12 text-text-muted mx-auto mb-4" />
                         <h2 className="text-lg font-bold text-text-primary mb-2">No Synced Data Yet</h2>
                         <p className="text-text-secondary">
-                            Sync your data from the dashboard first. Once synced, all your Oura data is stored locally and available here for export.
+                            Sync from the dashboard first. Once a sync finishes, the saved history is available here for export.
                         </p>
                     </div>
                 )}
@@ -617,7 +617,7 @@ const DataExport: React.FC = () => {
                 {!isLoading && data && (
                     <>
                         {availableRange && selectedRange && (
-                            <div className="glass-card p-6 mb-8">
+                            <div className="ui-card ui-card--default mb-5 p-4 sm:p-6">
                                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                                     <div>
                                         <h2 className="text-xl font-bold text-text-primary mb-1">Export Range</h2>
@@ -628,7 +628,7 @@ const DataExport: React.FC = () => {
                                     <button
                                         type="button"
                                         onClick={resetRange}
-                                        className="self-start rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:border-accent-cyan/40 hover:text-text-primary"
+                                        className="ui-button ui-button--secondary ui-button--sm self-start"
                                     >
                                         Use Full Synced Range
                                     </button>
@@ -643,7 +643,7 @@ const DataExport: React.FC = () => {
                                             min={availableRange.start}
                                             max={selectedRange.end}
                                             onChange={(event) => handleRangeChange('start', event.target.value)}
-                                            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-text-primary outline-none transition-colors focus:border-accent-cyan/50 focus:ring-2 focus:ring-accent-cyan/15"
+                                            className="ui-input"
                                         />
                                     </label>
                                     <label className="block">
@@ -654,7 +654,7 @@ const DataExport: React.FC = () => {
                                             min={selectedRange.start}
                                             max={availableRange.end}
                                             onChange={(event) => handleRangeChange('end', event.target.value)}
-                                            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-text-primary outline-none transition-colors focus:border-accent-cyan/50 focus:ring-2 focus:ring-accent-cyan/15"
+                                            className="ui-input"
                                         />
                                     </label>
                                 </div>
@@ -675,7 +675,7 @@ const DataExport: React.FC = () => {
                         )}
 
                         {/* Individual exports */}
-                        <div className="glass-card p-6 mb-6">
+                        <section className="ui-card ui-card--subtle mb-5 p-4 sm:p-6">
                             <h2 className="text-xl font-bold text-text-primary mb-1">Individual Data Types</h2>
                             <p className="text-text-secondary text-sm mb-6">One CSV per data type.</p>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -684,7 +684,7 @@ const DataExport: React.FC = () => {
                                         key={btn.filename}
                                         onClick={btn.onClick}
                                         disabled={btn.count === 0}
-                                        className="flex items-center gap-3 p-4 glass-card hover:border-accent-cyan/50 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed text-left"
+                                        className="ui-card ui-card--default ui-card--interactive flex min-h-11 items-center gap-3 p-4 text-left disabled:cursor-not-allowed disabled:opacity-40"
                                     >
                                         <div className={`w-10 h-10 ${btn.color} rounded-lg flex items-center justify-center flex-shrink-0`}>
                                             {btn.icon}
@@ -700,20 +700,20 @@ const DataExport: React.FC = () => {
                                     </button>
                                 ))}
                             </div>
-                        </div>
+                        </section>
 
                         {/* Combined export */}
-                        <div className="glass-card p-6">
+                        <section className="ui-card ui-card--subtle p-4 sm:p-6">
                             <h2 className="text-xl font-bold text-text-primary mb-1">Combined Daily Export</h2>
                             <p className="text-text-secondary text-sm mb-6">
                                 All daily metrics joined by date into a single wide CSV — ideal for spreadsheet or notebook analysis.
                             </p>
                             <button
                                 onClick={generateAllDailyCSV}
-                                className="w-full flex items-center gap-3 p-4 glass-card hover:border-accent-green/50 transition-all duration-300"
+                                className="ui-card ui-card--default ui-card--interactive flex min-h-11 w-full items-center gap-3 p-4"
                             >
-                                <div className="w-10 h-10 bg-accent-green/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <Database className="w-5 h-5 text-accent-green" />
+                                <div className="w-10 h-10 bg-metric-readiness/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <Database className="w-5 h-5 text-metric-readiness" />
                                 </div>
                                 <div className="flex-1 text-left">
                                     <p className="font-medium text-text-primary">All Daily Data Combined</p>
@@ -723,7 +723,7 @@ const DataExport: React.FC = () => {
                                 </div>
                                 <Download className="w-4 h-4 text-text-muted flex-shrink-0" />
                             </button>
-                        </div>
+                        </section>
                     </>
                 )}
             </div>

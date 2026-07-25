@@ -1,5 +1,5 @@
 {
   "name": "Davis Watches You Sleep",
-  "description": "A sleek, private leaderboard application for Oura Ring users to let Davis watch them sleep",
+  "description": "A shared Oura leaderboard for sleep, readiness, activity, trends, competitions, and bragging rights.",
   "requestFramePermissions": []
 }

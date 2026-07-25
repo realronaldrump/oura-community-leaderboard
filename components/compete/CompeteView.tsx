@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarPlus, Check, Copy, Flag, RefreshCw, Send, Sparkles, Trophy, Users } from 'lucide-react';
+import { AlertTriangle, CalendarPlus, Check, Flag, RefreshCw, Trophy, Users } from 'lucide-react';
 import { COMPETITION_TEMPLATES } from '../../constants/competitionMetrics';
 import { useCompetitionInvitePreview, useCompetitions } from '../../hooks/useCompetitions';
 import { competitionService, CreateCompetitionInput } from '../../services/competitionService';
@@ -8,9 +8,9 @@ import { DailyStats, UserProfile } from '../../types';
 import { CompetitionInvite, CompetitionTemplate } from '../../types/competitionTypes';
 import { formatISODateForDisplay } from '../../utils/date';
 import { getProfileDisplayName } from '../../utils/profileName';
+import { Button } from '../ui';
 import {
     copyCompetitionInviteLink,
-    InviteShareResult,
     shareCompetitionInviteLink,
 } from '../../utils/inviteLink';
 import CompetitionBuilder from './CompetitionBuilder';
@@ -39,9 +39,9 @@ type Notice = {
 type ShareStatus = 'idle' | 'copied' | 'shared' | 'error';
 
 const noticeClassNames: Record<Notice['tone'], string> = {
-    success: 'border-[rgba(107,158,138,0.3)] bg-[#FAF7F4] text-[#6B9E8A]',
-    warning: 'border-[rgba(212,165,116,0.3)] bg-[#FAF7F4] text-[#D4A574]',
-    error: 'border-[rgba(212,137,123,0.3)] bg-[#FAF7F4] text-[#D4897B]',
+    success: 'border-success/30 bg-success-soft text-success',
+    warning: 'border-warning/30 bg-warning-soft text-warning',
+    error: 'border-error/30 bg-error-soft text-error',
 };
 
 const CompeteView: React.FC<CompeteViewProps> = ({
@@ -200,57 +200,55 @@ const CompeteView: React.FC<CompeteViewProps> = ({
 
     return (
         <div className="pt-6 space-y-6">
-            <section className="relative overflow-hidden rounded-[2rem] border border-[rgba(0,0,0,0.06)] bg-[radial-gradient(circle_at_top_right,rgba(107,158,138,0.16),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(123,168,212,0.10),transparent_38%),#FFFFFF] p-5 sm:p-7">
-                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.4),transparent_45%)]" />
+            <section className="relative overflow-hidden rounded-[var(--radius-xl)] border border-line bg-surface p-5 shadow-card sm:p-7">
                 <div className="relative">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(107,158,138,0.2)] bg-[rgba(107,158,138,0.08)] px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-[#6B9E8A]">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent-soft px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-accent">
                         <Trophy className="h-3.5 w-3.5" />
                         Compete
                     </div>
                     <div className="mt-5 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                         <div className="max-w-3xl">
-                            <h2 className="text-3xl font-semibold tracking-tight text-[#2D2A26] sm:text-[2.4rem]">
-                                Goals for you. Competitions for the group.
-                            </h2>
-                            <p className="mt-3 text-sm leading-relaxed text-[#7A756E] sm:text-base">
-                                Set tomorrow's targets, challenge specific friends, and run custom combinations across sleep, readiness, activity, steps, HRV, stress, and more.
+                            <h1 className="text-3xl font-semibold tracking-tight text-ink sm:text-[2.4rem]">
+                                Set a goal—or make it a competition.
+                            </h1>
+                            <p className="mt-3 text-sm leading-relaxed text-ink-secondary sm:text-base">
+                                Choose the metric, dates, and who is in. Track a target alone or keep score with friends.
                             </p>
                         </div>
 
                         <div className="flex flex-col gap-3 sm:flex-row">
-                            <button
-                                type="button"
+                            <Button
                                 onClick={() => handleOpenBuilder(COMPETITION_TEMPLATES.find((template) => template.mode === 'solo') || null, 'solo')}
-                                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#6B9E8A] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                                size="lg"
                             >
                                 <Flag className="h-4 w-4" />
                                 Create Solo Goal
-                            </button>
-                            <button
-                                type="button"
+                            </Button>
+                            <Button
                                 onClick={() => handleOpenBuilder(COMPETITION_TEMPLATES.find((template) => template.mode === 'friends') || null, 'friends')}
-                                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-[rgba(107,158,138,0.2)] bg-[rgba(107,158,138,0.06)] px-5 py-3 text-sm font-semibold text-[#6B9E8A] transition-colors hover:bg-[rgba(107,158,138,0.12)]"
+                                variant="secondary"
+                                size="lg"
                             >
                                 <Users className="h-4 w-4" />
                                 Challenge Friends
-                            </button>
+                            </Button>
                         </div>
                     </div>
 
-                    <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                        <div className="rounded-[1.25rem] border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] p-4">
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Active</p>
-                            <p className="mt-2 text-3xl font-semibold text-[#2D2A26]">{activeEvaluations.length}</p>
+                    <dl className="mt-6 grid grid-cols-3 overflow-hidden rounded-[var(--radius-lg)] border border-line bg-surface-raised shadow-pressed">
+                        <div className="min-w-0 p-3 sm:p-4">
+                            <dt className="text-[10px] uppercase tracking-[0.12em] text-ink-muted sm:text-[11px] sm:tracking-[0.16em]">Active</dt>
+                            <dd className="mt-1 font-mono text-2xl font-semibold text-ink sm:text-3xl">{activeEvaluations.length}</dd>
                         </div>
-                        <div className="rounded-[1.25rem] border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] p-4">
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Starting Tomorrow</p>
-                            <p className="mt-2 text-3xl font-semibold text-[#2D2A26]">{scheduledEvaluations.length}</p>
+                        <div className="min-w-0 border-l border-line p-3 sm:p-4">
+                            <dt className="text-[10px] uppercase tracking-[0.12em] text-ink-muted sm:text-[11px] sm:tracking-[0.16em]">Starting tomorrow</dt>
+                            <dd className="mt-1 font-mono text-2xl font-semibold text-ink sm:text-3xl">{scheduledEvaluations.length}</dd>
                         </div>
-                        <div className="rounded-[1.25rem] border border-[rgba(0,0,0,0.06)] bg-[#FAF7F4] p-4">
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Pending Invites</p>
-                            <p className="mt-2 text-3xl font-semibold text-[#2D2A26]">{pendingInvites.length}</p>
+                        <div className="min-w-0 border-l border-line p-3 sm:p-4">
+                            <dt className="text-[10px] uppercase tracking-[0.12em] text-ink-muted sm:text-[11px] sm:tracking-[0.16em]">Pending invites</dt>
+                            <dd className="mt-1 font-mono text-2xl font-semibold text-ink sm:text-3xl">{pendingInvites.length}</dd>
                         </div>
-                    </div>
+                    </dl>
                 </div>
             </section>
 
@@ -261,23 +259,23 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             ) : null}
 
             {competitionInviteToken ? (
-                <section className="rounded-[1.5rem] border border-[rgba(0,0,0,0.06)] bg-white p-5">
+                <section className="rounded-[1.5rem] border border-line bg-surface p-5 shadow-sm">
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div className="max-w-3xl">
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-[#6B9E8A]">Invite Link</p>
-                            <h3 className="mt-2 text-xl font-semibold text-[#2D2A26]">
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-accent">Invite Link</p>
+                            <h2 className="mt-2 text-xl font-semibold text-ink">
                                 {invitePreviewLoading ? 'Loading competition...' : invitePreview?.competition.title || 'Competition invite'}
-                            </h3>
-                            <p className="mt-2 text-sm leading-relaxed text-[#7A756E]">
+                            </h2>
+                            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
                                 {invitePreview?.competition.description || 'Open this invite to join the next scheduled competition.'}
                             </p>
                             {invitePreview ? (
-                                <p className="mt-3 text-xs text-[#A8A29E]">
+                                <p className="mt-3 text-xs text-ink-muted">
                                     Starts {formatISODateForDisplay(invitePreview.competition.startDate, 'en-US', { month: 'short', day: 'numeric' })} and runs through {formatISODateForDisplay(invitePreview.competition.endDate, 'en-US', { month: 'short', day: 'numeric' })}.
                                 </p>
                             ) : null}
                             {invitePreviewError ? (
-                                <p className="mt-3 text-xs text-[#D4897B]">{invitePreviewError}</p>
+                                <p className="mt-3 text-xs text-error">{invitePreviewError}</p>
                             ) : null}
                         </div>
 
@@ -287,20 +285,20 @@ const CompeteView: React.FC<CompeteViewProps> = ({
                                     type="button"
                                     onClick={handleAcceptLinkInvite}
                                     disabled={isAcceptingTokenInvite}
-                                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#6B9E8A] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
                                 >
                                     <Check className="h-4 w-4" />
                                     {isAcceptingTokenInvite ? 'Joining...' : 'Join Competition'}
                                 </button>
                             ) : (
-                                <div className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[rgba(107,158,138,0.2)] bg-[rgba(107,158,138,0.08)] px-5 py-3 text-sm font-semibold text-[#6B9E8A]">
+                                <div className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-accent/30 bg-accent-soft px-5 py-3 text-sm font-semibold text-accent">
                                     Already joined
                                 </div>
                             )}
                             <button
                                 type="button"
                                 onClick={onClearCompetitionInviteToken}
-                                className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[rgba(0,0,0,0.08)] px-5 py-3 text-sm font-medium text-[#2D2A26] transition-colors hover:bg-[#FAF7F4]"
+                                className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-line px-5 py-3 text-sm font-medium text-ink transition-colors hover:bg-surface-raised"
                             >
                                 Dismiss
                             </button>
@@ -312,8 +310,8 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             <section>
                 <div className="flex items-center justify-between gap-3">
                     <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Templates</p>
-                        <h3 className="mt-2 text-xl font-semibold text-[#2D2A26]">Launch a proven format fast</h3>
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Templates</p>
+                        <h2 className="mt-2 text-xl font-semibold text-ink">Start from a template</h2>
                     </div>
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -322,20 +320,20 @@ const CompeteView: React.FC<CompeteViewProps> = ({
                             key={template.id}
                             type="button"
                             onClick={() => handleOpenBuilder(template)}
-                            className="rounded-[1.35rem] border border-[rgba(0,0,0,0.06)] bg-white p-4 text-left transition-colors hover:border-[rgba(107,158,138,0.25)]"
+                            className="rounded-[1.35rem] border border-line bg-surface-raised p-4 text-left transition-colors hover:border-accent/30"
                         >
                             <div className="flex items-center justify-between gap-3">
                                 <span
                                     className="inline-flex h-9 w-9 items-center justify-center rounded-full"
                                     style={{ backgroundColor: `${template.accentColor}22`, color: template.accentColor }}
                                 >
-                                    <Sparkles className="h-4 w-4" />
+                                    <Trophy className="h-4 w-4" />
                                 </span>
-                                <span className="text-[11px] uppercase tracking-[0.14em] text-[#A8A29E]">{template.format}</span>
+                                <span className="text-[11px] uppercase tracking-[0.14em] text-ink-muted">{template.format}</span>
                             </div>
-                            <h4 className="mt-4 text-lg font-semibold text-[#2D2A26]">{template.title}</h4>
-                            <p className="mt-2 text-sm leading-relaxed text-[#7A756E]">{template.description}</p>
-                            <div className="mt-4 inline-flex items-center gap-2 text-xs font-medium text-[#6B9E8A]">
+                            <h3 className="mt-4 text-lg font-semibold text-ink">{template.title}</h3>
+                            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">{template.description}</p>
+                            <div className="mt-4 inline-flex items-center gap-2 text-xs font-medium text-accent">
                                 <CalendarPlus className="h-3.5 w-3.5" />
                                 Starts tomorrow
                             </div>
@@ -347,17 +345,17 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             {pendingInvites.length > 0 ? (
                 <section className="space-y-3">
                     <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Pending For You</p>
-                        <h3 className="mt-2 text-xl font-semibold text-[#2D2A26]">Accept or pass on incoming invites</h3>
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Pending For You</p>
+                        <h2 className="mt-2 text-xl font-semibold text-ink">Accept or pass on incoming invites</h2>
                     </div>
                     {pendingInvites.map((competition) => (
-                        <div key={competition.id} className="rounded-[1.35rem] border border-[rgba(0,0,0,0.08)] bg-white p-4 sm:p-5">
+                        <div key={competition.id} className="rounded-[1.35rem] border border-line bg-surface p-4 shadow-sm sm:p-5">
                             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                                 <div className="max-w-3xl">
-                                    <p className="text-[11px] uppercase tracking-[0.16em] text-[#6B9E8A]">Invited</p>
-                                    <h4 className="mt-2 text-lg font-semibold text-[#2D2A26]">{competition.title}</h4>
-                                    <p className="mt-2 text-sm leading-relaxed text-[#7A756E]">{competition.description}</p>
-                                    <p className="mt-3 text-xs text-[#A8A29E]">
+                                    <p className="text-[11px] uppercase tracking-[0.16em] text-accent">Invited</p>
+                                    <h3 className="mt-2 text-lg font-semibold text-ink">{competition.title}</h3>
+                                    <p className="mt-2 text-sm leading-relaxed text-ink-secondary">{competition.description}</p>
+                                    <p className="mt-3 text-xs text-ink-muted">
                                         Starts {formatISODateForDisplay(competition.startDate, 'en-US', { month: 'short', day: 'numeric' })} and runs for{' '}
                                         {formatISODateForDisplay(competition.endDate, 'en-US', { month: 'short', day: 'numeric' })}.
                                     </p>
@@ -367,7 +365,7 @@ const CompeteView: React.FC<CompeteViewProps> = ({
                                         type="button"
                                         onClick={() => handleRespondToInvite(competition.id, 'accepted')}
                                         disabled={isRespondingCompetitionId === competition.id}
-                                        className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#6B9E8A] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                                        className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
                                     >
                                         <Check className="h-4 w-4" />
                                         Join
@@ -376,7 +374,7 @@ const CompeteView: React.FC<CompeteViewProps> = ({
                                         type="button"
                                         onClick={() => handleRespondToInvite(competition.id, 'declined')}
                                         disabled={isRespondingCompetitionId === competition.id}
-                                        className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-[rgba(0,0,0,0.08)] px-5 py-3 text-sm font-medium text-[#2D2A26] transition-colors hover:bg-[#FAF7F4] disabled:opacity-60"
+                                        className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-line px-5 py-3 text-sm font-medium text-ink transition-colors hover:bg-surface-raised disabled:opacity-60"
                                     >
                                         Decline
                                     </button>
@@ -388,27 +386,27 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             ) : null}
 
             {isLoading ? (
-                <div className="rounded-[1.25rem] border border-[rgba(0,0,0,0.06)] bg-white px-4 py-5 text-sm text-[#7A756E]">
+                <div className="rounded-[1.25rem] border border-line bg-surface px-4 py-5 text-sm text-ink-secondary shadow-sm">
                     Loading competitions...
                 </div>
             ) : null}
 
             {error ? (
-                <div className="rounded-[1.35rem] border border-[rgba(212,137,123,0.2)] bg-white p-5 sm:p-6">
+                <div className="rounded-[1.35rem] border border-error/20 bg-surface p-5 sm:p-6">
                     <div className="flex flex-col items-center text-center gap-4 sm:flex-row sm:items-start sm:text-left">
-                        <span className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[rgba(212,137,123,0.1)]">
-                            <AlertTriangle className="h-5 w-5 text-[#D4897B]" />
+                        <span className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-error-soft">
+                            <AlertTriangle className="h-5 w-5 text-error" />
                         </span>
                         <div className="flex-1 min-w-0">
-                            <h4 className="text-base font-semibold text-[#2D2A26]">Couldn't load competitions</h4>
-                            <p className="mt-1 text-sm leading-relaxed text-[#7A756E]">
-                                {error} This is usually temporary — your competitions and progress are safe.
+                            <h2 className="text-base font-semibold text-ink">Couldn't load competitions</h2>
+                            <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
+                                {error} This is usually temporary. Try again to load saved competitions and progress.
                             </p>
                         </div>
                         <button
                             type="button"
                             onClick={() => window.location.reload()}
-                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[rgba(0,0,0,0.08)] px-4 py-2.5 text-sm font-medium text-[#2D2A26] transition-colors hover:bg-[#FAF7F4] flex-shrink-0"
+                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-line px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-surface-raised flex-shrink-0"
                         >
                             <RefreshCw className="h-4 w-4" />
                             Try again
@@ -420,8 +418,8 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             {activeEvaluations.length > 0 ? (
                 <section className="space-y-4">
                     <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Active</p>
-                        <h3 className="mt-2 text-xl font-semibold text-[#2D2A26]">Happening right now</h3>
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Active</p>
+                        <h2 className="mt-2 text-xl font-semibold text-ink">Happening right now</h2>
                     </div>
                     {activeEvaluations.map((evaluation) => (
                         <CompetitionCard
@@ -441,8 +439,8 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             {scheduledEvaluations.length > 0 ? (
                 <section className="space-y-4">
                     <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">Scheduled</p>
-                        <h3 className="mt-2 text-xl font-semibold text-[#2D2A26]">Starts next</h3>
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Scheduled</p>
+                        <h2 className="mt-2 text-xl font-semibold text-ink">Starts next</h2>
                     </div>
                     {scheduledEvaluations.map((evaluation) => (
                         <CompetitionCard
@@ -462,8 +460,8 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             {completedEvaluations.length > 0 ? (
                 <section className="space-y-4">
                     <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-[#A8A29E]">History</p>
-                        <h3 className="mt-2 text-xl font-semibold text-[#2D2A26]">Recently completed</h3>
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">History</p>
+                        <h2 className="mt-2 text-xl font-semibold text-ink">Recently completed</h2>
                     </div>
                     {completedEvaluations.map((evaluation) => (
                         <CompetitionCard
@@ -481,16 +479,16 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             ) : null}
 
             {!isLoading && !error && activeEvaluations.length === 0 && scheduledEvaluations.length === 0 && completedEvaluations.length === 0 ? (
-                <div className="rounded-[1.5rem] border border-dashed border-[rgba(0,0,0,0.10)] bg-white px-5 py-8 text-center">
-                    <h3 className="text-xl font-semibold text-[#2D2A26]">No competitions yet</h3>
-                    <p className="mt-3 text-sm leading-relaxed text-[#7A756E]">
+                <div className="rounded-[1.5rem] border border-dashed border-line-strong bg-surface px-5 py-8 text-center">
+                    <h2 className="text-xl font-semibold text-ink">No rivalries on the books yet</h2>
+                    <p className="mt-3 text-sm leading-relaxed text-ink-secondary">
                         Start with a solo goal or create a friend competition that starts tomorrow.
                     </p>
                     <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
                         <button
                             type="button"
                             onClick={() => handleOpenBuilder(COMPETITION_TEMPLATES.find((template) => template.mode === 'solo') || null, 'solo')}
-                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#6B9E8A] px-5 py-3 text-sm font-semibold text-white"
+                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3 text-sm font-semibold text-white"
                         >
                             <Flag className="h-4 w-4" />
                             Create Solo Goal
@@ -498,7 +496,7 @@ const CompeteView: React.FC<CompeteViewProps> = ({
                         <button
                             type="button"
                             onClick={() => handleOpenBuilder(COMPETITION_TEMPLATES.find((template) => template.mode === 'friends') || null, 'friends')}
-                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-[rgba(0,0,0,0.08)] px-5 py-3 text-sm font-medium text-[#2D2A26]"
+                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-line px-5 py-3 text-sm font-medium text-ink"
                         >
                             <Users className="h-4 w-4" />
                             Challenge Friends
