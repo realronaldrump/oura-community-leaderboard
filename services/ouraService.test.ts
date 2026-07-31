@@ -61,4 +61,70 @@ describe('Oura data retry policy', () => {
         expect(localStorage.getItem('oura_unavailable_endpoints_v5') || '').not.toContain(accessToken.slice(0, 20));
         expect(JSON.stringify(warn.mock.calls)).not.toContain(accessToken.slice(0, 20));
     });
+
+    it('fetches every heart-rate window requested for a full-history range', async () => {
+        const fetchMock = vi.fn(async (_url: string | URL | Request) => new Response(JSON.stringify({
+            data: [],
+            next_token: null,
+        }), { status: 200 }));
+        vi.stubGlobal('fetch', fetchMock);
+
+        await ouraService.getHeartRate(
+            'access-token',
+            '2026-01-01',
+            '2026-03-15',
+            { availabilityKey: 'profile-1' },
+        );
+
+        const requestedUrls = fetchMock.mock.calls.map(([url]) => decodeURIComponent(String(url)));
+        expect(requestedUrls).toHaveLength(3);
+        expect(requestedUrls[0]).toContain('start_datetime=2026-01-01T00:00:00');
+        expect(requestedUrls.at(-1)).toContain('end_datetime=2026-03-15T23:59:59');
+    });
+
+    it('fetches ring battery history from the current Oura collection', async () => {
+        const fetchMock = vi.fn(async (_url: string | URL | Request) => new Response(JSON.stringify({
+            data: [{
+                timestamp: '2026-03-15T12:00:00Z',
+                timestamp_unix: 1_773_573_600_000,
+                level: 74,
+                charging: false,
+                in_charger: false,
+            }],
+            next_token: null,
+        }), { status: 200 }));
+        vi.stubGlobal('fetch', fetchMock);
+
+        await expect(ouraService.getRingBatteryLevel(
+            'access-token',
+            '2026-03-01',
+            '2026-03-15',
+            { availabilityKey: 'profile-1' },
+        )).resolves.toEqual([
+            expect.objectContaining({ level: 74 }),
+        ]);
+
+        expect(decodeURIComponent(String(fetchMock.mock.calls[0][0])))
+            .toContain('/ring_battery_level?start_datetime=2026-03-01T00:00:00');
+    });
+
+    it('records an optional endpoint scope denial without aborting the rest of a sync', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+            detail: 'Not authorized access: missing scope daily',
+        }), { status: 401 })));
+
+        await expect(ouraService.getDailyStress(
+            'access-token',
+            '2026-03-01',
+            '2026-03-02',
+            { availabilityKey: 'scope-denial-profile' },
+        )).resolves.toEqual([]);
+
+        expect(ouraService.getEndpointDiagnostic(
+            'access-token',
+            'daily_stress',
+            'scope-denial-profile',
+        )).toMatchObject({ code: 'missing_scope', status: 401 });
+    });
 });

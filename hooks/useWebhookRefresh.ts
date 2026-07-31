@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { UserProfile, WebhookSignal } from '../types';
+import { DailyStats, UserProfile, WebhookSignal } from '../types';
 import { firebaseService } from '../services/firebaseService';
+import { deleteStoredOuraRecord } from '../services/firestoreStatsService';
 import { webhookService } from '../services/webhookService';
+import { removeDeletedOuraRecord } from '../utils/ouraWebhook';
 
 const WEBHOOK_SETUP_CHECK_KEY = 'oura_webhook_setup_checked_at';
 const WEBHOOK_SETUP_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h
@@ -77,7 +79,27 @@ export const useWebhookRefresh = (profile: UserProfile | null, enabled: boolean 
             }
 
             invalidateTimerRef.current = setTimeout(() => {
-                queryClient.invalidateQueries({ queryKey: ['dailyStats', profile.id], exact: true });
+                const invalidate = () => {
+                    queryClient.invalidateQueries({ queryKey: ['dailyStats', profile.id], exact: true });
+                };
+                const isDelete = signal.lastEventType === 'delete';
+                const dataType = signal.lastDataType;
+                const objectId = signal.lastObjectId;
+                if (isDelete && dataType && objectId) {
+                    const removeFromCache = (current: DailyStats | undefined) => (
+                        current ? removeDeletedOuraRecord(current, dataType, objectId) : current
+                    );
+                    queryClient.setQueryData(['dailyStats', profile.id], removeFromCache);
+                    queryClient.setQueryData(['allTimeStats', profile.id], removeFromCache);
+                    void deleteStoredOuraRecord(profile.id, dataType, objectId)
+                        .catch((error) => {
+                            console.warn('Webhook delete reconciliation failed:', error);
+                        })
+                        .finally(invalidate);
+                    return;
+                }
+
+                invalidate();
             }, WEBHOOK_INVALIDATE_DEBOUNCE_MS);
         };
 

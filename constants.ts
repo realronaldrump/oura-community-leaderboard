@@ -13,7 +13,7 @@ const REQUESTED_SCOPES: string[] = [
   'workout',
   'session',
   'tag',
-  'spo2',
+  'spo2Daily',
 ];
 
 // Dynamically determine the redirect URI based on the current environment.

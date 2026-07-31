@@ -4,13 +4,14 @@ import {
   DailyReadiness,
   DailySleep,
   SleepSession,
-  UserProfile,
+  OuraPersonalInfo,
   HeartRate,
   DailySpO2,
   Workout,
   DailyStress,
   DailyResilience,
-  OuraEndpointDiagnostic
+  OuraEndpointDiagnostic,
+  RingBatteryLevel
 } from '../types';
 import { formatLocalISODate, getOuraFetchEndISODate } from '../utils/date';
 
@@ -319,18 +320,6 @@ class OuraService {
     this.persistUnavailableCache();
   }
 
-  private clampDateWindow(startDate: string, endDate: string, maxDays: number): string {
-    const start = this.parseDay(startDate);
-    const end = this.parseDay(endDate);
-    if (!start || !end) return startDate;
-
-    const maxRangeMs = maxDays * 24 * 60 * 60 * 1000;
-    if (end.getTime() - start.getTime() <= maxRangeMs) return startDate;
-
-    const clamped = new Date(end.getTime() - maxRangeMs);
-    return this.formatDay(clamped);
-  }
-
   private parseDay(day: string): Date | null {
     const parsed = new Date(`${day}T00:00:00Z`);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
@@ -570,7 +559,7 @@ class OuraService {
       if (!response.ok) {
         const detail = await this.readErrorDetail(response);
 
-        if (optional && [403, 404].includes(response.status)) {
+        if (optional && ([403, 404].includes(response.status) || this.isMissingScopeError(response.status, detail))) {
           const code = this.optionalEndpointFailureCode(response.status, detail);
           this.logOptionalEndpointFailure(availabilityKey, endpoint, response.status, detail);
           if (code === 'missing_scope') {
@@ -649,7 +638,46 @@ class OuraService {
     return chunksByWindow.flat();
   }
 
-  async getPersonalInfo(token: string): Promise<UserProfile> {
+  private async fetchDateTimeWindowed<T>(
+    token: string,
+    endpoint: string,
+    startDate: string,
+    endDate: string,
+    options?: DateWindowOptions
+  ): Promise<T[]> {
+    const availabilityKey = this.getAvailabilityKey(token, options?.availabilityKey);
+    this.clearEndpointDiagnostic(availabilityKey, endpoint);
+    const windows = this.splitDateRange(startDate, endDate, options?.windowDays ?? this.maxWindowDays);
+    const chunksByWindow: T[][] = new Array(windows.length);
+    let nextWindowIndex = 0;
+
+    const worker = async () => {
+      while (true) {
+        const index = nextWindowIndex;
+        nextWindowIndex += 1;
+        if (index >= windows.length) return;
+
+        const window = windows[index];
+        chunksByWindow[index] = await this.fetchPaginated<T>(
+          token,
+          endpoint,
+          {
+            start_datetime: `${window.start}T00:00:00`,
+            end_datetime: `${window.end}T23:59:59`,
+          },
+          { optional: options?.optional, availabilityKey: options?.availabilityKey }
+        );
+      }
+    };
+
+    const maxWorkersForRequest = options?.optional ? 1 : this.maxConcurrentWindowRequests;
+    const workerCount = Math.min(maxWorkersForRequest, windows.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+    return chunksByWindow.flat();
+  }
+
+  async getPersonalInfo(token: string): Promise<OuraPersonalInfo> {
     let response: Response;
     try {
       response = await this.fetchWithRetry(`${API_BASE_URL}/personal_info`, {
@@ -696,16 +724,12 @@ class OuraService {
 
   async getHeartRate(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<HeartRate[]> {
     const { start_date, end_date } = this.getDateRange(start || 2, end);
-    // Oura heartrate timeseries can reject very large windows; keep this to recent history.
-    const clampedStartDate = this.clampDateWindow(start_date, end_date, 30);
-    return this.fetchPaginated<HeartRate>(
+    return this.fetchDateTimeWindowed<HeartRate>(
       token,
       'heartrate',
-      {
-        start_datetime: `${clampedStartDate}T00:00:00`,
-        end_datetime: `${end_date}T23:59:59`,
-      },
-      { optional: true, availabilityKey: options?.availabilityKey }
+      start_date,
+      end_date,
+      { optional: true, availabilityKey: options?.availabilityKey, windowDays: 30 }
     );
   }
 
@@ -786,6 +810,17 @@ class OuraService {
       optional: true,
       availabilityKey: options?.availabilityKey,
     });
+  }
+
+  async getRingBatteryLevel(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<RingBatteryLevel[]> {
+    const { start_date, end_date } = this.getDateRange(start || 30, end);
+    return this.fetchDateTimeWindowed<RingBatteryLevel>(
+      token,
+      'ring_battery_level',
+      start_date,
+      end_date,
+      { optional: true, availabilityKey: options?.availabilityKey, windowDays: 30 }
+    );
   }
 
   async getDailyCardiovascularAge(token: string, start?: string, end?: string, options?: { availabilityKey?: string }): Promise<any[]> {

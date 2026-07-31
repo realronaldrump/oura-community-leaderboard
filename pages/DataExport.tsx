@@ -2,7 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Download, FileText, Database, TrendingUp, AlertCircle, Heart, Activity, Moon, Zap, Wind, RefreshCw } from 'lucide-react';
 import Papa from 'papaparse';
 import { useUser } from '../contexts/UserContext';
-import { getStoredDailyStats } from '../services/firestoreStatsService';
+import {
+    getProfileStatsMetadata,
+    getStoredDailyStats,
+    type ProfileStatsMetadata,
+} from '../services/firestoreStatsService';
 import { DailyStats } from '../types';
 import { formatISODateForDisplay } from '../utils/date';
 import { filterDailyStatsForProfile, getTotalExcludedDayCount } from '../utils/dataExclusions';
@@ -18,6 +22,12 @@ import {
     getNightlyVitalsRows,
     getSessionDays,
 } from '../utils/exportData';
+import {
+    buildCompleteOuraExport,
+    createComprehensiveCsv,
+    OURA_COLLECTION_NAMES,
+    type OuraCollectionName,
+} from '../utils/ouraExport';
 
 const METERS_TO_MILES = 0.000621371;
 const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
@@ -27,6 +37,8 @@ const toMiles = (meters: number | null | undefined): number | '' =>
 
 const toFahrenheitDelta = (celsiusDelta: number | null | undefined): number | '' =>
     celsiusDelta == null ? '' : Number((celsiusDelta * CELSIUS_DELTA_TO_FAHRENHEIT_DELTA).toFixed(2));
+
+const safeUnparse = (rows: unknown[]): string => Papa.unparse(rows, { escapeFormulae: true });
 
 const downloadCSV = (csvContent: string, filename: string) => {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -41,10 +53,32 @@ const downloadCSV = (csvContent: string, filename: string) => {
     URL.revokeObjectURL(url);
 };
 
+const downloadJSON = (value: unknown, filename: string) => {
+    const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+};
+
+const humanizeCollectionName = (name: OuraCollectionName): string => (
+    name
+        .replace('vO2', 'VO2')
+        .split('_')
+        .map((part) => part === 'VO2' ? part : `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+        .join(' ')
+);
+
 const DataExport: React.FC = () => {
     const { activeProfile } = useUser();
     const [isLoading, setIsLoading] = useState(true);
     const [data, setData] = useState<DailyStats | null>(null);
+    const [metadata, setMetadata] = useState<ProfileStatsMetadata | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [selectedRange, setSelectedRange] = useState<ExportDateRange | null>(null);
 
@@ -52,8 +86,14 @@ const DataExport: React.FC = () => {
         if (!activeProfile) return;
         setIsLoading(true);
         setError(null);
-        getStoredDailyStats(activeProfile.id)
-            .then(setData)
+        Promise.all([
+            getStoredDailyStats(activeProfile.id),
+            getProfileStatsMetadata(activeProfile.id),
+        ])
+            .then(([storedData, storedMetadata]) => {
+                setData(storedData);
+                setMetadata(storedMetadata);
+            })
             .catch(() => setError('Failed to load synced data. Try syncing again from the dashboard.'))
             .finally(() => setIsLoading(false));
     }, [activeProfile?.id]);
@@ -66,7 +106,14 @@ const DataExport: React.FC = () => {
         () => getTotalExcludedDayCount(activeProfile?.dataExclusionRanges),
         [activeProfile?.dataExclusionRanges]
     );
-    const availableRange = useMemo(() => (analysisData ? getAvailableExportRange(analysisData) : null), [analysisData]);
+    const availableRange = useMemo(
+        () => (analysisData ? getAvailableExportRange(analysisData, activeProfile?.lastKnownUtcOffsetMinutes) : null),
+        [activeProfile?.lastKnownUtcOffsetMinutes, analysisData],
+    );
+    const completeBundle = useMemo(
+        () => (data && activeProfile ? buildCompleteOuraExport({ data, profile: activeProfile, metadata }) : null),
+        [activeProfile, data, metadata],
+    );
 
     useEffect(() => {
         if (!availableRange) {
@@ -119,7 +166,10 @@ const DataExport: React.FC = () => {
         [analysisData?.cardiovascularAge, effectiveRange],
     );
     const vo2MaxRows = useMemo(() => filterByDayRange(analysisData?.vo2Max as any[] | undefined, effectiveRange), [analysisData?.vo2Max, effectiveRange]);
-    const heartrateRows = useMemo(() => filterHeartRateByRange(analysisData?.heartrate, effectiveRange), [analysisData?.heartrate, effectiveRange]);
+    const heartrateRows = useMemo(
+        () => filterHeartRateByRange(analysisData?.heartrate, effectiveRange, activeProfile?.lastKnownUtcOffsetMinutes),
+        [activeProfile?.lastKnownUtcOffsetMinutes, analysisData?.heartrate, effectiveRange],
+    );
     const workoutRows = useMemo(() => filterByDayRange(analysisData?.workout as any[] | undefined, effectiveRange), [analysisData?.workout, effectiveRange]);
     const tagRows = useMemo(() => filterTagItemsByRange(analysisData?.tag as any[] | undefined, effectiveRange), [analysisData?.tag, effectiveRange]);
     const enhancedTagRows = useMemo(
@@ -154,7 +204,7 @@ const DataExport: React.FC = () => {
         const csvData = sleepRows.map((item) => ({
             date: item.day,
             sleep_score: item.score ?? '',
-            total_sleep_duration: item.contributors?.total_sleep ?? '',
+            total_sleep_contributor_score: item.contributors?.total_sleep ?? '',
             efficiency: item.contributors?.efficiency ?? '',
             restfulness: item.contributors?.restfulness ?? '',
             rem_sleep: item.contributors?.rem_sleep ?? '',
@@ -163,7 +213,7 @@ const DataExport: React.FC = () => {
             timing: item.contributors?.timing ?? '',
             timestamp: item.timestamp ?? '',
         }));
-        const csv = Papa.unparse(csvData);
+        const csv = safeUnparse(csvData);
         downloadCSV(csv, 'sleep_scores.csv');
     };
 
@@ -180,11 +230,13 @@ const DataExport: React.FC = () => {
             body_temperature: item.contributors?.body_temperature ?? '',
             activity_balance: item.contributors?.activity_balance ?? '',
             previous_day_activity: item.contributors?.previous_day_activity ?? '',
+            temperature_deviation_c: item.temperature_deviation ?? '',
             temperature_deviation_f: toFahrenheitDelta(item.temperature_deviation),
+            temperature_trend_deviation_c: item.temperature_trend_deviation ?? '',
             temperature_trend_deviation_f: toFahrenheitDelta(item.temperature_trend_deviation),
             timestamp: item.timestamp ?? '',
         }));
-        downloadCSV(Papa.unparse(csvData), 'readiness_scores.csv');
+        downloadCSV(safeUnparse(csvData), 'readiness_scores.csv');
     };
 
     const generateActivityCSV = () => {
@@ -201,9 +253,12 @@ const DataExport: React.FC = () => {
             steps: item.steps ?? '',
             active_calories: item.active_calories ?? '',
             total_calories: item.total_calories ?? '',
+            equivalent_walking_distance_m: item.equivalent_walking_distance ?? '',
             equivalent_walking_distance_miles: toMiles(item.equivalent_walking_distance),
             target_calories: item.target_calories ?? '',
+            target_meters: item.target_meters ?? '',
             target_miles: toMiles(item.target_meters),
+            meters_to_target: item.meters_to_target ?? '',
             miles_to_target: toMiles(item.meters_to_target),
             high_activity_met_minutes: item.high_activity_met_minutes ?? '',
             medium_activity_met_minutes: item.medium_activity_met_minutes ?? '',
@@ -218,7 +273,7 @@ const DataExport: React.FC = () => {
             average_met_minutes: item.average_met_minutes ?? '',
             timestamp: item.timestamp ?? '',
         }));
-        downloadCSV(Papa.unparse(csvData), 'activity_scores.csv');
+        downloadCSV(safeUnparse(csvData), 'activity_scores.csv');
     };
 
     const generateSleepSessionsCSV = () => {
@@ -244,17 +299,17 @@ const DataExport: React.FC = () => {
             sleep_score_delta: item.sleep_score_delta ?? '',
             readiness_score_delta: item.readiness_score_delta ?? '',
         }));
-        downloadCSV(Papa.unparse(csvData), 'sleep_sessions.csv');
+        downloadCSV(safeUnparse(csvData), 'sleep_sessions.csv');
     };
 
     const generateNightlyRestingHeartRateCSV = () => {
         if (!nightlyRestingHeartRateRows.length) return;
-        downloadCSV(Papa.unparse(nightlyRestingHeartRateRows), 'nightly_resting_heart_rate.csv');
+        downloadCSV(safeUnparse(nightlyRestingHeartRateRows), 'nightly_lowest_heart_rate.csv');
     };
 
     const generateNightlyVitalsCSV = () => {
         if (!nightlyVitalsRows.length) return;
-        downloadCSV(Papa.unparse(nightlyVitalsRows), 'nightly_vitals.csv');
+        downloadCSV(safeUnparse(nightlyVitalsRows), 'nightly_vitals.csv');
     };
 
     const generateSpO2CSV = () => {
@@ -264,7 +319,7 @@ const DataExport: React.FC = () => {
             spo2_average: item.spo2_percentage?.average ?? '',
             breathing_disturbance_index: item.breathing_disturbance_index ?? '',
         }));
-        downloadCSV(Papa.unparse(csvData), 'spo2.csv');
+        downloadCSV(safeUnparse(csvData), 'spo2.csv');
     };
 
     const generateStressCSV = () => {
@@ -275,7 +330,7 @@ const DataExport: React.FC = () => {
             recovery_high_s: item.recovery_high ?? '',
             day_summary: item.day_summary ?? '',
         }));
-        downloadCSV(Papa.unparse(csvData), 'daily_stress.csv');
+        downloadCSV(safeUnparse(csvData), 'daily_stress.csv');
     };
 
     const generateResilienceCSV = () => {
@@ -287,7 +342,7 @@ const DataExport: React.FC = () => {
             daytime_recovery: item.contributors?.daytime_recovery ?? '',
             stress: item.contributors?.stress ?? '',
         }));
-        downloadCSV(Papa.unparse(csvData), 'resilience.csv');
+        downloadCSV(safeUnparse(csvData), 'resilience.csv');
     };
 
     const generateCardiovascularAgeCSV = () => {
@@ -295,8 +350,9 @@ const DataExport: React.FC = () => {
         const csvData = cardiovascularAgeRows.map((item) => ({
             date: item.day,
             vascular_age: item.vascular_age ?? '',
+            pulse_wave_velocity_m_per_s: item.pulse_wave_velocity ?? '',
         }));
-        downloadCSV(Papa.unparse(csvData), 'cardiovascular_age.csv');
+        downloadCSV(safeUnparse(csvData), 'cardiovascular_age.csv');
     };
 
     const generateVO2MaxCSV = () => {
@@ -306,17 +362,18 @@ const DataExport: React.FC = () => {
             vo2_max: item.vo2_max ?? '',
             timestamp: item.timestamp ?? '',
         }));
-        downloadCSV(Papa.unparse(csvData), 'vo2_max.csv');
+        downloadCSV(safeUnparse(csvData), 'vo2_max.csv');
     };
 
     const generateHeartrateCSV = () => {
         if (!heartrateRows.length) return;
         const csvData = heartrateRows.map((item) => ({
             timestamp: item.timestamp,
+            timestamp_unix_ms: item.timestamp_unix ?? '',
             bpm: item.bpm,
             source: item.source,
         }));
-        downloadCSV(Papa.unparse(csvData), 'heart_rate.csv');
+        downloadCSV(safeUnparse(csvData), 'heart_rate.csv');
     };
 
     const generateWorkoutsCSV = () => {
@@ -328,11 +385,12 @@ const DataExport: React.FC = () => {
             end_datetime: item.end_datetime ?? '',
             intensity: item.intensity ?? '',
             calories: item.calories ?? '',
+            distance_m: item.distance ?? '',
             distance_miles: toMiles(item.distance),
             source: item.source ?? '',
             label: item.label ?? '',
         }));
-        downloadCSV(Papa.unparse(csvData), 'workouts.csv');
+        downloadCSV(safeUnparse(csvData), 'workouts.csv');
     };
 
     const generateTagsCSV = () => {
@@ -345,7 +403,7 @@ const DataExport: React.FC = () => {
             end_time: item.end_time ?? '',
             comment: item.comment ?? '',
         }));
-        downloadCSV(Papa.unparse(csvData), 'tags.csv');
+        downloadCSV(safeUnparse(csvData), 'tags.csv');
     };
 
     const generateAllDailyCSV = () => {
@@ -374,7 +432,7 @@ const DataExport: React.FC = () => {
             return {
                 date,
                 sleep_score: sleep?.score ?? '',
-                sleep_total_sleep: sleep?.contributors?.total_sleep ?? '',
+                sleep_total_sleep_contributor_score: sleep?.contributors?.total_sleep ?? '',
                 sleep_efficiency: sleep?.contributors?.efficiency ?? '',
                 sleep_restfulness: sleep?.contributors?.restfulness ?? '',
                 sleep_rem_sleep: sleep?.contributors?.rem_sleep ?? '',
@@ -390,7 +448,9 @@ const DataExport: React.FC = () => {
                 readiness_body_temperature: readiness?.contributors?.body_temperature ?? '',
                 readiness_activity_balance: readiness?.contributors?.activity_balance ?? '',
                 readiness_previous_day_activity: readiness?.contributors?.previous_day_activity ?? '',
+                readiness_temperature_deviation_c: readiness?.temperature_deviation ?? '',
                 readiness_temperature_deviation_f: toFahrenheitDelta(readiness?.temperature_deviation),
+                readiness_temperature_trend_deviation_c: readiness?.temperature_trend_deviation ?? '',
                 readiness_temperature_trend_deviation_f: toFahrenheitDelta(readiness?.temperature_trend_deviation),
                 sleep_lowest_heart_rate_bpm: session?.lowest_heart_rate ?? '',
                 activity_score: activity?.score ?? '',
@@ -403,6 +463,7 @@ const DataExport: React.FC = () => {
                 activity_steps: activity?.steps ?? '',
                 activity_active_calories: activity?.active_calories ?? '',
                 activity_total_calories: activity?.total_calories ?? '',
+                activity_equivalent_walking_distance_m: activity?.equivalent_walking_distance ?? '',
                 activity_distance_miles: toMiles(activity?.equivalent_walking_distance),
                 spo2_average: spo2?.spo2_percentage?.average ?? '',
                 spo2_breathing_disturbance_index: spo2?.breathing_disturbance_index ?? '',
@@ -414,11 +475,35 @@ const DataExport: React.FC = () => {
                 resilience_daytime_recovery: resilience?.contributors?.daytime_recovery ?? '',
                 resilience_stress: resilience?.contributors?.stress ?? '',
                 cardiovascular_age: cardio?.vascular_age ?? '',
+                cardiovascular_pulse_wave_velocity_m_per_s: cardio?.pulse_wave_velocity ?? '',
                 vo2_max: vo2?.vo2_max ?? '',
             };
         });
-        downloadCSV(Papa.unparse(csvData), 'all_daily_data.csv');
+        downloadCSV(safeUnparse(csvData), 'all_daily_data.csv');
     };
+
+    const generateCompleteJSON = () => {
+        if (!completeBundle) return;
+        downloadJSON(
+            completeBundle,
+            `oura_complete_export_${completeBundle.manifest.exported_at.slice(0, 10)}.json`,
+        );
+    };
+
+    const rawCollectionButtons = completeBundle
+        ? OURA_COLLECTION_NAMES.map((name) => ({
+            name,
+            count: completeBundle.manifest.collection_counts[name],
+            onClick: () => {
+                const source = completeBundle.collections[name];
+                downloadCSV(createComprehensiveCsv(source), `oura_${name}_complete.csv`);
+            },
+        }))
+        : [];
+
+    const endpointWarningCount = completeBundle
+        ? Object.values(completeBundle.manifest.endpoint_diagnostics).filter(Boolean).length
+        : 0;
 
     if (!activeProfile) {
         return (
@@ -471,8 +556,8 @@ const DataExport: React.FC = () => {
             filename: 'activity_scores.csv',
         },
         {
-            label: 'Sleep Sessions',
-            description: 'Raw sleep periods with lowest HR, HRV, stages',
+            label: 'Sleep Session Summary',
+            description: 'Analysis columns for sleep periods; use Complete Raw CSV for every source field',
             icon: <Moon className="w-5 h-5 text-metric-sleep" />,
             color: 'bg-metric-sleep/10',
             count: sleepSessionRows.length,
@@ -480,17 +565,17 @@ const DataExport: React.FC = () => {
             filename: 'sleep_sessions.csv',
         },
         {
-            label: 'Nightly Resting HR',
-            description: 'One row per night with resting heart rate only',
+            label: 'Nightly Lowest HR',
+            description: 'One row per Oura day with the sleep session lowest heart rate',
             icon: <Heart className="w-5 h-5 text-error" />,
             color: 'bg-error/20',
             count: nightlyRestingHeartRateRows.length,
             onClick: generateNightlyRestingHeartRateCSV,
-            filename: 'nightly_resting_heart_rate.csv',
+            filename: 'nightly_lowest_heart_rate.csv',
         },
         {
             label: 'Nightly Vitals',
-            description: 'One row per day with resting HR, HRV, breathing',
+            description: 'One row per Oura day with average/lowest HR, HRV, and breathing',
             icon: <Heart className="w-5 h-5 text-error" />,
             color: 'bg-error/10',
             count: nightlyVitalsRows.length,
@@ -499,7 +584,7 @@ const DataExport: React.FC = () => {
         },
         {
             label: 'Heart Rate',
-            description: 'Time-series HR readings (5-min intervals)',
+            description: 'Time-series HR samples using the profile local offset for range filtering',
             icon: <Heart className="w-5 h-5 text-error" />,
             color: 'bg-error/20',
             count: heartrateRows.length,
@@ -517,7 +602,7 @@ const DataExport: React.FC = () => {
         },
         {
             label: 'Daily Stress',
-            description: 'High stress and recovery minutes per day',
+            description: 'High stress and recovery seconds per day',
             icon: <Zap className="w-5 h-5 text-metric-activity" />,
             color: 'bg-metric-activity/10',
             count: stressRows.length,
@@ -581,7 +666,7 @@ const DataExport: React.FC = () => {
                         Data Export
                     </h1>
                     <p className="text-text-secondary">
-                        Download your synced Oura data as CSV files. Profile ring breaks are excluded from these exports, and no additional API calls are needed.
+                        Download a lossless snapshot of every current Oura V2 collection, or create analysis-ready CSVs from your synced data. No additional API calls are needed.
                     </p>
                 </div>
 
@@ -616,13 +701,65 @@ const DataExport: React.FC = () => {
 
                 {!isLoading && data && (
                     <>
+                        {completeBundle && (
+                            <section className="ui-card ui-card--subtle mb-5 p-4 sm:p-6">
+                                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                                    <div>
+                                        <h2 className="text-xl font-bold text-text-primary mb-1">Complete Raw Export</h2>
+                                        <p className="text-text-secondary text-sm">
+                                            All 19 collections in Oura OpenAPI 1.37, with original IDs, units, nulls, nested samples, and no profile exclusions. Access and refresh tokens are never included.
+                                        </p>
+                                        <p className="text-text-muted text-xs mt-2">
+                                            Snapshot: {completeBundle.manifest.snapshot_status === 'full-sync' ? 'full sync' : 'incremental or unknown'}
+                                            {completeBundle.manifest.snapshot_status === 'full-sync' && completeBundle.manifest.last_full_sync_at
+                                                ? ` · Last full sync ${new Date(completeBundle.manifest.last_full_sync_at).toLocaleString()}`
+                                                : ' · Run a Full Sync for verified full-history coverage'}
+                                            {endpointWarningCount > 0 ? ` · ${endpointWarningCount} endpoint ${endpointWarningCount === 1 ? 'diagnostic' : 'diagnostics'} recorded` : ''}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={generateCompleteJSON}
+                                        className="ui-button ui-button--primary self-start"
+                                    >
+                                        <Download className="w-4 h-4" />
+                                        Download Complete JSON
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-6">
+                                    {rawCollectionButtons.map(({ name, count, onClick }) => (
+                                        <button
+                                            key={name}
+                                            type="button"
+                                            onClick={onClick}
+                                            disabled={count === 0}
+                                            className="ui-card ui-card--default ui-card--interactive flex min-h-11 items-center gap-3 p-4 text-left disabled:cursor-not-allowed disabled:opacity-40"
+                                        >
+                                            <div className="w-10 h-10 bg-accent/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                <FileText className="w-5 h-5 text-accent" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-medium text-text-primary">{humanizeCollectionName(name)}</p>
+                                                <p className="text-xs text-text-muted font-mono">{name}</p>
+                                            </div>
+                                            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                                                <Download className="w-4 h-4 text-text-muted" />
+                                                <span className="text-xs text-text-muted">{count.toLocaleString()} {count === 1 ? 'record' : 'records'}</span>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
                         {availableRange && selectedRange && (
                             <div className="ui-card ui-card--default mb-5 p-4 sm:p-6">
                                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                                     <div>
                                         <h2 className="text-xl font-bold text-text-primary mb-1">Export Range</h2>
                                         <p className="text-text-secondary text-sm">
-                                            Choose the start and end dates for every CSV export on this page.
+                                            Choose the start and end dates for the analysis CSVs below. Complete raw exports always include the entire synced snapshot.
                                         </p>
                                     </div>
                                     <button
@@ -674,10 +811,10 @@ const DataExport: React.FC = () => {
                             </div>
                         )}
 
-                        {/* Individual exports */}
+                        {/* Individual analysis exports */}
                         <section className="ui-card ui-card--subtle mb-5 p-4 sm:p-6">
-                            <h2 className="text-xl font-bold text-text-primary mb-1">Individual Data Types</h2>
-                            <p className="text-text-secondary text-sm mb-6">One CSV per data type.</p>
+                            <h2 className="text-xl font-bold text-text-primary mb-1">Analysis CSVs</h2>
+                            <p className="text-text-secondary text-sm mb-6">Curated, selected-range tables. Profile ring-break exclusions apply only in this section.</p>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 {exportButtons.map((btn) => (
                                     <button

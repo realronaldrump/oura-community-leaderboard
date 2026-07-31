@@ -37,6 +37,15 @@ export interface UserProfile {
   challenges?: ProfileChallenge[];
 }
 
+export interface OuraPersonalInfo {
+  id: string;
+  age?: number | null;
+  weight?: number | null;
+  height?: number | null;
+  biological_sex?: string | null;
+  email?: string | null;
+}
+
 export interface DataExclusionRange {
   id: string;
   startDay: string;
@@ -76,7 +85,7 @@ export interface DailySleep {
 
 export interface SampleModel {
   interval: number;
-  items: number[];
+  items: Array<number | null>;
   timestamp: string;
 }
 
@@ -96,7 +105,13 @@ export interface SleepSession {
   low_battery_alert?: boolean;
   lowest_heart_rate?: number | null; // Actual lowest HR in bpm
   movement_30_sec?: string | null;
+  sleep_phase_30_sec?: string | null;
   period?: number;
+  ring_id?: string | null;
+  app_sleep_phase_5_min?: string | null;
+  sleep_algorithm_version?: string | null;
+  sleep_analysis_reason?: string | null;
+  readiness?: Record<string, unknown> | null;
   readiness_score_delta?: number | null;
   rem_sleep_duration?: number | null; // Duration in seconds
   restless_periods?: number | null;
@@ -188,6 +203,15 @@ export interface HeartRate {
   bpm: number;
   source: 'awake' | 'rest' | 'sleep' | 'session' | 'live' | 'workout';
   timestamp: string;
+  timestamp_unix?: number;
+}
+
+export interface RingBatteryLevel {
+  timestamp: string;
+  timestamp_unix: number;
+  level: number;
+  charging?: boolean | null;
+  in_charger?: boolean | null;
 }
 
 export interface Spo2Percentage {
@@ -269,6 +293,7 @@ export const formatTime = (isoString: string | undefined): string => (
 );
 
 export interface DailyStats {
+  personalInfo?: OuraPersonalInfo | null;
   sleep: DailySleep[];
   readiness: DailyReadiness[];
   activity: DailyActivity[];
@@ -284,7 +309,9 @@ export interface DailyStats {
   enhancedTag?: any[];
   restModePeriod?: any[];
   ringConfiguration?: any[];
+  ringBatteryLevel?: RingBatteryLevel[];
   cardiovascularAge?: any[];
   vo2Max?: any[];
   resilienceDiagnostic?: OuraEndpointDiagnostic | null;
+  endpointDiagnostics?: Record<string, OuraEndpointDiagnostic | null>;
 }

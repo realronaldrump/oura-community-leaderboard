@@ -1,1 +1,1 @@
-export const PROFILE_STATS_SCHEMA_VERSION = 1;
+export const PROFILE_STATS_SCHEMA_VERSION = 2;

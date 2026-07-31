@@ -179,17 +179,20 @@ const Settings: React.FC = () => {
                 }
 
                 const activeSubscriptions = result.subscriptions?.length || 0;
+                const expectedSubscriptions = result.dataTypes.length * (result.eventTypes?.length || 1);
+                const allSubscriptionsActive = activeSubscriptions >= expectedSubscriptions;
                 const details = [
                     `Callback URL: ${result.callbackUrl}`,
                     `Data types: ${result.dataTypes.join(', ')}`,
-                    `Subscriptions active: ${activeSubscriptions}`,
+                    `Event types: ${(result.eventTypes || ['update']).join(', ')}`,
+                    `Subscriptions active: ${activeSubscriptions}/${expectedSubscriptions}`,
                 ];
 
                 setWebhookStatus({
-                    status: activeSubscriptions > 0 ? 'ok' : 'warning',
-                    message: activeSubscriptions > 0
+                    status: allSubscriptionsActive ? 'ok' : 'warning',
+                    message: allSubscriptionsActive
                         ? 'Live webhook updates are enabled.'
-                        : 'Webhook config is ready, but subscriptions are not active yet.',
+                        : 'Webhook config is ready, but some subscriptions are not active yet.',
                     details,
                     checkedAt: new Date().toISOString(),
                 });
@@ -539,10 +542,12 @@ const Settings: React.FC = () => {
             const renewedCount = result.renewed?.length || 0;
             const existingCount = result.existing?.length || 0;
             const totalActive = createdCount + renewedCount + existingCount;
+            const expectedSubscriptions = result.dataTypes.length * (result.eventTypes?.length || 1);
             const details = [
                 `Callback URL: ${result.callbackUrl}`,
                 `Data types: ${result.dataTypes.join(', ')}`,
-                `Subscriptions active: ${totalActive}`,
+                `Event types: ${(result.eventTypes || ['update']).join(', ')}`,
+                `Subscriptions active: ${totalActive}/${expectedSubscriptions}`,
                 `Created: ${createdCount} | Renewed: ${renewedCount} | Existing: ${existingCount}`,
             ];
 

@@ -10,12 +10,18 @@ const collectDefinedDays = (days: Array<string | null | undefined>): string[] =>
 );
 
 const getSessionRelatedDays = (session: SleepSession): string[] => (
-    collectDefinedDays([
-        session.day,
-        session.bedtime_start?.slice(0, 10),
-        session.bedtime_end?.slice(0, 10),
-    ])
+    collectDefinedDays([session.day])
 );
+
+const getOffsetDay = (timestamp: string | null | undefined, offsetMinutes?: number | null): string | null => {
+    if (!timestamp) return null;
+    if (typeof offsetMinutes !== 'number' || !Number.isFinite(offsetMinutes)) {
+        return timestamp.slice(0, 10);
+    }
+    const timestampMs = Date.parse(timestamp);
+    if (!Number.isFinite(timestampMs)) return timestamp.slice(0, 10);
+    return new Date(timestampMs + (offsetMinutes * 60_000)).toISOString().slice(0, 10);
+};
 
 export const isDayWithinRange = (
     day: string | null | undefined,
@@ -37,9 +43,10 @@ export const filterByDayRange = <T extends { day?: string | null }>(
 export const filterHeartRateByRange = (
     items: HeartRate[] | undefined,
     range?: ExportDateRange | null,
+    offsetMinutes?: number | null,
 ): HeartRate[] => {
     if (!items?.length) return [];
-    return items.filter((item) => isDayWithinRange(item.timestamp?.slice(0, 10), range));
+    return items.filter((item) => isDayWithinRange(getOffsetDay(item.timestamp, offsetMinutes), range));
 };
 
 export const filterSleepSessionsByRange = (
@@ -54,16 +61,19 @@ export const filterTagItemsByRange = <T extends {
     day?: string | null;
     start_day?: string | null;
     start_time?: string | null;
+    end_day?: string | null;
+    end_time?: string | null;
 }>(
     items: T[] | undefined,
     range?: ExportDateRange | null,
 ): T[] => {
     if (!items?.length) return [];
-    return items.filter((item) => (
-        isDayWithinRange(item.day, range)
-        || isDayWithinRange(item.start_day, range)
-        || isDayWithinRange(item.start_time?.slice(0, 10), range)
-    ));
+    if (!range) return [...items];
+    return items.filter((item) => {
+        const startDay = item.day || item.start_day || item.start_time?.slice(0, 10);
+        const endDay = item.day || item.end_day || item.end_time?.slice(0, 10) || startDay;
+        return Boolean(startDay && endDay && startDay <= range.end && endDay >= range.start);
+    });
 };
 
 export const getSessionsForDay = (sessions: SleepSession[] | undefined, day: string): SleepSession[] => {
@@ -147,7 +157,7 @@ export const getNightlyRestingHeartRateRows = (data: DailyStats, range?: ExportD
         }, [])
 );
 
-export const getAvailableExportRange = (data: DailyStats): ExportDateRange | null => {
+export const getAvailableExportRange = (data: DailyStats, offsetMinutes?: number | null): ExportDateRange | null => {
     const allDays = collectDefinedDays([
         ...data.sleep.map((item) => item.day),
         ...data.readiness.map((item) => item.day),
@@ -158,17 +168,29 @@ export const getAvailableExportRange = (data: DailyStats): ExportDateRange | nul
         ...data.resilience.map((item) => item.day),
         ...(data.cardiovascularAge as Array<{ day?: string | null }>).map((item) => item.day),
         ...(data.vo2Max as Array<{ day?: string | null }>).map((item) => item.day),
-        ...(data.heartrate ?? []).map((item) => item.timestamp?.slice(0, 10)),
+        ...(data.heartrate ?? []).map((item) => getOffsetDay(item.timestamp, offsetMinutes)),
+        ...(data.ringBatteryLevel ?? []).map((item) => getOffsetDay(item.timestamp, offsetMinutes)),
         ...(data.workout ?? []).map((item) => item.day),
-        ...(data.tag ?? []).flatMap((item: { day?: string | null; start_day?: string | null; start_time?: string | null }) => [
+        ...(data.guidedSession ?? []).flatMap((item: { day?: string | null; start_datetime?: string | null; end_datetime?: string | null }) => [
             item.day,
-            item.start_day,
-            item.start_time?.slice(0, 10),
+            item.start_datetime?.slice(0, 10),
+            item.end_datetime?.slice(0, 10),
         ]),
-        ...(data.enhancedTag ?? []).flatMap((item: { day?: string | null; start_day?: string | null; start_time?: string | null }) => [
+        ...(data.sleepTime ?? []).map((item: { day?: string | null }) => item.day),
+        ...(data.restModePeriod ?? []).flatMap((item: { start_day?: string | null; end_day?: string | null }) => [item.start_day, item.end_day]),
+        ...(data.tag ?? []).flatMap((item: { day?: string | null; start_day?: string | null; end_day?: string | null; start_time?: string | null; end_time?: string | null }) => [
             item.day,
             item.start_day,
+            item.end_day,
             item.start_time?.slice(0, 10),
+            item.end_time?.slice(0, 10),
+        ]),
+        ...(data.enhancedTag ?? []).flatMap((item: { day?: string | null; start_day?: string | null; end_day?: string | null; start_time?: string | null; end_time?: string | null }) => [
+            item.day,
+            item.start_day,
+            item.end_day,
+            item.start_time?.slice(0, 10),
+            item.end_time?.slice(0, 10),
         ]),
     ]);
 

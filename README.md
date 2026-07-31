@@ -48,6 +48,14 @@ The public welcome screen does not load the dashboard bundle or issue member-sta
 - Profile-local dates use monotonic timezone evidence from sessions, workouts, or sleep-time windows. UTC heart-rate samples are never treated as local offsets, including for legacy stored profiles.
 - Oura retries are bounded, jittered, timeout-protected, and honor `Retry-After`.
 
+## Oura export contract
+
+- The canonical JSON export follows the 19 user collections in Oura V2 OpenAPI snapshot 1.37. It preserves source IDs, units, nulls, nested samples, and full UTC timestamps.
+- Raw JSON and per-collection CSV exports use the unfiltered synced snapshot. Profile ring-break exclusions and selected date ranges apply only to the curated analysis CSVs.
+- Access tokens, refresh tokens, app-only profile names, and Firestore `updatedAt` fields are never included. CSV cells are formula-escaped.
+- A schema-matched Full Sync is required before the export is labeled a full-sync snapshot. The manifest records scopes, collection counts, coverage dates, and endpoint diagnostics.
+- The complete endpoint list and schema source are the current official [Oura V2 documentation](https://cloud.ouraring.com/v2/docs) and [OpenAPI snapshot](https://cloud.ouraring.com/v2/static/json/openapi-1.37.json). The checked-in `openapi-1.28.json` file is retained only as a historical snapshot.
+
 ## Important security limitation
 
 This repository’s current compatibility contract has no Firebase Authentication or server-side member authorization. The checked-in Firestore rules allow anonymous profile/stat access, and complete profile documents contain Oura credentials. That means the current deployment is **not suitable for sensitive production use**, despite the client-side lifecycle improvements.

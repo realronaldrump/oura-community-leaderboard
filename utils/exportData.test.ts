@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { createEmptyDailyStats } from '../test/helpers';
 import {
     filterSleepSessionsByRange,
+    filterHeartRateByRange,
+    filterTagItemsByRange,
     getAvailableExportRange,
     getNightlyRestingHeartRateRows,
+    getNightlyVitalsRows,
 } from './exportData';
 
 describe('exportData helpers', () => {
@@ -53,7 +56,7 @@ describe('exportData helpers', () => {
         ]);
     });
 
-    it('includes sleep sessions that overlap the selected date range', () => {
+    it('assigns sleep sessions to the canonical Oura day without duplicating overnight rows', () => {
         const sessions = [
             {
                 id: 'overnight',
@@ -71,8 +74,13 @@ describe('exportData helpers', () => {
             },
         ];
 
-        expect(filterSleepSessionsByRange(sessions, { start: '2026-04-09', end: '2026-04-09' })).toEqual([
-            sessions[0],
+        expect(filterSleepSessionsByRange(sessions, { start: '2026-04-09', end: '2026-04-09' })).toEqual([]);
+        expect(filterSleepSessionsByRange(sessions, { start: '2026-04-10', end: '2026-04-10' })).toEqual([sessions[0]]);
+
+        const data = createEmptyDailyStats({ session: sessions });
+        expect(getNightlyVitalsRows(data).map((row) => row.date)).toEqual([
+            '2026-04-10',
+            '2026-04-12',
         ]);
     });
 
@@ -102,8 +110,32 @@ describe('exportData helpers', () => {
         });
 
         expect(getAvailableExportRange(data)).toEqual({
-            start: '2026-04-01',
+            start: '2026-04-02',
             end: '2026-04-07',
         });
+    });
+
+    it('filters UTC heart-rate timestamps using the profile local offset', () => {
+        const samples = [{
+            bpm: 58,
+            source: 'sleep' as const,
+            timestamp: '2026-04-10T01:00:00Z',
+        }];
+
+        expect(filterHeartRateByRange(
+            samples,
+            { start: '2026-04-09', end: '2026-04-09' },
+            -360,
+        )).toEqual(samples);
+    });
+
+    it('includes tags whose source interval overlaps the selected range', () => {
+        const tags = [{
+            id: 'tag-1',
+            start_day: '2026-04-01',
+            end_day: '2026-04-10',
+        }];
+
+        expect(filterTagItemsByRange(tags, { start: '2026-04-05', end: '2026-04-05' })).toEqual(tags);
     });
 });

@@ -1,6 +1,7 @@
 import { DailyStats } from '../types';
 
 export const createEmptyDailyStats = (overrides: Partial<DailyStats> = {}): DailyStats => ({
+    personalInfo: null,
     sleep: [],
     readiness: [],
     activity: [],
@@ -16,6 +17,7 @@ export const createEmptyDailyStats = (overrides: Partial<DailyStats> = {}): Dail
     enhancedTag: [],
     restModePeriod: [],
     ringConfiguration: [],
+    ringBatteryLevel: [],
     cardiovascularAge: [],
     vo2Max: [],
     ...overrides,

@@ -4,6 +4,7 @@ type WebhookSetupResult = {
     configured: boolean;
     callbackUrl: string;
     dataTypes: string[];
+    eventTypes?: string[];
     subscriptions?: Array<{
         id: string;
         callback_url: string;

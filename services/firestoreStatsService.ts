@@ -12,6 +12,9 @@ import { db } from './firebaseConfig';
 import {
     DailyStats,
     HeartRate,
+    OuraEndpointDiagnostic,
+    OuraPersonalInfo,
+    RingBatteryLevel,
     SleepSession,
 } from '../types';
 import { PROFILE_STATS_SCHEMA_VERSION } from './profileStatsConstants';
@@ -30,7 +33,36 @@ const RAW_COLLECTIONS = {
     sleepTime: 'sleepTime',
     restModePeriods: 'restModePeriods',
     ringConfigurations: 'ringConfigurations',
+    ringBatteryLevels: 'ringBatteryLevels',
+    personalInfo: 'personalInfo',
+    vo2Max: 'vo2Max',
 } as const;
+
+const RAW_COLLECTION_BY_WEBHOOK_DATA_TYPE: Record<string, string> = {
+    sleep: RAW_COLLECTIONS.sleepSessions,
+    workout: RAW_COLLECTIONS.workouts,
+    tag: RAW_COLLECTIONS.tags,
+    enhanced_tag: RAW_COLLECTIONS.enhancedTags,
+    session: RAW_COLLECTIONS.guidedSessions,
+    sleep_time: RAW_COLLECTIONS.sleepTime,
+    rest_mode_period: RAW_COLLECTIONS.restModePeriods,
+    ring_configuration: RAW_COLLECTIONS.ringConfigurations,
+    vO2_max: RAW_COLLECTIONS.vo2Max,
+    vo2_max: RAW_COLLECTIONS.vo2Max,
+};
+
+const DAY_FIELD_BY_WEBHOOK_DATA_TYPE: Record<string, keyof ProfileStatsDayDocument> = {
+    daily_sleep: 'sleep',
+    daily_readiness: 'readiness',
+    daily_activity: 'activity',
+    daily_spo2: 'spo2',
+    daily_stress: 'stress',
+    daily_resilience: 'resilience',
+    daily_cardiovascular_age: 'cardiovascularAge',
+    vO2_max: 'vo2Max',
+    vo2_max: 'vo2Max',
+    sleep: 'bestSleepSession',
+};
 
 type SyncMode = 'incremental' | 'full';
 
@@ -40,8 +72,10 @@ export interface ProfileStatsMetadata {
     oldestDay: string | null;
     newestDay: string | null;
     lastFullSyncAt?: string | null;
+    lastFullSyncSchemaVersion?: number | null;
     lastIncrementalSyncAt?: string | null;
     lastSyncError?: string | null;
+    endpointDiagnostics?: Record<string, OuraEndpointDiagnostic | null>;
     updatedAt: string;
 }
 
@@ -125,9 +159,19 @@ const stripUndefinedDeep = <T>(value: T): T => {
 };
 
 const toDocumentId = (item: unknown, index: number): string => {
+    const sourceIdentity = isRecord(item)
+        ? [
+            item.timestamp,
+            item.start_datetime,
+            item.start_time,
+            item.bedtime_start,
+            item.day,
+            item.type,
+        ].filter((value) => value != null && value !== '').map(String).join('|')
+        : '';
     const rawId = isRecord(item) && item.id != null
         ? String(item.id)
-        : JSON.stringify(item);
+        : sourceIdentity || JSON.stringify(item);
     const normalized = encodeURIComponent(rawId || `item-${index}`)
         .replace(/\./g, '%2E')
         .replace(/\//g, '%2F')
@@ -181,10 +225,6 @@ const extractDayRange = (data: DailyStats): { oldestDay: string | null; newestDa
 const getSessionCandidateDays = (session: SleepSession): Set<string> => {
     const days = new Set<string>();
     if (session.day) days.add(session.day);
-    const startDay = session.bedtime_start?.slice(0, 10);
-    const endDay = session.bedtime_end?.slice(0, 10);
-    if (startDay) days.add(startDay);
-    if (endDay) days.add(endDay);
     return days;
 };
 
@@ -238,13 +278,16 @@ const buildProfileStatsMetadata = (
         oldestDay,
         newestDay,
         lastFullSyncAt: mode === 'full' ? now : undefined,
+        lastFullSyncSchemaVersion: mode === 'full' ? PROFILE_STATS_SCHEMA_VERSION : undefined,
         lastIncrementalSyncAt: mode === 'incremental' ? now : undefined,
         lastSyncError: null,
+        endpointDiagnostics: data.endpointDiagnostics || {},
         updatedAt: now,
     });
 };
 
 const buildRawCollections = (data: DailyStats): Record<string, unknown[]> => ({
+    [RAW_COLLECTIONS.personalInfo]: data.personalInfo ? [data.personalInfo] : [],
     [RAW_COLLECTIONS.sleepSessions]: data.session || [],
     [RAW_COLLECTIONS.workouts]: data.workout || [],
     [RAW_COLLECTIONS.tags]: data.tag || [],
@@ -253,6 +296,8 @@ const buildRawCollections = (data: DailyStats): Record<string, unknown[]> => ({
     [RAW_COLLECTIONS.sleepTime]: data.sleepTime || [],
     [RAW_COLLECTIONS.restModePeriods]: data.restModePeriod || [],
     [RAW_COLLECTIONS.ringConfigurations]: data.ringConfiguration || [],
+    [RAW_COLLECTIONS.ringBatteryLevels]: data.ringBatteryLevel || [],
+    [RAW_COLLECTIONS.vo2Max]: data.vo2Max || [],
 });
 
 const groupHeartRateByDay = (items: HeartRate[] | undefined, updatedAt: string) => {
@@ -597,8 +642,11 @@ const readRawCollection = async <T = any>(profileId: string, collectionName: str
 
 export const getStoredDailyStats = async (profileId: string): Promise<DailyStats | null> => {
     try {
-        const daysSnapshot = await getDocs(query(collection(db, PROFILE_STATS_COLLECTION, profileId, DAYS_COLLECTION)));
-        if (daysSnapshot.empty) return null;
+        const [daysSnapshot, metadataSnapshot] = await Promise.all([
+            getDocs(query(collection(db, PROFILE_STATS_COLLECTION, profileId, DAYS_COLLECTION))),
+            getDoc(doc(db, PROFILE_STATS_COLLECTION, profileId)),
+        ]);
+        if (daysSnapshot.empty && !metadataSnapshot.exists()) return null;
 
         const dayDocs = daysSnapshot.docs.map((document) => document.data() as ProfileStatsDayDocument);
         const heartRateDays = await readRawCollection<{ items?: HeartRate[] }>(profileId, HEART_RATE_DAYS_COLLECTION);
@@ -611,6 +659,9 @@ export const getStoredDailyStats = async (profileId: string): Promise<DailyStats
             sleepTime,
             restModePeriods,
             ringConfigurations,
+            ringBatteryLevels,
+            personalInfoRows,
+            rawVo2Max,
         ] = await Promise.all([
             readRawCollection<SleepSession>(profileId, RAW_COLLECTIONS.sleepSessions),
             readRawCollection<any>(profileId, RAW_COLLECTIONS.workouts),
@@ -620,9 +671,13 @@ export const getStoredDailyStats = async (profileId: string): Promise<DailyStats
             readRawCollection<any>(profileId, RAW_COLLECTIONS.sleepTime),
             readRawCollection<any>(profileId, RAW_COLLECTIONS.restModePeriods),
             readRawCollection<any>(profileId, RAW_COLLECTIONS.ringConfigurations),
+            readRawCollection<RingBatteryLevel>(profileId, RAW_COLLECTIONS.ringBatteryLevels),
+            readRawCollection<OuraPersonalInfo>(profileId, RAW_COLLECTIONS.personalInfo),
+            readRawCollection<any>(profileId, RAW_COLLECTIONS.vo2Max),
         ]);
 
         return {
+            personalInfo: personalInfoRows[0] || null,
             sleep: sortByDayDesc(dayDocs.map((day) => day.sleep).filter(Boolean) as any[]),
             readiness: sortByDayDesc(dayDocs.map((day) => day.readiness).filter(Boolean) as any[]),
             activity: sortByDayDesc(dayDocs.map((day) => day.activity).filter(Boolean) as any[]),
@@ -638,12 +693,68 @@ export const getStoredDailyStats = async (profileId: string): Promise<DailyStats
             enhancedTag: sortByDayDesc(enhancedTags || []),
             restModePeriod: sortByDayDesc(restModePeriods || []),
             ringConfiguration: ringConfigurations || [],
+            ringBatteryLevel: sortByTimestampDesc(ringBatteryLevels || []),
             cardiovascularAge: sortByDayDesc(dayDocs.map((day) => day.cardiovascularAge).filter(Boolean) as any[]),
-            vo2Max: sortByDayDesc(dayDocs.map((day) => day.vo2Max).filter(Boolean) as any[]),
+            vo2Max: sortByDayDesc(Array.from(new Map([
+                ...(dayDocs.map((day) => day.vo2Max).filter(Boolean) as any[]),
+                ...(rawVo2Max || []),
+            ].map((item, index) => [
+                String(item?.id || `${item?.day || ''}|${item?.timestamp || ''}|${index}`),
+                item,
+            ])).values())),
+            endpointDiagnostics: (metadataSnapshot.data() as ProfileStatsMetadata | undefined)?.endpointDiagnostics || {},
         };
     } catch (error) {
         logSharedStatsWarning('read', profileId, error);
         return null;
+    }
+};
+
+/**
+ * Reconciles an Oura `delete` webhook against the normalized snapshot. Raw
+ * collection documents use the Oura object id; daily summaries are located by
+ * inspecting their embedded source id because the Firestore document id is the day.
+ */
+export const deleteStoredOuraRecord = async (
+    profileId: string,
+    dataType: string,
+    objectId: string,
+): Promise<void> => {
+    if (!profileId || !dataType || !objectId) return;
+
+    try {
+        const rawCollection = RAW_COLLECTION_BY_WEBHOOK_DATA_TYPE[dataType];
+        if (rawCollection) {
+            await deleteDoc(doc(
+                db,
+                PROFILE_STATS_COLLECTION,
+                profileId,
+                rawCollection,
+                toDocumentId({ id: objectId }, 0),
+            ));
+        }
+
+        const dayField = DAY_FIELD_BY_WEBHOOK_DATA_TYPE[dataType];
+        if (!dayField) return;
+
+        const snapshot = await getDocs(collection(db, PROFILE_STATS_COLLECTION, profileId, DAYS_COLLECTION));
+        const matchingDocuments = snapshot.docs.filter((document) => {
+            const value = (document.data() as Record<string, unknown>)[dayField];
+            return isRecord(value) && String(value.id ?? '') === objectId;
+        });
+        if (matchingDocuments.length === 0) return;
+
+        const now = new Date().toISOString();
+        for (let index = 0; index < matchingDocuments.length; index += 450) {
+            const batch = writeBatch(db);
+            matchingDocuments.slice(index, index + 450).forEach((document) => {
+                batch.set(document.ref, { [dayField]: null, updatedAt: now }, { merge: true });
+            });
+            await batch.commit();
+        }
+    } catch (error) {
+        logSharedStatsWarning('webhook delete reconciliation', profileId, error);
+        throw error;
     }
 };
 

@@ -7,7 +7,7 @@ import { ouraService } from '../services/ouraService';
 import { persistDerivedProfileTemporalMetadata } from '../services/profileTemporalService';
 import { DailyStats, OuraEndpointDiagnostic } from '../types';
 import { getOuraFetchEndISODate, shiftLocalISODate } from '../utils/date';
-import { hasAnyOuraScope, normalizeGrantedOuraScopes, OURA_SCOPE_CANDIDATES } from '../utils/ouraScopes';
+import { getOuraEndpointCapabilities } from '../utils/ouraScopes';
 
 export const FULL_HISTORY_START_DATE = '2016-01-01';
 const INITIAL_RECENT_DAYS = 28;
@@ -178,10 +178,10 @@ const buildRejectedEndpointDiagnostic = (endpoint: string, reason: unknown): Our
     const normalized = message.toLowerCase();
 
     if (normalized.includes('unauthorized') || normalized.includes('401')) {
-        return buildDiagnostic('unauthorized', endpoint, `Oura returned 401 while loading Resilience: ${message}`, 401, message);
+        return buildDiagnostic('unauthorized', endpoint, `Oura returned 401 while loading ${endpoint}: ${message}`, 401, message);
     }
 
-    return buildDiagnostic('request_failed', endpoint, `The Resilience request failed: ${message}`, null, message);
+    return buildDiagnostic('request_failed', endpoint, `The ${endpoint} request failed: ${message}`, null, message);
 };
 
 const resolveCriticalSettled = (settled: PromiseSettledResult<any[]>[], names: string[]): any[][] => {
@@ -216,10 +216,12 @@ const buildDailyStats = (
     sleep: any[], readiness: any[], activity: any[], sessions: any[],
     spo2: any[], stress: any[], resilience: any[], heartrate: any[],
     workout: any[], guidedSession: any[], sleepTime: any[], tag: any[],
-    enhancedTag: any[], restModePeriod: any[], ringConfiguration: any[],
+    enhancedTag: any[], restModePeriod: any[], ringConfiguration: any[], personalInfo: any | null, ringBatteryLevel: any[],
     cardiovascularAge: any[], vo2Max: any[],
-    resilienceDiagnostic?: OuraEndpointDiagnostic | null
+    resilienceDiagnostic?: OuraEndpointDiagnostic | null,
+    endpointDiagnostics?: Record<string, OuraEndpointDiagnostic | null>
 ): DailyStats => ({
+    personalInfo,
     sleep: mergeCollectionByDay([], sleep.map(s => ({ ...s, score: toNumberOrNull(s.score) }))),
     readiness: mergeCollectionByDay([], readiness.map(r => ({ ...r, score: toNumberOrNull(r.score) }))),
     activity: mergeCollectionByDay([], activity.map(a => ({
@@ -240,9 +242,11 @@ const buildDailyStats = (
     enhancedTag: enhancedTag.sort(sortByDayDesc),
     restModePeriod: restModePeriod.sort(sortByDayDesc),
     ringConfiguration,
+    ringBatteryLevel: ringBatteryLevel.sort(sortByTimestampDesc),
     cardiovascularAge: mergeCollectionByDay([], cardiovascularAge),
-    vo2Max: mergeCollectionByDay([], vo2Max),
+    vo2Max: mergeCollection([], vo2Max),
     resilienceDiagnostic: resilienceDiagnostic ?? null,
+    endpointDiagnostics: endpointDiagnostics ?? {},
 });
 
 export const fetchDailyStats = async (
@@ -252,18 +256,7 @@ export const fetchDailyStats = async (
 ): Promise<DailyStats> => {
     const includeStaticCollections = config.includeStaticCollections ?? true;
     const availabilityKey = config.availabilityKey;
-    const normalizedScopes = normalizeGrantedOuraScopes(config.grantedScopes);
-    const scopesKnown = normalizedScopes.size > 0;
-    const hasDailyScope = hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.daily]);
-    const canFetchSpO2 = !scopesKnown || hasDailyScope || hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.spo2]);
-    const canFetchStress = !scopesKnown || hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.stress]);
-    const canFetchResilience = !scopesKnown || hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.resilience]);
-    const canFetchHeartrate = !scopesKnown || hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.heartrate]);
-    const canFetchWorkout = !scopesKnown || hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.workout]);
-    const canFetchSession = !scopesKnown || hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.session]);
-    const canFetchTag = !scopesKnown || hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.tag]);
-    const canFetchRingConfiguration = hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.ringConfiguration]);
-    const canFetchHeartHealth = hasAnyOuraScope(normalizedScopes, [...OURA_SCOPE_CANDIDATES.heartHealth]);
+    const capabilities = getOuraEndpointCapabilities(config.grantedScopes);
     const end = dateRange?.end || getOuraFetchEndISODate(new Date(), config.profileOffsetMinutes);
     const start = dateRange?.start || shiftDate(end, -INITIAL_RECENT_DAYS);
 
@@ -284,24 +277,26 @@ export const fetchDailyStats = async (
     // Limit heartrate to 2 days for dashboard fetches; full syncs fetch the complete range.
     const hrStart = config.fullHeartrate ? start : shiftDate(end, -2);
     const supplementaryRequests = [
-        canFetchSpO2 ? ouraService.getDailySpO2(token, start, end, { availabilityKey }) : Promise.resolve([]),
-        canFetchStress ? ouraService.getDailyStress(token, start, end, { availabilityKey }) : Promise.resolve([]),
-        canFetchResilience ? ouraService.getDailyResilience(token, start, end, { availabilityKey }) : Promise.resolve([]),
-        canFetchHeartrate ? ouraService.getHeartRate(token, hrStart, end, { availabilityKey }) : Promise.resolve([]),
-        canFetchWorkout ? ouraService.getWorkouts(token, start, end, { availabilityKey }) : Promise.resolve([]),
-        canFetchSession ? ouraService.getSessions(token, start, end, { availabilityKey }) : Promise.resolve([]),
-        canFetchSession ? ouraService.getSleepTime(token, start, end, { availabilityKey }) : Promise.resolve([]),
-        canFetchTag ? ouraService.getTags(token, start, end, { availabilityKey }) : Promise.resolve([]),
-        canFetchTag ? ouraService.getEnhancedTags(token, start, end, { availabilityKey }) : Promise.resolve([]),
-        ouraService.getRestModePeriods(token, start, end, { availabilityKey }),
-        includeStaticCollections && canFetchRingConfiguration ? ouraService.getRingConfiguration(token, { availabilityKey }) : Promise.resolve([]),
-        canFetchHeartHealth ? ouraService.getDailyCardiovascularAge(token, start, end, { availabilityKey }) : Promise.resolve([]),
-        canFetchHeartHealth ? ouraService.getVO2Max(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        capabilities.spo2 ? ouraService.getDailySpO2(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        capabilities.stress ? ouraService.getDailyStress(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        capabilities.resilience ? ouraService.getDailyResilience(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        capabilities.heartrate ? ouraService.getHeartRate(token, hrStart, end, { availabilityKey }) : Promise.resolve([]),
+        capabilities.workout ? ouraService.getWorkouts(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        capabilities.session ? ouraService.getSessions(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        capabilities.sleepTime ? ouraService.getSleepTime(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        capabilities.tag ? ouraService.getTags(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        capabilities.tag ? ouraService.getEnhancedTags(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        capabilities.restModePeriod ? ouraService.getRestModePeriods(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        includeStaticCollections && capabilities.ringConfiguration ? ouraService.getRingConfiguration(token, { availabilityKey }) : Promise.resolve([]),
+        includeStaticCollections && capabilities.personal ? ouraService.getPersonalInfo(token).then((info) => [info]) : Promise.resolve([]),
+        capabilities.ringBatteryLevel ? ouraService.getRingBatteryLevel(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        capabilities.cardiovascularAge ? ouraService.getDailyCardiovascularAge(token, start, end, { availabilityKey }) : Promise.resolve([]),
+        capabilities.vo2Max ? ouraService.getVO2Max(token, start, end, { availabilityKey }) : Promise.resolve([]),
     ];
     const supplementaryNames = [
         'spo2', 'stress', 'resilience', 'heartrate', 'workout', 'guidedSession',
         'sleepTime', 'tag', 'enhancedTag', 'restModePeriod', 'ringConfiguration',
-        'cardiovascularAge', 'vo2Max'
+        'personalInfo', 'ringBatteryLevel', 'cardiovascularAge', 'vo2Max'
     ];
 
     const suppSettled = await Promise.allSettled(supplementaryRequests);
@@ -316,11 +311,11 @@ export const fetchDailyStats = async (
     const [
         spo2, stress, resilience, heartrate, workout, guidedSession,
         sleepTime, tag, enhancedTag, restModePeriod, ringConfiguration,
-        cardiovascularAge, vo2Max
+        personalInfoRows, ringBatteryLevel, cardiovascularAge, vo2Max
     ] = resolveSettled(suppSettled, supplementaryNames);
     const resilienceSettled = suppSettled[2];
 
-    const resilienceDiagnostic = !canFetchResilience
+    const resilienceDiagnostic = !capabilities.resilience
         ? buildDiagnostic(
             'skipped_missing_scope',
             'daily_resilience',
@@ -337,13 +332,45 @@ export const fetchDailyStats = async (
                     )
                     : null);
 
+    const endpointNames = [
+        'daily_spo2', 'daily_stress', 'daily_resilience', 'heartrate', 'workout', 'session',
+        'sleep_time', 'tag', 'enhanced_tag', 'rest_mode_period', 'ring_configuration',
+        'personal_info', 'ring_battery_level', 'daily_cardiovascular_age', 'vO2_max',
+    ];
+    const endpointEnabled = [
+        capabilities.spo2, capabilities.stress, capabilities.resilience, capabilities.heartrate,
+        capabilities.workout, capabilities.session, capabilities.sleepTime, capabilities.tag,
+        capabilities.tag, capabilities.restModePeriod,
+        includeStaticCollections && capabilities.ringConfiguration,
+        includeStaticCollections && capabilities.personal,
+        capabilities.ringBatteryLevel, capabilities.cardiovascularAge, capabilities.vo2Max,
+    ];
+    const endpointDiagnostics = Object.fromEntries(endpointNames.flatMap((endpoint, index) => {
+        if (!endpointEnabled[index]) {
+            if (!includeStaticCollections && (endpoint === 'ring_configuration' || endpoint === 'personal_info')) {
+                return [];
+            }
+            return [[endpoint, buildDiagnostic(
+                'skipped_missing_scope',
+                endpoint,
+                `The saved Oura authorization does not include the scope required for ${endpoint}.`,
+            )]];
+        }
+        const result = suppSettled[index];
+        const diagnostic = result?.status === 'rejected'
+            ? buildRejectedEndpointDiagnostic(endpoint, result.reason)
+            : ouraService.getEndpointDiagnostic(token, endpoint, availabilityKey) ?? null;
+        return [[endpoint, diagnostic]];
+    }));
+
     const stats = buildDailyStats(
         sleep, readiness, activity, sessions,
         spo2, stress, resilience, heartrate,
         workout, guidedSession, sleepTime, tag,
-        enhancedTag, restModePeriod, ringConfiguration,
+        enhancedTag, restModePeriod, ringConfiguration, personalInfoRows[0] ?? null, ringBatteryLevel,
         cardiovascularAge, vo2Max,
-        resilienceDiagnostic
+        resilienceDiagnostic,
+        endpointDiagnostics,
     );
 
     return stats;
@@ -351,6 +378,7 @@ export const fetchDailyStats = async (
 
 export const mergeDailyStats = (existingData: DailyStats, incomingData: DailyStats): DailyStats => {
     return {
+        personalInfo: incomingData.personalInfo ?? existingData.personalInfo ?? null,
         sleep: mergeCollectionByDay(existingData.sleep, incomingData.sleep),
         readiness: mergeCollectionByDay(existingData.readiness, incomingData.readiness),
         activity: mergeCollectionByDay(existingData.activity, incomingData.activity),
@@ -366,9 +394,14 @@ export const mergeDailyStats = (existingData: DailyStats, incomingData: DailySta
         enhancedTag: mergeCollection(existingData.enhancedTag || [], incomingData.enhancedTag || []),
         restModePeriod: mergeCollection(existingData.restModePeriod || [], incomingData.restModePeriod || []),
         ringConfiguration: mergeCollection(existingData.ringConfiguration || [], incomingData.ringConfiguration || [], sortByTimestampDesc),
+        ringBatteryLevel: mergeCollection(existingData.ringBatteryLevel || [], incomingData.ringBatteryLevel || [], sortByTimestampDesc),
         cardiovascularAge: mergeCollectionByDay(existingData.cardiovascularAge || [], incomingData.cardiovascularAge || []),
-        vo2Max: mergeCollectionByDay(existingData.vo2Max || [], incomingData.vo2Max || []),
+        vo2Max: mergeCollection(existingData.vo2Max || [], incomingData.vo2Max || []),
         resilienceDiagnostic: incomingData.resilienceDiagnostic ?? null,
+        endpointDiagnostics: {
+            ...(existingData.endpointDiagnostics || {}),
+            ...(incomingData.endpointDiagnostics || {}),
+        },
     };
 };
 

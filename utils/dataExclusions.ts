@@ -150,6 +150,7 @@ export const filterDailyStatsByDataExclusions = (
         enhancedTag: filterGenericItems(data.enhancedTag, normalizedRanges),
         restModePeriod: filterGenericItems(data.restModePeriod, normalizedRanges),
         ringConfiguration: filterGenericItems(data.ringConfiguration, normalizedRanges),
+        ringBatteryLevel: filterTimestampItems(data.ringBatteryLevel, normalizedRanges),
         cardiovascularAge: filterDayItems(data.cardiovascularAge as DayLikeItem[] | undefined, normalizedRanges),
         vo2Max: filterDayItems(data.vo2Max as DayLikeItem[] | undefined, normalizedRanges),
     };

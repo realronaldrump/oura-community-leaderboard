@@ -12,6 +12,7 @@ import { DailyStats } from '../types';
 describe('buildProfileStatsDocuments', () => {
     it('normalizes daily stats into shared Firestore day and collection documents', () => {
         const stats: DailyStats = {
+            personalInfo: { id: 'oura-user-1', age: 40, email: 'member@example.com' },
             sleep: [
                 {
                     id: 'sleep-1',
@@ -77,6 +78,18 @@ describe('buildProfileStatsDocuments', () => {
             enhancedTag: [],
             restModePeriod: [],
             ringConfiguration: [{ id: 'ring-1', color: 'silver' }],
+            ringBatteryLevel: [{
+                timestamp: '2026-04-18T12:00:00Z',
+                timestamp_unix: 1_776_513_600_000,
+                level: 71,
+            }],
+            endpointDiagnostics: {
+                daily_stress: null,
+            },
+            vo2Max: [
+                { id: 'vo2-1', day: '2026-04-18', timestamp: '2026-04-18T10:00:00Z', vo2_max: 44.1 },
+                { id: 'vo2-2', day: '2026-04-18', timestamp: '2026-04-18T18:00:00Z', vo2_max: 44.8 },
+            ],
         };
 
         const built = buildProfileStatsDocuments('profile-1', stats, 'full', '2026-04-19T12:00:00.000Z');
@@ -87,6 +100,7 @@ describe('buildProfileStatsDocuments', () => {
             oldestDay: '2026-04-18',
             newestDay: '2026-04-18',
             lastFullSyncAt: '2026-04-19T12:00:00.000Z',
+            lastFullSyncSchemaVersion: PROFILE_STATS_SCHEMA_VERSION,
         });
         expect(built.days).toHaveLength(1);
         expect(built.days[0].bestSleepSession).toMatchObject({ id: 'best-session' });
@@ -95,6 +109,12 @@ describe('buildProfileStatsDocuments', () => {
         expect(built.rawCollections.sleepSessions).toHaveLength(2);
         expect(built.rawCollections.workouts).toHaveLength(1);
         expect(built.rawCollections.ringConfigurations).toHaveLength(1);
+        expect(built.rawCollections.ringBatteryLevels).toHaveLength(1);
+        expect(built.rawCollections.personalInfo).toEqual([
+            expect.objectContaining({ id: 'oura-user-1', age: 40 }),
+        ]);
+        expect(built.rawCollections.vo2Max).toHaveLength(2);
+        expect(built.metadata.endpointDiagnostics).toEqual({ daily_stress: null });
     });
 
     it('builds incremental persistence docs from the delta while keeping merged coverage metadata', () => {
@@ -193,6 +213,28 @@ describe('buildProfileStatsDocuments', () => {
         expect(built.rawCollections.sleepSessions).toHaveLength(1);
         expect(built.rawCollections.workouts).toHaveLength(1);
         expect(built.rawCollections.ringConfigurations).toHaveLength(0);
+    });
+
+    it('stores an overnight sleep session only on its canonical Oura day', () => {
+        const stats: DailyStats = {
+            sleep: [
+                { id: 'sleep-9', day: '2026-04-09', contributors: {} },
+                { id: 'sleep-10', day: '2026-04-10', contributors: {} },
+            ],
+            readiness: [], activity: [], spo2: [], stress: [], resilience: [],
+            session: [{
+                id: 'overnight',
+                day: '2026-04-10',
+                bedtime_start: '2026-04-09T23:00:00Z',
+                bedtime_end: '2026-04-10T07:00:00Z',
+                total_sleep_duration: 28_000,
+            }],
+        };
+
+        const built = buildProfileStatsDocuments('profile-1', stats, 'full');
+
+        expect(built.days.find((day) => day.day === '2026-04-09')?.bestSleepSession).toBeNull();
+        expect(built.days.find((day) => day.day === '2026-04-10')?.bestSleepSession).toMatchObject({ id: 'overnight' });
     });
 
     it('partitions set operations by payload size before Firestore rejects the commit', () => {

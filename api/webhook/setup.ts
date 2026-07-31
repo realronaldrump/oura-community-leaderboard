@@ -1,7 +1,9 @@
 const OURA_WEBHOOK_BASE_URL = 'https://api.ouraring.com/v2/webhook/subscription';
 const DEFAULT_OURA_CLIENT_ID = '92e4c379-b278-4c42-a7c0-db088b67680f';
-const WEBHOOK_EVENT_TYPE = 'update';
+export const WEBHOOK_EVENT_TYPES = ['create', 'update', 'delete'] as const;
+type WebhookEventType = (typeof WEBHOOK_EVENT_TYPES)[number];
 const RENEW_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_CONCURRENT_SUBSCRIPTION_REQUESTS = 3;
 const SUPPORTED_WEBHOOK_DATA_TYPES = new Set([
     'tag',
     'enhanced_tag',
@@ -34,6 +36,7 @@ const DEFAULT_WEBHOOK_DATA_TYPES = [
     'tag',
     'enhanced_tag',
     'rest_mode_period',
+    'ring_configuration',
     'daily_cardiovascular_age',
     'vo2_max',
 ];
@@ -54,6 +57,12 @@ type WebhookConfig = {
     invalidDataTypes: string[];
     configured: boolean;
 };
+
+const subscriptionKey = (eventType: string, dataType: string): string => `${eventType}:${dataType}`;
+
+export const getExpectedWebhookSubscriptionKeys = (dataTypes: string[]): string[] => (
+    dataTypes.flatMap((dataType) => WEBHOOK_EVENT_TYPES.map((eventType) => subscriptionKey(eventType, dataType)))
+);
 
 const sendJson = (res: any, status: number, payload: Record<string, unknown>) => {
     res.status(status).setHeader('Content-Type', 'application/json').send(JSON.stringify(payload));
@@ -134,6 +143,7 @@ const createSubscription = async (
     clientSecret: string,
     callbackUrl: string,
     verificationToken: string,
+    eventType: WebhookEventType,
     dataType: string
 ): Promise<WebhookSubscription> => {
     const response = await fetch(OURA_WEBHOOK_BASE_URL, {
@@ -146,7 +156,7 @@ const createSubscription = async (
         body: JSON.stringify({
             callback_url: callbackUrl,
             verification_token: verificationToken,
-            event_type: WEBHOOK_EVENT_TYPE,
+            event_type: eventType,
             data_type: dataType,
         }),
     });
@@ -181,20 +191,21 @@ const summarizeSubscriptions = (subscriptions: WebhookSubscription[], callbackUr
     const normalizedCallbackUrl = normalizeCallbackUrl(callbackUrl);
     const matching = subscriptions.filter((subscription) =>
         normalizeCallbackUrl(subscription.callback_url) === normalizedCallbackUrl
-        && subscription.event_type === WEBHOOK_EVENT_TYPE
+        && WEBHOOK_EVENT_TYPES.includes(subscription.event_type as WebhookEventType)
         && dataTypes.includes(subscription.data_type)
     );
 
-    const byDataType = new Map<string, WebhookSubscription[]>();
+    const byKey = new Map<string, WebhookSubscription[]>();
     matching.forEach((subscription) => {
-        const list = byDataType.get(subscription.data_type) || [];
+        const key = subscriptionKey(subscription.event_type, subscription.data_type);
+        const list = byKey.get(key) || [];
         list.push(subscription);
-        byDataType.set(subscription.data_type, list);
+        byKey.set(key, list);
     });
 
     return {
         matching,
-        byDataType,
+        byKey,
     };
 };
 
@@ -218,7 +229,7 @@ export default async function handler(req: any, res: any) {
             configured: false,
             callbackUrl,
             dataTypes: config.dataTypes,
-            eventType: WEBHOOK_EVENT_TYPE,
+            eventTypes: WEBHOOK_EVENT_TYPES,
             invalidDataTypes: config.invalidDataTypes,
             subscriptions: [],
             missing: [
@@ -238,7 +249,7 @@ export default async function handler(req: any, res: any) {
                 configured: true,
                 callbackUrl,
                 dataTypes: config.dataTypes,
-                eventType: WEBHOOK_EVENT_TYPE,
+                eventTypes: WEBHOOK_EVENT_TYPES,
                 invalidDataTypes: config.invalidDataTypes,
                 subscriptions: summary.matching,
             });
@@ -249,39 +260,52 @@ export default async function handler(req: any, res: any) {
         const renewed: WebhookSubscription[] = [];
         const existing: WebhookSubscription[] = [];
 
-        for (const dataType of config.dataTypes) {
-            const candidates = summary.byDataType.get(dataType) || [];
-            if (candidates.length === 0) {
-                const subscription = await createSubscription(
-                    config.clientId,
-                    config.clientSecret,
-                    callbackUrl,
-                    config.verificationToken,
-                    dataType
-                );
-                created.push(subscription);
-                continue;
-            }
+        const expectedPairs = config.dataTypes.flatMap((dataType) => (
+            WEBHOOK_EVENT_TYPES.map((eventType) => ({ dataType, eventType }))
+        ));
+        let nextPairIndex = 0;
+        const worker = async () => {
+            while (true) {
+                const pairIndex = nextPairIndex;
+                nextPairIndex += 1;
+                if (pairIndex >= expectedPairs.length) return;
+                const { dataType, eventType } = expectedPairs[pairIndex];
+                const candidates = summary.byKey.get(subscriptionKey(eventType, dataType)) || [];
+                if (candidates.length === 0) {
+                    const subscription = await createSubscription(
+                        config.clientId,
+                        config.clientSecret,
+                        callbackUrl,
+                        config.verificationToken,
+                        eventType,
+                        dataType
+                    );
+                    created.push(subscription);
+                    continue;
+                }
 
-            existing.push(...candidates);
-            const earliestExpiring = candidates
-                .slice()
-                .sort((a, b) => new Date(a.expiration_time).getTime() - new Date(b.expiration_time).getTime())[0];
-            const expiresInMs = new Date(earliestExpiring.expiration_time).getTime() - Date.now();
-            const shouldRenewSoon = Number.isFinite(expiresInMs) && expiresInMs < RENEW_THRESHOLD_MS;
-            if (shouldRenewSoon) {
-                const renewedSubscription = await renewSubscription(config.clientId, config.clientSecret, earliestExpiring.id);
-                if (renewedSubscription) {
-                    renewed.push(renewedSubscription);
+                existing.push(...candidates);
+                const earliestExpiring = candidates
+                    .slice()
+                    .sort((a, b) => new Date(a.expiration_time).getTime() - new Date(b.expiration_time).getTime())[0];
+                const expiresInMs = new Date(earliestExpiring.expiration_time).getTime() - Date.now();
+                const shouldRenewSoon = Number.isFinite(expiresInMs) && expiresInMs < RENEW_THRESHOLD_MS;
+                if (shouldRenewSoon) {
+                    const renewedSubscription = await renewSubscription(config.clientId, config.clientSecret, earliestExpiring.id);
+                    if (renewedSubscription) {
+                        renewed.push(renewedSubscription);
+                    }
                 }
             }
-        }
+        };
+        const workerCount = Math.min(MAX_CONCURRENT_SUBSCRIPTION_REQUESTS, expectedPairs.length);
+        await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
         sendJson(res, 200, {
             configured: true,
             callbackUrl,
             dataTypes: config.dataTypes,
-            eventType: WEBHOOK_EVENT_TYPE,
+            eventTypes: WEBHOOK_EVENT_TYPES,
             invalidDataTypes: config.invalidDataTypes,
             created,
             renewed,
