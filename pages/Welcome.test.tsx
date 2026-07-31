@@ -86,6 +86,10 @@ describe('getProfileFreshness', () => {
             label: 'Connection needs attention',
             tone: 'error',
         });
+        expect(getProfileFreshness(profile({ lastSyncError: 'Critical data fetch failed: 503' }), now)).toMatchObject({
+            label: 'Last sync 10m ago',
+            tone: 'success',
+        });
     });
 });
 

@@ -65,10 +65,14 @@ export const useAutoSync = (profiles: readonly AutoSyncProfile[], enabled: boole
     ): Promise<boolean> => {
         const uniqueProfileIds = [...new Set(profileIds.filter(Boolean))];
         if (uniqueProfileIds.length === 0) return false;
-        const results = await Promise.all(
-            uniqueProfileIds.map((profileId) => refreshProfile(profileId, respectCooldown))
-        );
-        return results.every(Boolean);
+        let allSucceeded = true;
+        // Each profile refresh fans out across many Oura endpoints. Serialize
+        // profiles to avoid multiplying those bursts at app start or reconnect.
+        for (const profileId of uniqueProfileIds) {
+            const succeeded = await refreshProfile(profileId, respectCooldown);
+            allSucceeded = succeeded && allSucceeded;
+        }
+        return allSucceeded;
     }, [refreshProfile]);
 
     const refreshIfStale = useCallback(() => {

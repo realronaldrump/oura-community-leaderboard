@@ -44,6 +44,8 @@ The public welcome screen does not load the dashboard bundle or issue member-sta
 - Refreshes are single-flight in one app instance, serialized across tabs with Web Locks, and persisted with an optimistic Firestore transaction.
 - Only confirmed unrecoverable credential errors become a durable reconnect state. Rate limits, timeouts, network failures, server failures, and storage failures remain retryable.
 - Full sync fetches and stages every Oura result before replacing stored records. It prunes obsolete records only after data writes succeed and publishes freshness metadata last.
+- Saved Firestore scores hydrate the UI before background Oura refreshes begin, so retryable failures never replace valid scores with loading or reconnect states.
+- Profile-local dates use monotonic timezone evidence from sessions, workouts, or sleep-time windows. UTC heart-rate samples are never treated as local offsets, including for legacy stored profiles.
 - Oura retries are bounded, jittered, timeout-protected, and honor `Retry-After`.
 
 ## Important security limitation

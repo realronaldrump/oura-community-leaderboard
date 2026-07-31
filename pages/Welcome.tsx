@@ -17,6 +17,7 @@ import { AuthStatus } from '../types';
 import { formatISODateForDisplay } from '../utils/date';
 import { getCompetitionInviteToken, isInviteLocation } from '../utils/inviteLink';
 import { getProfileDisplayName } from '../utils/profileName';
+import { profileRequiresReconnect } from '../utils/profileSyncHealth';
 import { Badge, Button, Card, Skeleton, StatePanel, type BadgeTone } from '../components/ui';
 
 const RECENT_SYNC_WINDOW_MS = 15 * 60 * 1000;
@@ -54,7 +55,7 @@ export const getProfileFreshness = (
     profile: Pick<UserProfile, 'lastSuccessfulSyncAt' | 'lastSyncError'>,
     nowMs: number = Date.now(),
 ): ProfileFreshness => {
-    if (profile.lastSyncError) {
+    if (profileRequiresReconnect(profile)) {
         return {
             label: 'Connection needs attention',
             description: 'Saved sync metadata reports an Oura connection issue.',

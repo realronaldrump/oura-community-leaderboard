@@ -52,6 +52,7 @@ const ViewLoadingFallback: React.FC = () => (
     </div>
 );
 import { useAutoSync, formatLastSync } from '../hooks/useAutoSync';
+import { useProfileStatsHydration } from '../hooks/useProfileStatsHydration';
 import { useWebhookRefresh } from '../hooks/useWebhookRefresh';
 import { RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain, Users, Trophy, TrendingUp, TrendingDown, Minus, BarChart3, Swords, Download, CalendarDays, Search, GitCompareArrows, ArrowRight, ChevronLeft } from 'lucide-react';
 import { getProfileDisplayName } from '../utils/profileName';
@@ -70,9 +71,11 @@ import {
     getMillisecondsUntilNextProfileMidnight,
     getProfileCurrentHour,
     getProfileLocalISODate,
+    getProfileOffsetMinutes,
 } from '../utils/profileTemporal';
 import { filterDailyStatsForProfile, isDayExcludedByRanges } from '../utils/dataExclusions';
 import { buildAlignedDailyScoreAverages } from '../utils/scoreTrends';
+import { profileRequiresReconnect } from '../utils/profileSyncHealth';
 
 const METERS_TO_MILES = 0.000621371;
 const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
@@ -1970,7 +1973,7 @@ const Dashboard: React.FC = () => {
                     grantedScopes: profile.grantedScopes,
                     availabilityKey: profile.id,
                     profileId: profile.id,
-                    profileOffsetMinutes: profile.lastKnownUtcOffsetMinutes,
+                    profileOffsetMinutes: getProfileOffsetMinutes(profile),
                 })
             );
             queryClient.setQueryData(['dailyStats', profile.id], synced);
@@ -2002,26 +2005,11 @@ const Dashboard: React.FC = () => {
         return loadProfileDailyStats(profile);
     }, [loadProfileDailyStats, mergeIntoAllTimeCache, primeStoredStatsCache, queryClient]);
 
-    useEffect(() => {
-        if (!activeProfile?.id) return;
-        if (queryClient.getQueryData(['dailyStats', activeProfile.id])) return;
-
-        let cancelled = false;
-
-        getStoredDailyStats(activeProfile.id)
-            .then((stored) => {
-                if (cancelled || !stored) return;
-                primeStoredStatsCache(activeProfile.id, stored);
-            })
-            .catch((error) => {
-                if (cancelled) return;
-                console.warn('Failed to hydrate stored stats for active profile:', error);
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [activeProfile?.id, primeStoredStatsCache, queryClient]);
+    const profileIds = useMemo(() => profiles.map((profile) => profile.id), [profiles]);
+    const { hydratedProfileIds, allProfilesHydrated } = useProfileStatsHydration(profileIds);
+    const isActiveProfileStatsHydrated = Boolean(
+        activeProfile?.id && hydratedProfileIds.has(activeProfile.id)
+    );
 
     // Auto-sync stale profiles independently. Freshness comes from each
     // profile's durable successful-sync marker, never shared browser state.
@@ -2029,9 +2017,9 @@ const Dashboard: React.FC = () => {
         id: profile.id,
         lastSuccessfulSyncAt: profile.lastSuccessfulSyncAt,
     })), [profiles]);
-    useAutoSync(autoSyncProfiles, !!activeProfile);
+    useAutoSync(autoSyncProfiles, Boolean(activeProfile) && allProfilesHydrated);
     const activeProfileLastSuccessfulSyncAt = activeProfile?.lastSuccessfulSyncAt ?? null;
-    useWebhookRefresh(activeProfile, viewMode === 'today');
+    useWebhookRefresh(activeProfile, viewMode === 'today' && isActiveProfileStatsHydrated);
 
     const navigateToView = useCallback((nextView: ViewMode) => {
         const nextUrl = new URL(pathForView(nextView), window.location.origin);
@@ -2072,7 +2060,7 @@ const Dashboard: React.FC = () => {
                     grantedScopes: activeProfile.grantedScopes,
                     availabilityKey: activeProfile.id,
                     profileId: activeProfile.id,
-                    profileOffsetMinutes: activeProfile.lastKnownUtcOffsetMinutes,
+                    profileOffsetMinutes: getProfileOffsetMinutes(activeProfile),
                 })
             );
             queryClient.setQueryData(['dailyStats', activeProfile.id], syncedData);
@@ -2098,7 +2086,7 @@ const Dashboard: React.FC = () => {
             return ({
                 queryKey: ['dailyStats', p.id],
                 queryFn: () => loadProfileDailyStats(p),
-                enabled: Boolean(activeProfile),
+                enabled: Boolean(activeProfile) && hydratedProfileIds.has(p.id),
                 staleTime: viewMode === 'today' && p.id === activeProfile?.id
                     ? LIVE_DAILY_STATS_STALE_MS
                     : DEFAULT_DAILY_STATS_STALE_MS,
@@ -2135,7 +2123,7 @@ const Dashboard: React.FC = () => {
             placeholderData: (previousData) => previousData,
             staleTime: Number.POSITIVE_INFINITY,
             refetchOnWindowFocus: false,
-            enabled: shouldLoadAllTimeStats,
+            enabled: shouldLoadAllTimeStats && hydratedProfileIds.has(p.id),
         }))
     });
 
@@ -2179,7 +2167,7 @@ const Dashboard: React.FC = () => {
             const tokenExpiryMs = profile.tokenExpiresAt ? new Date(profile.tokenExpiresAt).getTime() : 0;
             const missingRefresh = !profile.refreshToken;
 
-            if (profile.lastSyncError) {
+            if (profileRequiresReconnect(profile)) {
                 map.set(profile.id, { level: 'error', label: 'Needs reconnect' });
                 return;
             }
@@ -3045,13 +3033,7 @@ const Dashboard: React.FC = () => {
     ]), [compareSnapshots]);
 
     useEffect(() => {
-        if (!activeProfile?.id || viewMode !== 'today') return;
-        if (referenceDay !== todayIsoDay) return;
-        queryClient.invalidateQueries({ queryKey: ['dailyStats', activeProfile.id], exact: true });
-    }, [activeProfile?.id, queryClient, referenceDay, todayIsoDay, viewMode]);
-
-    useEffect(() => {
-        if (!profiles.length) return;
+        if (!activeProfile?.id) return;
         let timer: number | null = null;
 
         const scheduleMidnightInvalidation = () => {
@@ -3059,7 +3041,10 @@ const Dashboard: React.FC = () => {
             const delayMs = getMillisecondsUntilNextProfileMidnight(activeProfile, now);
 
             timer = window.setTimeout(() => {
-                queryClient.invalidateQueries({ queryKey: ['dailyStats'] });
+                queryClient.invalidateQueries({
+                    queryKey: ['dailyStats', activeProfile.id],
+                    exact: true,
+                });
                 scheduleMidnightInvalidation();
             }, delayMs);
         };
@@ -3068,7 +3053,12 @@ const Dashboard: React.FC = () => {
         return () => {
             if (timer !== null) window.clearTimeout(timer);
         };
-    }, [activeProfile, profiles.length, queryClient]);
+    }, [
+        activeProfile?.id,
+        activeProfile?.lastKnownOffsetSource,
+        activeProfile?.lastKnownUtcOffsetMinutes,
+        queryClient,
+    ]);
 
     const userName = activeProfile ? getProfileDisplayName(activeProfile) : 'there';
 
@@ -3140,7 +3130,7 @@ const Dashboard: React.FC = () => {
     // ============================================
     const activeQueryError = userQueries.find((q, idx) => profiles[idx].id === activeProfile?.id && q.isError);
 
-    if (!activeData && activeQueryError) {
+    if (isActiveProfileStatsHydrated && !activeData && activeQueryError) {
         const errorState = getDashboardErrorState(activeQueryError.error);
         return (
             <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-canvas">
@@ -3171,7 +3161,7 @@ const Dashboard: React.FC = () => {
         );
     }
 
-    if (!activeData && userQueries.some(q => q.isLoading)) {
+    if (!activeData && (!isActiveProfileStatsHydrated || activeUserQuery?.isLoading)) {
         return (
             <div className="min-h-screen bg-canvas px-4 py-6" aria-label="Loading your Oura dashboard" role="status">
                 <div className="mx-auto max-w-5xl">

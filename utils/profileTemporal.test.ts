@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { deriveProfileTemporalMetadata } from './profileTemporal';
+import {
+    deriveProfileTemporalMetadata,
+    getProfileOffsetMinutes,
+    shouldReplaceProfileTemporalMetadata,
+} from './profileTemporal';
 import { createEmptyDailyStats } from '../test/helpers';
 
 describe('profile temporal metadata derivation', () => {
-    it('picks the freshest available offset automatically for traveling users', () => {
+    it('ignores UTC heart-rate timestamps when deriving a profile timezone', () => {
         const data = createEmptyDailyStats({
             session: [
                 {
@@ -16,7 +20,9 @@ describe('profile temporal metadata derivation', () => {
                 {
                     bpm: 58,
                     source: 'rest',
-                    timestamp: '2026-03-31T14:00:00-07:00',
+                    // Oura heart-rate samples are absolute UTC timestamps. They
+                    // do not describe the member's local timezone.
+                    timestamp: '2026-03-31T21:00:00Z',
                 },
             ],
             workout: [
@@ -31,9 +37,9 @@ describe('profile temporal metadata derivation', () => {
         });
 
         expect(deriveProfileTemporalMetadata(data)).toEqual({
-            lastKnownUtcOffsetMinutes: -420,
-            lastKnownOffsetObservedAt: '2026-03-31T14:00:00-07:00',
-            lastKnownOffsetSource: 'heartrate',
+            lastKnownUtcOffsetMinutes: -360,
+            lastKnownOffsetObservedAt: '2026-03-31T09:00:00-06:00',
+            lastKnownOffsetSource: 'workout_end',
         });
     });
 
@@ -52,5 +58,40 @@ describe('profile temporal metadata derivation', () => {
             lastKnownOffsetObservedAt: '2026-03-31T12:00:00-05:00',
             lastKnownOffsetSource: 'sleep_time_window',
         });
+    });
+
+    it('ignores and repairs a legacy heart-rate-derived UTC offset', () => {
+        const legacyProfile = {
+            lastKnownUtcOffsetMinutes: 0,
+            lastKnownOffsetObservedAt: '2026-07-31T01:33:00Z',
+            lastKnownOffsetSource: 'heartrate' as const,
+        };
+        const reliableCandidate = {
+            lastKnownUtcOffsetMinutes: -360,
+            lastKnownOffsetObservedAt: '2026-07-30T09:11:55-06:00',
+            lastKnownOffsetSource: 'session_bedtime_end' as const,
+        };
+
+        expect(getProfileOffsetMinutes(legacyProfile)).toBeNull();
+        expect(shouldReplaceProfileTemporalMetadata(legacyProfile, reliableCandidate)).toBe(true);
+    });
+
+    it('does not let an older partial sync overwrite newer reliable timezone evidence', () => {
+        const current = {
+            lastKnownUtcOffsetMinutes: -360,
+            lastKnownOffsetObservedAt: '2026-07-30T09:11:55-06:00',
+            lastKnownOffsetSource: 'session_bedtime_end' as const,
+        };
+        const olderCandidate = {
+            lastKnownUtcOffsetMinutes: -420,
+            lastKnownOffsetObservedAt: '2026-07-29T18:00:00-07:00',
+            lastKnownOffsetSource: 'workout_end' as const,
+        };
+
+        expect(shouldReplaceProfileTemporalMetadata(current, olderCandidate)).toBe(false);
+        expect(shouldReplaceProfileTemporalMetadata(current, {
+            ...current,
+            lastKnownOffsetSource: 'session_bedtime_end',
+        })).toBe(false);
     });
 });

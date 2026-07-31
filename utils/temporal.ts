@@ -16,6 +16,8 @@ type ShiftedDateParts = {
 export type ProfileOffsetSource =
     | 'session_bedtime_end'
     | 'session_bedtime_start'
+    // Legacy persisted value only. Heart-rate timestamps are UTC and must not
+    // be used as new profile offset evidence.
     | 'heartrate'
     | 'workout_end'
     | 'workout_start'

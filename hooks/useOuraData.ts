@@ -3,12 +3,11 @@ import {
     saveIncrementalProfileStats,
     saveProfileStats,
 } from '../services/firestoreStatsService';
-import { firebaseService } from '../services/firebaseService';
 import { ouraService } from '../services/ouraService';
+import { persistDerivedProfileTemporalMetadata } from '../services/profileTemporalService';
 import { DailyStats, OuraEndpointDiagnostic } from '../types';
 import { getOuraFetchEndISODate, shiftLocalISODate } from '../utils/date';
 import { hasAnyOuraScope, normalizeGrantedOuraScopes, OURA_SCOPE_CANDIDATES } from '../utils/ouraScopes';
-import { deriveProfileTemporalMetadata } from '../utils/profileTemporal';
 
 export const FULL_HISTORY_START_DATE = '2016-01-01';
 const INITIAL_RECENT_DAYS = 28;
@@ -20,7 +19,6 @@ type FetchConfig = {
     requireCompleteData?: boolean;
     grantedScopes?: string[];
     availabilityKey?: string;
-    profileId?: string;
     profileOffsetMinutes?: number | null;
 };
 
@@ -348,15 +346,6 @@ export const fetchDailyStats = async (
         resilienceDiagnostic
     );
 
-    if (config.profileId) {
-        const temporalMetadata = deriveProfileTemporalMetadata(stats);
-        if (temporalMetadata) {
-            firebaseService.patchProfile(config.profileId, temporalMetadata).catch((error) => {
-                console.warn('Failed to persist profile temporal metadata:', error);
-            });
-        }
-    }
-
     return stats;
 };
 
@@ -402,11 +391,11 @@ export const syncDailyStats = async (
             fullHeartrate: true,
             grantedScopes: options.grantedScopes,
             availabilityKey: options.availabilityKey,
-            profileId: options.profileId,
             profileOffsetMinutes: options.profileOffsetMinutes,
         });
         if (profileId) {
             await saveProfileStats(profileId, fullData, 'full');
+            await persistDerivedProfileTemporalMetadata(profileId, fullData);
         }
         return fullData;
     }
@@ -433,7 +422,6 @@ export const syncDailyStats = async (
         includeStaticCollections: !baseData,
         grantedScopes: options.grantedScopes,
         availabilityKey: options.availabilityKey,
-        profileId: options.profileId,
         profileOffsetMinutes: options.profileOffsetMinutes,
     });
 
@@ -442,6 +430,7 @@ export const syncDailyStats = async (
     // Persist only the changed slice so dashboard queries do not block on full-history rewrites.
     if (profileId) {
         await saveIncrementalProfileStats(profileId, result, delta);
+        await persistDerivedProfileTemporalMetadata(profileId, result);
     }
 
     return result;

@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
     mergeDailyStats: vi.fn(),
     syncDailyStats: vi.fn(),
     saveProfileStats: vi.fn(),
+    persistDerivedProfileTemporalMetadata: vi.fn(),
 }));
 
 vi.mock('../hooks/useOuraData', () => ({
@@ -16,6 +17,10 @@ vi.mock('../hooks/useOuraData', () => ({
 
 vi.mock('./firestoreStatsService', () => ({
     saveProfileStats: mocks.saveProfileStats,
+}));
+
+vi.mock('./profileTemporalService', () => ({
+    persistDerivedProfileTemporalMetadata: mocks.persistDerivedProfileTemporalMetadata,
 }));
 
 describe('fullSync stale-data safety', () => {
@@ -44,6 +49,7 @@ describe('fullSync stale-data safety', () => {
         };
         mocks.fetchDailyStats.mockResolvedValueOnce(completeStats);
         mocks.saveProfileStats.mockResolvedValueOnce(undefined);
+        mocks.persistDerivedProfileTemporalMetadata.mockResolvedValueOnce(undefined);
 
         await expect(fullSync(
             'access-token',
@@ -58,5 +64,9 @@ describe('fullSync stale-data safety', () => {
         );
         expect(mocks.saveProfileStats).toHaveBeenCalledTimes(1);
         expect(mocks.saveProfileStats).toHaveBeenCalledWith('profile-1', completeStats, 'full');
+        expect(mocks.persistDerivedProfileTemporalMetadata).toHaveBeenCalledWith('profile-1', completeStats);
+        expect(mocks.saveProfileStats.mock.invocationCallOrder[0]).toBeLessThan(
+            mocks.persistDerivedProfileTemporalMetadata.mock.invocationCallOrder[0]
+        );
     });
 });

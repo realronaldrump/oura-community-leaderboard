@@ -4,7 +4,6 @@ import { UserProfile, WebhookSignal } from '../types';
 import { firebaseService } from '../services/firebaseService';
 import { webhookService } from '../services/webhookService';
 
-const LAST_SYNC_KEY = 'oura_last_sync';
 const WEBHOOK_SETUP_CHECK_KEY = 'oura_webhook_setup_checked_at';
 const WEBHOOK_SETUP_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h
 const WEBHOOK_INVALIDATE_DEBOUNCE_MS = 1200;
@@ -23,6 +22,17 @@ const signalKey = (signal: WebhookSignal): string => {
     ].join('|');
 };
 
+const toTimestampMs = (value?: string | null): number => {
+    if (!value) return 0;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const getSignalTimestampMs = (signal: WebhookSignal): number => Math.max(
+    toTimestampMs(signal.lastReceivedAt),
+    toTimestampMs(signal.lastEventAt)
+);
+
 const isPermissionDeniedError = (error: unknown): boolean => {
     const code = String((error as any)?.code || '').toLowerCase();
     if (PERMISSION_DENIED_ERROR_CODES.has(code)) return true;
@@ -33,11 +43,18 @@ const isPermissionDeniedError = (error: unknown): boolean => {
 export const useWebhookRefresh = (profile: UserProfile | null, enabled: boolean = true) => {
     const queryClient = useQueryClient();
     const lastSignalKeyRef = useRef<string>('');
+    const lastSuccessfulSyncAtRef = useRef<string | null>(profile?.lastSuccessfulSyncAt ?? null);
     const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        lastSuccessfulSyncAtRef.current = profile?.lastSuccessfulSyncAt ?? null;
+    }, [profile?.id, profile?.lastSuccessfulSyncAt]);
 
     useEffect(() => {
         if (!enabled) return;
         if (!profile?.id || !profile?.ouraUserId) return;
+
+        lastSignalKeyRef.current = '';
 
         const handleSignal = (signal: WebhookSignal | null) => {
             if (!signal) return;
@@ -45,17 +62,22 @@ export const useWebhookRefresh = (profile: UserProfile | null, enabled: boolean 
             if (!nextKey || nextKey === lastSignalKeyRef.current) return;
             lastSignalKeyRef.current = nextKey;
 
+            const signalTimestampMs = getSignalTimestampMs(signal);
+            const lastSuccessfulSyncMs = toTimestampMs(lastSuccessfulSyncAtRef.current);
+            if (
+                signalTimestampMs > 0 &&
+                lastSuccessfulSyncMs > 0 &&
+                signalTimestampMs <= lastSuccessfulSyncMs
+            ) {
+                return;
+            }
+
             if (invalidateTimerRef.current) {
                 clearTimeout(invalidateTimerRef.current);
             }
 
             invalidateTimerRef.current = setTimeout(() => {
                 queryClient.invalidateQueries({ queryKey: ['dailyStats', profile.id], exact: true });
-                try {
-                    localStorage.setItem(LAST_SYNC_KEY, Date.now().toString());
-                } catch {
-                    // Ignore storage errors.
-                }
             }, WEBHOOK_INVALIDATE_DEBOUNCE_MS);
         };
 

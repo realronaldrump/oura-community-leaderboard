@@ -7,11 +7,12 @@ import PrimaryProfileSwitcher from '../components/PrimaryProfileSwitcher';
 import InviteLinkCard from '../components/InviteLinkCard';
 import { Button, Dialog } from '../components/ui';
 import { ouraService } from '../services/ouraService';
+import { isReconnectRequiredError } from '../services/ouraTokenLifecycle';
 import { webhookService } from '../services/webhookService';
 import { DailyStats, DataExclusionRange } from '../types';
 import { getProfileDisplayName } from '../utils/profileName';
 import { formatISODateForDisplay, isISODateString, shiftLocalISODate } from '../utils/date';
-import { getProfileLocalISODate } from '../utils/profileTemporal';
+import { getProfileLocalISODate, getProfileOffsetMinutes } from '../utils/profileTemporal';
 import {
     getDataExclusionRangeDayCount,
     getTotalExcludedDayCount,
@@ -278,7 +279,7 @@ const Settings: React.FC = () => {
                     grantedScopes: activeProfile.grantedScopes,
                     availabilityKey: activeProfile.id,
                     profileId: activeProfile.id,
-                    profileOffsetMinutes: activeProfile.lastKnownUtcOffsetMinutes,
+                    profileOffsetMinutes: getProfileOffsetMinutes(activeProfile),
                 });
             };
 
@@ -498,8 +499,10 @@ const Settings: React.FC = () => {
         } catch (error) {
             const rawMessage = error instanceof Error ? error.message : 'Unknown error';
             const lower = rawMessage.toLowerCase();
-            const message = (lower.includes('unauthorized') || lower.includes('401') || lower.includes('missing required oura consent') || lower.includes('missing oura consent scopes'))
-                ? 'Oura check failed: authorization expired. Reconnect your Oura account.'
+            const requiresConsent = lower.includes('missing required oura consent') ||
+                lower.includes('missing oura consent scopes');
+            const message = (isReconnectRequiredError(error) || requiresConsent)
+                ? 'Oura check failed: the saved connection needs attention. Reconnect your Oura account.'
                 : 'Oura check failed. Please try again.';
 
             setQuickCheck({

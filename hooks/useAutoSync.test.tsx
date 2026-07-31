@@ -121,4 +121,33 @@ describe('useAutoSync', () => {
             { cancelRefetch: false, throwOnError: true }
         );
     });
+
+    it('serializes stale profile refreshes so endpoint fan-out cannot burst across members', async () => {
+        const queryClient = new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+        });
+        let resolveFirst!: () => void;
+        const firstRefresh = new Promise<void>((resolve) => {
+            resolveFirst = resolve;
+        });
+        const refetch = vi.spyOn(queryClient, 'refetchQueries')
+            .mockImplementationOnce(() => firstRefresh)
+            .mockResolvedValue(undefined);
+
+        render(
+            <QueryClientProvider client={queryClient}>
+                <Harness profiles={[
+                    { id: 'profile-1', lastSuccessfulSyncAt: null },
+                    { id: 'profile-2', lastSuccessfulSyncAt: null },
+                ]} />
+            </QueryClientProvider>
+        );
+
+        await flushPromises();
+        expect(refetch).toHaveBeenCalledTimes(1);
+
+        resolveFirst();
+        await flushPromises();
+        expect(refetch).toHaveBeenCalledTimes(2);
+    });
 });

@@ -1,5 +1,6 @@
 import { FULL_HISTORY_START_DATE, fetchDailyStats, mergeDailyStats, syncDailyStats } from '../hooks/useOuraData';
 import { saveProfileStats } from './firestoreStatsService';
+import { persistDerivedProfileTemporalMetadata } from './profileTemporalService';
 import { DailyStats } from '../types';
 import { getOuraFetchEndISODate } from '../utils/date';
 import { getOffsetIsoDay } from '../utils/temporal';
@@ -151,7 +152,6 @@ export const fullSync = async (
             requireCompleteData: true,
             grantedScopes: authContext.grantedScopes,
             availabilityKey: authContext.availabilityKey,
-            profileId: authContext.profileId,
             profileOffsetMinutes: authContext.profileOffsetMinutes,
         });
 
@@ -161,6 +161,7 @@ export const fullSync = async (
     const result = accumulated!;
     if (authContext.profileId) {
         await saveProfileStats(authContext.profileId, result, 'full');
+        await persistDerivedProfileTemporalMetadata(authContext.profileId, result);
     }
     const coverage = describeCoverage(result);
     const details = coverage

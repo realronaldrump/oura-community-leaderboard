@@ -1,4 +1,4 @@
-import { DailyStats, UserProfile } from '../types';
+import type { DailyStats, UserProfile } from '../types';
 import {
     getBufferedFetchEndISODate,
     getCurrentHourForOffset,
@@ -24,16 +24,27 @@ type OffsetCandidate = ProfileTemporalMetadata & {
 const PRIORITY_BY_SOURCE: Record<ProfileOffsetSource, number> = {
     session_bedtime_end: 0,
     session_bedtime_start: 1,
-    heartrate: 2,
     workout_end: 3,
     workout_start: 4,
     sleep_time_window: 5,
+    // Kept only so legacy Firestore documents can be recognized and repaired.
+    // Oura heart-rate timestamps are UTC instants, not local-timezone evidence.
+    heartrate: Number.POSITIVE_INFINITY,
 };
+
+const MAX_UTC_OFFSET_MINUTES = 14 * 60;
+
+const isPlausibleUtcOffsetMinutes = (value: unknown): value is number => (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    Number.isInteger(value) &&
+    Math.abs(value) <= MAX_UTC_OFFSET_MINUTES
+);
 
 const toCandidate = (observedAt: string | null | undefined, source: ProfileOffsetSource): OffsetCandidate | null => {
     if (!observedAt) return null;
     const offsetMinutes = parseUtcOffsetMinutesFromIso(observedAt);
-    if (offsetMinutes == null) return null;
+    if (!isPlausibleUtcOffsetMinutes(offsetMinutes)) return null;
     const observedAtMs = new Date(observedAt).getTime();
     if (!Number.isFinite(observedAtMs)) return null;
 
@@ -49,10 +60,10 @@ const toCandidate = (observedAt: string | null | undefined, source: ProfileOffse
 const toSleepTimeCandidate = (item: any): OffsetCandidate | null => {
     if (item?.day_tz == null || item?.day == null) return null;
     const offsetMinutes = Math.round(Number(item.day_tz) / 60);
-    if (!Number.isFinite(offsetMinutes)) return null;
+    if (!isPlausibleUtcOffsetMinutes(offsetMinutes)) return null;
 
     const observedAt = `${item.day}T12:00:00${offsetMinutes >= 0 ? '+' : '-'}${Math.abs(Math.trunc(offsetMinutes / 60)).toString().padStart(2, '0')}:${Math.abs(offsetMinutes % 60).toString().padStart(2, '0')}`;
-    const observedAtMs = new Date(`${item.day}T12:00:00Z`).getTime();
+    const observedAtMs = new Date(observedAt).getTime();
     if (!Number.isFinite(observedAtMs)) return null;
 
     return {
@@ -79,10 +90,6 @@ export const deriveProfileTemporalMetadata = (data: DailyStats): ProfileTemporal
         ...(data.session || []).map((session) => toCandidate(session.bedtime_start, 'session_bedtime_start')),
     ]);
 
-    const heartrateCandidate = chooseNewestCandidate(
-        (data.heartrate || []).map((item) => toCandidate(item.timestamp, 'heartrate'))
-    );
-
     const workoutCandidate = chooseNewestCandidate([
         ...(data.workout || []).map((item) => toCandidate(item.end_datetime, 'workout_end')),
         ...(data.workout || []).map((item) => toCandidate(item.start_datetime, 'workout_start')),
@@ -94,7 +101,6 @@ export const deriveProfileTemporalMetadata = (data: DailyStats): ProfileTemporal
 
     const merged = chooseNewestCandidate([
         sessionCandidates,
-        heartrateCandidate,
         workoutCandidate,
         sleepTimeCandidate,
     ]);
@@ -114,14 +120,65 @@ export const deriveProfileTemporalMetadata = (data: DailyStats): ProfileTemporal
     };
 };
 
-export const getProfileOffsetMinutes = (profile?: Pick<UserProfile, 'lastKnownUtcOffsetMinutes'> | null): number | null => {
+type ProfileOffsetFields = Pick<
+    UserProfile,
+    'lastKnownUtcOffsetMinutes' | 'lastKnownOffsetSource'
+>;
+
+type ProfileTemporalFields = Pick<
+    UserProfile,
+    | 'lastKnownUtcOffsetMinutes'
+    | 'lastKnownOffsetObservedAt'
+    | 'lastKnownOffsetSource'
+>;
+
+export const getProfileOffsetMinutes = (profile?: ProfileOffsetFields | null): number | null => {
+    // A previous regression persisted Oura's UTC heart-rate timestamps as a
+    // profile offset. Ignore those documents immediately; the next successful
+    // sync replaces them with reliable session/workout/sleep-time evidence.
+    if (profile?.lastKnownOffsetSource === 'heartrate') return null;
     const offsetMinutes = profile?.lastKnownUtcOffsetMinutes;
-    return typeof offsetMinutes === 'number' && Number.isFinite(offsetMinutes)
+    return isPlausibleUtcOffsetMinutes(offsetMinutes)
         ? offsetMinutes
         : null;
 };
 
-export const getProfileLocalISODate = (profile?: Pick<UserProfile, 'lastKnownUtcOffsetMinutes'> | null, baseDate: Date = new Date()): string => {
+export const shouldReplaceProfileTemporalMetadata = (
+    current: ProfileTemporalFields | null | undefined,
+    candidate: ProfileTemporalMetadata
+): boolean => {
+    if (
+        candidate.lastKnownOffsetSource === 'heartrate' ||
+        !isPlausibleUtcOffsetMinutes(candidate.lastKnownUtcOffsetMinutes) ||
+        !Number.isFinite(Date.parse(candidate.lastKnownOffsetObservedAt))
+    ) {
+        return false;
+    }
+
+    const currentOffset = getProfileOffsetMinutes(current);
+    const currentObservedAtMs = Date.parse(current?.lastKnownOffsetObservedAt || '');
+    if (currentOffset == null || !Number.isFinite(currentObservedAtMs)) return true;
+
+    const candidateObservedAtMs = Date.parse(candidate.lastKnownOffsetObservedAt);
+    if (candidateObservedAtMs !== currentObservedAtMs) {
+        return candidateObservedAtMs > currentObservedAtMs;
+    }
+
+    if (
+        currentOffset === candidate.lastKnownUtcOffsetMinutes &&
+        current?.lastKnownOffsetSource === candidate.lastKnownOffsetSource &&
+        current?.lastKnownOffsetObservedAt === candidate.lastKnownOffsetObservedAt
+    ) {
+        return false;
+    }
+
+    const currentPriority = current?.lastKnownOffsetSource
+        ? PRIORITY_BY_SOURCE[current.lastKnownOffsetSource]
+        : Number.POSITIVE_INFINITY;
+    return PRIORITY_BY_SOURCE[candidate.lastKnownOffsetSource] < currentPriority;
+};
+
+export const getProfileLocalISODate = (profile?: ProfileOffsetFields | null, baseDate: Date = new Date()): string => {
     const offsetMinutes = getProfileOffsetMinutes(profile);
     if (offsetMinutes == null) {
         return `${baseDate.getFullYear()}-${String(baseDate.getMonth() + 1).padStart(2, '0')}-${String(baseDate.getDate()).padStart(2, '0')}`;
@@ -130,7 +187,7 @@ export const getProfileLocalISODate = (profile?: Pick<UserProfile, 'lastKnownUtc
 };
 
 export const getProfileRelativeISODate = (
-    profile: Pick<UserProfile, 'lastKnownUtcOffsetMinutes'> | null | undefined,
+    profile: ProfileOffsetFields | null | undefined,
     daysDelta: number,
     baseDate: Date = new Date()
 ): string => {
@@ -144,7 +201,7 @@ export const getProfileRelativeISODate = (
 };
 
 export const getProfileCurrentHour = (
-    profile: Pick<UserProfile, 'lastKnownUtcOffsetMinutes'> | null | undefined,
+    profile: ProfileOffsetFields | null | undefined,
     baseDate: Date = new Date()
 ): number => {
     const offsetMinutes = getProfileOffsetMinutes(profile);
@@ -153,13 +210,13 @@ export const getProfileCurrentHour = (
 };
 
 export const getProfileFetchEndISODate = (
-    profile: Pick<UserProfile, 'lastKnownUtcOffsetMinutes'> | null | undefined,
+    profile: ProfileOffsetFields | null | undefined,
     baseDate: Date = new Date(),
     futureDays: number = 2
 ): string => getBufferedFetchEndISODate(getProfileOffsetMinutes(profile), baseDate, futureDays);
 
 export const getMillisecondsUntilNextProfileMidnight = (
-    profile: Pick<UserProfile, 'lastKnownUtcOffsetMinutes'> | null | undefined,
+    profile: ProfileOffsetFields | null | undefined,
     baseDate: Date = new Date(),
     bufferMs: number = 5_000
 ): number => {

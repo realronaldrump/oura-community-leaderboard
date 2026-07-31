@@ -14,6 +14,10 @@ import {
 import { db } from "./firebaseConfig";
 import { UserProfile, WebhookSignal } from "../types";
 import type { TokenRotationPatch, TokenRotationResult } from "./ouraTokenLifecycle";
+import {
+    shouldReplaceProfileTemporalMetadata,
+    type ProfileTemporalMetadata,
+} from "../utils/profileTemporal";
 
 const PROFILES_COLLECTION = "profiles";
 const WEBHOOK_SIGNALS_COLLECTION = "webhookSignals";
@@ -117,6 +121,33 @@ export const firebaseService = {
                 status: 'updated',
                 profile: { ...current, ...patch },
             };
+        });
+    },
+
+    /**
+     * Persist timezone evidence monotonically. Concurrent/partial syncs may
+     * finish out of order, so an older observation must never roll the profile
+     * clock backward. Legacy heart-rate-derived offsets are always replaceable.
+     */
+    persistProfileTemporalMetadata: async (
+        id: string,
+        metadata: ProfileTemporalMetadata
+    ): Promise<boolean> => {
+        return runTransaction(db, async (transaction) => {
+            const profileRef = doc(db, PROFILES_COLLECTION, id);
+            const snapshot = await transaction.get(profileRef);
+            if (!snapshot.exists()) return false;
+
+            const current = snapshot.data() as UserProfile;
+            if (!shouldReplaceProfileTemporalMetadata(current, metadata)) {
+                return false;
+            }
+
+            transaction.set(profileRef, {
+                ...metadata,
+                lastUpdated: new Date().toISOString(),
+            }, { merge: true });
+            return true;
         });
     },
 
