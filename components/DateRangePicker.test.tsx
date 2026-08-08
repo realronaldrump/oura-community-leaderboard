@@ -55,4 +55,23 @@ describe('DateRangePicker availability', () => {
         expect(screen.queryByRole('dialog', { name: 'Date picker' })).not.toBeInTheDocument();
         expect(onSelectDate).not.toHaveBeenCalled();
     });
+
+    it('notifies the caller when history is opened so older dates can load on demand', () => {
+        const onOpen = vi.fn();
+        const { container } = render(
+            <DateRangePicker
+                dates={['2026-07-25']}
+                mode="date"
+                selectedDate="2026-07-25"
+                onSelectDate={vi.fn()}
+                onOpen={onOpen}
+            />,
+        );
+
+        const trigger = container.querySelector<HTMLButtonElement>('.date-picker-trigger');
+        fireEvent.click(trigger!);
+        fireEvent.click(trigger!);
+
+        expect(onOpen).toHaveBeenCalledTimes(1);
+    });
 });

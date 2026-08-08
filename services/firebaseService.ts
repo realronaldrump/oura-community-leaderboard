@@ -4,14 +4,18 @@ import {
     doc,
     setDoc,
     deleteDoc,
-    getDoc,
-    getDocs,
     onSnapshot,
     QuerySnapshot,
     DocumentData,
     runTransaction,
 } from "firebase/firestore";
-import { db } from "./firebaseConfig";
+import {
+    collection as bootstrapCollection,
+    doc as bootstrapDoc,
+    getDoc as getBootstrapDoc,
+    getDocs as getBootstrapDocs,
+} from "firebase/firestore/lite";
+import { bootstrapDb, db } from "./firebaseConfig";
 import { UserProfile, WebhookSignal } from "../types";
 import type { TokenRotationPatch, TokenRotationResult } from "./ouraTokenLifecycle";
 import {
@@ -54,10 +58,10 @@ export const firebaseService = {
      * One-shot fetch of all profiles (bypasses the realtime subscription).
      */
     getProfiles: async (): Promise<UserProfile[]> => {
-        const snapshot = await getDocs(collection(db, PROFILES_COLLECTION));
+        const snapshot = await getBootstrapDocs(bootstrapCollection(bootstrapDb, PROFILES_COLLECTION));
         const profiles: UserProfile[] = [];
-        snapshot.forEach((doc) => {
-            profiles.push(doc.data() as UserProfile);
+        snapshot.forEach((profileDocument) => {
+            profiles.push(profileDocument.data() as UserProfile);
         });
         return profiles;
     },
@@ -66,7 +70,7 @@ export const firebaseService = {
      * Read the latest profile document before a single-use token refresh.
      */
     getProfile: async (id: string): Promise<UserProfile | null> => {
-        const snapshot = await getDoc(doc(db, PROFILES_COLLECTION, id));
+        const snapshot = await getBootstrapDoc(bootstrapDoc(bootstrapDb, PROFILES_COLLECTION, id));
         return snapshot.exists() ? snapshot.data() as UserProfile : null;
     },
 

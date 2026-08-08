@@ -405,6 +405,19 @@ export const mergeDailyStats = (existingData: DailyStats, incomingData: DailySta
     };
 };
 
+/**
+ * Keep a loaded all-time cache current without creating one from a compact
+ * launch snapshot. Returning undefined tells React Query to leave an absent
+ * cache entry absent, so the first history request still performs the durable
+ * full-history read.
+ */
+export const mergeDailyStatsIfLoaded = (
+    existingData: DailyStats | undefined,
+    incomingData: DailyStats
+): DailyStats | undefined => (
+    existingData ? mergeDailyStats(existingData, incomingData) : undefined
+);
+
 export const syncDailyStats = async (
     token: string,
     existingData?: DailyStats,

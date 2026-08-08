@@ -7,7 +7,7 @@ import { useUser } from '../contexts/UserContext';
 import MetricCard from '../components/MetricCard';
 import type { MetricDetailType } from '../components/MetricDetailModal';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
-import { mergeDailyStats, syncDailyStats } from '../hooks/useOuraData';
+import { mergeDailyStats, mergeDailyStatsIfLoaded, syncDailyStats } from '../hooks/useOuraData';
 import SyncModal from '../components/SyncModal';
 import PrimaryProfileSwitcher from '../components/PrimaryProfileSwitcher';
 import DateRangePicker from '../components/DateRangePicker';
@@ -1954,15 +1954,18 @@ const Dashboard: React.FC = () => {
     }, [getAccessTokenForProfile]);
 
     const mergeIntoAllTimeCache = useCallback((profileId: string, data: DailyStats) => {
-        queryClient.setQueryData(['allTimeStats', profileId], (current: DailyStats | undefined) => (
-            current ? mergeDailyStats(current, data) : data
-        ));
+        queryClient.setQueryData(
+            ['allTimeStats', profileId],
+            (current: DailyStats | undefined) => mergeDailyStatsIfLoaded(current, data)
+        );
     }, [queryClient]);
 
     const primeStoredStatsCache = useCallback((profileId: string, stored: DailyStats) => {
         queryClient.setQueryData(['dailyStats', profileId], (current: DailyStats | undefined) => current ?? stored);
-        mergeIntoAllTimeCache(profileId, stored);
-    }, [mergeIntoAllTimeCache, queryClient]);
+        queryClient.setQueryData(['allTimeStats', profileId], (current: DailyStats | undefined) => (
+            current ? mergeDailyStats(current, stored) : stored
+        ));
+    }, [queryClient]);
 
     const loadProfileDailyStats = useCallback(async (profile: UserProfile): Promise<DailyStats> => {
         try {
@@ -1986,27 +1989,29 @@ const Dashboard: React.FC = () => {
         }
     }, [markProfileSyncError, markProfileSyncSuccess, mergeIntoAllTimeCache, queryClient, runWithAutoTokenRefresh]);
 
-    const loadProfileAllTimeStats = useCallback(async (profile: UserProfile): Promise<DailyStats | undefined> => {
+    const loadProfileAllTimeStats = useCallback(async (profile: UserProfile): Promise<DailyStats> => {
         const cachedAllTime = queryClient.getQueryData(['allTimeStats', profile.id]) as DailyStats | undefined;
         if (cachedAllTime) return cachedAllTime;
 
-        const cachedDaily = queryClient.getQueryData(['dailyStats', profile.id]) as DailyStats | undefined;
-        if (cachedDaily) {
-            mergeIntoAllTimeCache(profile.id, cachedDaily);
-            return cachedDaily;
-        }
-
         const stored = await getStoredDailyStats(profile.id);
         if (stored) {
-            primeStoredStatsCache(profile.id, stored);
-            return stored;
+            const latestDaily = queryClient.getQueryData(['dailyStats', profile.id]) as DailyStats | undefined;
+            const completeHistory = latestDaily ? mergeDailyStats(stored, latestDaily) : stored;
+            primeStoredStatsCache(profile.id, completeHistory);
+            return completeHistory;
         }
 
-        return loadProfileDailyStats(profile);
-    }, [loadProfileDailyStats, mergeIntoAllTimeCache, primeStoredStatsCache, queryClient]);
+        // The compact daily cache remains available as placeholder UI, but it
+        // must never be cached under the all-time key. Keeping this query in an
+        // error state lets a later attempt read history after a sync completes.
+        throw new Error('Saved full history is not available yet.');
+    }, [primeStoredStatsCache, queryClient]);
 
     const profileIds = useMemo(() => profiles.map((profile) => profile.id), [profiles]);
-    const { hydratedProfileIds, allProfilesHydrated } = useProfileStatsHydration(profileIds);
+    const { hydratedProfileIds, allProfilesHydrated } = useProfileStatsHydration(
+        profileIds,
+        activeProfile?.id
+    );
     const isActiveProfileStatsHydrated = Boolean(
         activeProfile?.id && hydratedProfileIds.has(activeProfile.id)
     );
@@ -2110,17 +2115,9 @@ const Dashboard: React.FC = () => {
         queries: profiles.map(p => ({
             queryKey: ['allTimeStats', p.id],
             queryFn: () => loadProfileAllTimeStats(p),
-            initialData: () => {
-                const existingAllTime = queryClient.getQueryData(['allTimeStats', p.id]) as DailyStats | undefined;
-                if (existingAllTime) return existingAllTime;
-                return queryClient.getQueryData(['dailyStats', p.id]) as DailyStats | undefined;
-            },
-            initialDataUpdatedAt: () => {
-                const allTimeState = queryClient.getQueryState<DailyStats>(['allTimeStats', p.id]);
-                if (allTimeState?.data) return allTimeState.dataUpdatedAt;
-                return 0;
-            },
-            placeholderData: (previousData) => previousData,
+            placeholderData: (previousData) => previousData ?? (
+                queryClient.getQueryData(['dailyStats', p.id]) as DailyStats | undefined
+            ),
             staleTime: Number.POSITIVE_INFINITY,
             refetchOnWindowFocus: false,
             enabled: shouldLoadAllTimeStats && hydratedProfileIds.has(p.id),
@@ -2147,6 +2144,19 @@ const Dashboard: React.FC = () => {
     const activeData = activeUserQuery?.data as DailyStats | undefined;
     const activeAllTimeQuery = analysisAllTimeQueries.find((_, idx) => profiles[idx]?.id === activeProfile?.id);
     const activeAllTimeData = activeAllTimeQuery?.data as DailyStats | undefined;
+    const activeHistoryData = useMemo(() => {
+        if (activeAllTimeData && activeData) return mergeDailyStats(activeAllTimeData, activeData);
+        return activeAllTimeData ?? activeData;
+    }, [activeAllTimeData, activeData]);
+    const [showSlowStartupMessage, setShowSlowStartupMessage] = useState(false);
+    useEffect(() => {
+        if (activeData) {
+            setShowSlowStartupMessage(false);
+            return;
+        }
+        const timeout = window.setTimeout(() => setShowSlowStartupMessage(true), 2_500);
+        return () => window.clearTimeout(timeout);
+    }, [activeData, activeProfile?.id]);
     const competitionProfileData = useMemo(() => (
         profiles.map((profile, index) => ({
             profile,
@@ -2206,19 +2216,19 @@ const Dashboard: React.FC = () => {
     const [todayOverrideDay, setTodayOverrideDay] = useState<string | null>(null);
     const [trendsRange, setTrendsRange] = useState<DayRange | null>(null);
 
-    const sleepHistory = activeData?.sleep || [];
-    const readinessHistory = activeData?.readiness || [];
-    const activityHistory = activeData?.activity || [];
-    const sessionHistory = activeData?.session || [];
+    const sleepHistory = activeHistoryData?.sleep || [];
+    const readinessHistory = activeHistoryData?.readiness || [];
+    const activityHistory = activeHistoryData?.activity || [];
+    const sessionHistory = activeHistoryData?.session || [];
 
     // All-time histories for personal records (falls back to recent data)
     const allTimeSleepHistory = activeAllTimeData?.sleep || sleepHistory;
     const allTimeReadinessHistory = activeAllTimeData?.readiness || readinessHistory;
     const allTimeActivityHistory = activeAllTimeData?.activity || activityHistory;
     const allTimeSessionHistory = activeAllTimeData?.session || sessionHistory;
-    const spo2History = activeData?.spo2 || [];
-    const stressHistory = activeData?.stress || [];
-    const resilienceHistory = activeData?.resilience || [];
+    const spo2History = activeHistoryData?.spo2 || [];
+    const stressHistory = activeHistoryData?.stress || [];
+    const resilienceHistory = activeHistoryData?.resilience || [];
     const allTimeSpo2History = activeAllTimeData?.spo2 || spo2History;
     const allTimeStressHistory = activeAllTimeData?.stress || stressHistory;
     const allTimeResilienceHistory = activeAllTimeData?.resilience || resilienceHistory;
@@ -2226,7 +2236,7 @@ const Dashboard: React.FC = () => {
     const allTimeCardiovascularAgeHistory = activeAllTimeData?.cardiovascularAge || activeData?.cardiovascularAge || [];
     const allTimeVo2MaxHistory = activeAllTimeData?.vo2Max || activeData?.vo2Max || [];
     const resilienceDiagnostic = activeData?.resilienceDiagnostic ?? activeAllTimeData?.resilienceDiagnostic ?? null;
-    const hrData = activeData?.heartrate || [];
+    const hrData = activeHistoryData?.heartrate || [];
 
     const availableDays = useMemo(() => {
         const daySet = new Set<string>();
@@ -3171,7 +3181,13 @@ const Dashboard: React.FC = () => {
                     </div>
                     <div className="mt-8 grid gap-4">
                         <Skeleton className="h-8 w-44" />
-                        <Skeleton className="h-4 w-64 max-w-full" />
+                        {showSlowStartupMessage ? (
+                            <p className="max-w-md text-sm leading-6 text-ink-muted">
+                                Saved scores are taking longer than expected. The app will keep trying without discarding your existing Oura connection.
+                            </p>
+                        ) : (
+                            <p className="text-sm text-ink-muted">Loading your saved scores…</p>
+                        )}
                         <Skeleton className="mt-3 h-48 w-full rounded-xl" />
                         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                             <Skeleton className="h-28 rounded-xl" />
@@ -3391,6 +3407,7 @@ const Dashboard: React.FC = () => {
                                         dates={todayPickerDays}
                                         selectedDate={referenceDay}
                                         onSelectDate={handleSelectReferenceDay}
+                                        onOpen={prefetchAllTimeStats}
                                         showStepper
                                         todayIsoDay={todayIsoDay}
                                     />

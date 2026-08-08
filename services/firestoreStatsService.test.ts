@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+    buildProfileDashboardSnapshot,
     buildIncrementalProfileStatsDocuments,
     buildProfileStatsDocuments,
     estimateSetOperationBytes,
+    mergeIncrementalProfileStatsMetadata,
     partitionSetOperations,
     saveProfileStats,
 } from './firestoreStatsService';
@@ -10,6 +12,62 @@ import { PROFILE_STATS_SCHEMA_VERSION } from './profileStatsConstants';
 import { DailyStats } from '../types';
 
 describe('buildProfileStatsDocuments', () => {
+    it('builds a bounded dashboard snapshot without raw high-volume samples', () => {
+        const days = Array.from({ length: 32 }, (_, index) => {
+            const day = new Date(Date.UTC(2026, 5, index + 1)).toISOString().slice(0, 10);
+            return {
+                day,
+                sleep: { id: `sleep-${index}`, day, score: 80 + (index % 10), contributors: {} },
+                readiness: { id: `readiness-${index}`, day, score: 81 + (index % 10), contributors: {} },
+                activity: {
+                    id: `activity-${index}`,
+                    day,
+                    score: 82 + (index % 10),
+                    active_calories: 500,
+                    contributors: {},
+                    steps: 10_000,
+                    target_calories: 450,
+                    total_calories: 2_400,
+                    class_5_min: 'raw-class-samples',
+                    met: { interval: 60, items: [1, 2, 3], timestamp: `${day}T00:00:00Z` },
+                } as any,
+                session: {
+                    id: `session-${index}`,
+                    day,
+                    total_sleep_duration: 28_000,
+                    movement_30_sec: 'raw-movement-samples',
+                    sleep_phase_30_sec: 'raw-sleep-phase-samples',
+                    heart_rate: { interval: 300, items: [50, 51], timestamp: `${day}T00:00:00Z` },
+                    hrv: { interval: 300, items: [20, 22], timestamp: `${day}T00:00:00Z` },
+                },
+            };
+        });
+        const stats: DailyStats = {
+            sleep: days.map((item) => item.sleep),
+            readiness: days.map((item) => item.readiness),
+            activity: days.map((item) => item.activity),
+            session: days.map((item) => item.session),
+            spo2: [],
+            stress: [],
+            resilience: [],
+            endpointDiagnostics: { daily_stress: null },
+        };
+
+        const snapshot = buildProfileDashboardSnapshot('profile-1', stats, '2026-08-01T12:00:00.000Z');
+
+        expect(snapshot.profileId).toBe('profile-1');
+        expect(snapshot.data.sleep).toHaveLength(30);
+        expect(snapshot.data.sleep[0].day).toBe('2026-07-02');
+        expect(snapshot.data.sleep.at(-1)?.day).toBe('2026-06-03');
+        expect(snapshot.data.endpointDiagnostics).toEqual({ daily_stress: null });
+        expect(snapshot.data.session[0]).not.toHaveProperty('movement_30_sec');
+        expect(snapshot.data.session[0]).not.toHaveProperty('sleep_phase_30_sec');
+        expect(snapshot.data.session[0]).not.toHaveProperty('heart_rate');
+        expect(snapshot.data.session[0]).not.toHaveProperty('hrv');
+        expect(snapshot.data.activity[0]).not.toHaveProperty('class_5_min');
+        expect(snapshot.data.activity[0]).not.toHaveProperty('met');
+    });
+
     it('normalizes daily stats into shared Firestore day and collection documents', () => {
         const stats: DailyStats = {
             personalInfo: { id: 'oura-user-1', age: 40, email: 'member@example.com' },
@@ -215,6 +273,36 @@ describe('buildProfileStatsDocuments', () => {
         expect(built.rawCollections.ringConfigurations).toHaveLength(0);
     });
 
+    it('never narrows durable history coverage when an incremental client holds only a compact snapshot', () => {
+        const merged = mergeIncrementalProfileStatsMetadata(
+            {
+                profileId: 'profile-1',
+                schemaVersion: PROFILE_STATS_SCHEMA_VERSION,
+                oldestDay: '2023-01-01',
+                newestDay: '2026-07-30',
+                lastFullSyncAt: '2026-07-01T12:00:00.000Z',
+                lastFullSyncSchemaVersion: PROFILE_STATS_SCHEMA_VERSION,
+                updatedAt: '2026-07-30T12:00:00.000Z',
+            },
+            {
+                profileId: 'profile-1',
+                schemaVersion: PROFILE_STATS_SCHEMA_VERSION,
+                oldestDay: '2026-07-01',
+                newestDay: '2026-08-01',
+                lastIncrementalSyncAt: '2026-08-01T12:00:00.000Z',
+                updatedAt: '2026-08-01T12:00:00.000Z',
+            }
+        );
+
+        expect(merged).toMatchObject({
+            oldestDay: '2023-01-01',
+            newestDay: '2026-08-01',
+            lastFullSyncAt: '2026-07-01T12:00:00.000Z',
+            lastFullSyncSchemaVersion: PROFILE_STATS_SCHEMA_VERSION,
+            lastIncrementalSyncAt: '2026-08-01T12:00:00.000Z',
+        });
+    });
+
     it('stores an overnight sleep session only on its canonical Oura day', () => {
         const stats: DailyStats = {
             sleep: [
@@ -301,11 +389,15 @@ describe('buildProfileStatsDocuments', () => {
 
     it('reconciles a successful full snapshot before publishing metadata', async () => {
         const events: string[] = [];
+        let dashboardSnapshotOperation: { path: string[]; data?: unknown } | undefined;
         const commitOperations = vi.fn(async (operations: Array<{ path: string[]; merge?: boolean }>) => {
             const isMetadata = operations.length === 1 && operations[0].path.length === 2;
             events.push(isMetadata ? 'metadata' : 'data');
             if (!isMetadata) {
                 expect(operations.every((operation) => operation.merge === false)).toBe(true);
+                dashboardSnapshotOperation = operations.find((operation) =>
+                    operation.path.join('/') === 'profileStats/profile-1/snapshots/dashboard'
+                );
             }
         });
         const pruneFullSnapshot = vi.fn(async () => {
@@ -325,5 +417,12 @@ describe('buildProfileStatsDocuments', () => {
 
         expect(events).toEqual(['data', 'prune', 'metadata']);
         expect(pruneFullSnapshot).toHaveBeenCalledTimes(1);
+        expect(dashboardSnapshotOperation).toMatchObject({
+            path: ['profileStats', 'profile-1', 'snapshots', 'dashboard'],
+            data: {
+                schemaVersion: 1,
+                profileId: 'profile-1',
+            },
+        });
     });
 });

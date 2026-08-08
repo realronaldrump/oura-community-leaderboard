@@ -41,6 +41,25 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
+const PROFILE_BOOTSTRAP_TIMEOUT_MS = 8_000;
+
+const withBootstrapTimeout = <T,>(task: Promise<T>): Promise<T> => new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+        reject(new Error('profile_bootstrap_timeout'));
+    }, PROFILE_BOOTSTRAP_TIMEOUT_MS);
+
+    task.then(
+        (value) => {
+            window.clearTimeout(timeout);
+            resolve(value);
+        },
+        (error) => {
+            window.clearTimeout(timeout);
+            reject(error);
+        }
+    );
+});
+
 const withCrossTabRefreshLock = <T,>(
     profileId: string,
     task: () => Promise<T>
@@ -85,47 +104,96 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
     }
 
-    // The public profile chooser needs one snapshot, not an open realtime
-    // listener. Start realtime updates only after a profile is active so the
-    // welcome route stays lightweight and does not maintain idle listeners.
+    // Restore the remembered profile with a direct REST-backed document read
+    // before starting the all-profile realtime listener. This keeps a cold
+    // WebChannel handshake from blocking the first dashboard paint. The rest
+    // of the profile list is filled in behind the selected profile.
     useEffect(() => {
+        let cancelled = false;
+        let unsubscribe: (() => void) | null = null;
         setIsLoadingProfiles(true);
         setFirebaseError(null);
 
-        if (!activeProfileId) {
-            let cancelled = false;
-            firebaseService.getProfiles()
-                .then((loadedProfiles) => {
-                    if (cancelled) return;
-                    setProfiles(loadedProfiles);
-                    setIsLoadingProfiles(false);
-                })
-                .catch((error) => {
-                    if (cancelled) return;
-                    console.error('Firebase profile fetch error:', error);
-                    setIsLoadingProfiles(false);
-                    setFirebaseError('Having trouble connecting. Tap to try again!');
-                });
+        const reportBootstrapError = (operation: string, error: unknown) => {
+            if (cancelled) return;
+            console.error(`Firebase ${operation} error:`, error);
+            setIsLoadingProfiles(false);
+            setFirebaseError('Having trouble connecting. Tap to try again!');
+        };
 
-            return () => {
-                cancelled = true;
-            };
-        }
+        const applyProfiles = (updatedProfiles: UserProfile[]) => {
+            if (cancelled) return;
+            setProfiles(updatedProfiles);
+            setIsLoadingProfiles(false);
+            setFirebaseError(null);
+        };
 
-        const unsubscribe = firebaseService.subscribeToProfiles(
-            (updatedProfiles) => {
-                setProfiles(updatedProfiles);
+        const startProfileSubscription = () => {
+            if (cancelled || unsubscribe) return;
+            unsubscribe = firebaseService.subscribeToProfiles(
+                (updatedProfiles) => {
+                    applyProfiles(updatedProfiles);
+                    if (
+                        activeProfileId &&
+                        !updatedProfiles.some((profile) => profile.id === activeProfileId)
+                    ) {
+                        setActiveProfileIdState(null);
+                    }
+                },
+                (error) => reportBootstrapError('subscription', error)
+            );
+        };
+
+        const bootstrapProfiles = async () => {
+            if (!activeProfileId) {
+                try {
+                    const loadedProfiles = await withBootstrapTimeout(firebaseService.getProfiles());
+                    applyProfiles(loadedProfiles);
+                } catch (error) {
+                    reportBootstrapError('profile fetch', error);
+                }
+                return;
+            }
+
+            try {
+                const selectedProfile = await withBootstrapTimeout(
+                    firebaseService.getProfile(activeProfileId)
+                );
+                if (cancelled) return;
+                if (!selectedProfile) {
+                    setActiveProfileIdState(null);
+                    return;
+                }
+
+                setProfiles((current) => [
+                    selectedProfile,
+                    ...current.filter((profile) => profile.id !== selectedProfile.id),
+                ]);
                 setIsLoadingProfiles(false);
                 setFirebaseError(null);
-            },
-            (error) => {
-                console.error('Firebase subscription error:', error);
-                setIsLoadingProfiles(false);
-                // Keep error message friendly and non-technical
-                setFirebaseError('Having trouble connecting. Tap to try again!');
+
+                // Populate peers through the faster one-shot transport. Realtime
+                // updates begin only after this non-critical bootstrap finishes.
+                try {
+                    const loadedProfiles = await withBootstrapTimeout(firebaseService.getProfiles());
+                    applyProfiles(loadedProfiles);
+                } catch (error) {
+                    reportBootstrapError('background profile fetch', error);
+                } finally {
+                    startProfileSubscription();
+                }
+            } catch (error) {
+                reportBootstrapError('selected profile fetch', error);
+                startProfileSubscription();
             }
-        );
-        return () => unsubscribe();
+        };
+
+        void bootstrapProfiles();
+
+        return () => {
+            cancelled = true;
+            unsubscribe?.();
+        };
     }, [activeProfileId, retryCount]);
 
     const retryFirebaseConnection = useCallback(() => {

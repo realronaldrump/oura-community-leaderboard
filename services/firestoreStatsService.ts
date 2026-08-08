@@ -6,9 +6,19 @@ import {
     getDoc,
     getDocs,
     query,
+    runTransaction,
     writeBatch,
 } from 'firebase/firestore';
-import { db } from './firebaseConfig';
+import {
+    collection as bootstrapCollection,
+    doc as bootstrapDoc,
+    getDoc as getBootstrapDoc,
+    getDocs as getBootstrapDocs,
+    limit as bootstrapLimit,
+    orderBy as bootstrapOrderBy,
+    query as bootstrapQuery,
+} from 'firebase/firestore/lite';
+import { bootstrapDb, db } from './firebaseConfig';
 import {
     DailyStats,
     HeartRate,
@@ -23,6 +33,10 @@ export const PROFILE_STATS_COLLECTION = 'profileStats';
 
 const DAYS_COLLECTION = 'days';
 const HEART_RATE_DAYS_COLLECTION = 'heartRateDays';
+const SNAPSHOTS_COLLECTION = 'snapshots';
+const DASHBOARD_SNAPSHOT_DOCUMENT = 'dashboard';
+export const DASHBOARD_SNAPSHOT_SCHEMA_VERSION = 1;
+export const DASHBOARD_SNAPSHOT_DAY_LIMIT = 30;
 
 const RAW_COLLECTIONS = {
     sleepSessions: 'sleepSessions',
@@ -91,6 +105,13 @@ export interface ProfileStatsDayDocument {
     vo2Max?: unknown | null;
     bestSleepSession?: unknown | null;
     updatedAt: string;
+}
+
+export interface ProfileDashboardSnapshot {
+    profileId: string;
+    schemaVersion: number;
+    updatedAt: string;
+    data: DailyStats;
 }
 
 type BuiltProfileStatsDocuments = {
@@ -286,6 +307,26 @@ const buildProfileStatsMetadata = (
     });
 };
 
+const minIsoDay = (left?: string | null, right?: string | null): string | null => {
+    const values = [left, right].filter((value): value is string => Boolean(value)).sort();
+    return values[0] || null;
+};
+
+const maxIsoDay = (left?: string | null, right?: string | null): string | null => {
+    const values = [left, right].filter((value): value is string => Boolean(value)).sort();
+    return values.at(-1) || null;
+};
+
+export const mergeIncrementalProfileStatsMetadata = (
+    current: ProfileStatsMetadata | null,
+    incoming: ProfileStatsMetadata
+): ProfileStatsMetadata => stripUndefinedDeep({
+    ...(current || {}),
+    ...incoming,
+    oldestDay: minIsoDay(current?.oldestDay, incoming.oldestDay),
+    newestDay: maxIsoDay(current?.newestDay, incoming.newestDay),
+});
+
 const buildRawCollections = (data: DailyStats): Record<string, unknown[]> => ({
     [RAW_COLLECTIONS.personalInfo]: data.personalInfo ? [data.personalInfo] : [],
     [RAW_COLLECTIONS.sleepSessions]: data.session || [],
@@ -367,6 +408,99 @@ export const buildIncrementalProfileStatsDocuments = (
     metadata: buildProfileStatsMetadata(profileId, mergedData, 'incremental', now),
     ...buildProfileStatsSliceDocuments(deltaData, now),
 });
+
+const selectDashboardDays = (data: DailyStats): string[] => {
+    const days = new Set<string>();
+    const collect = (items?: Array<{ day?: string }>) => {
+        items?.forEach((item) => {
+            if (item.day) days.add(item.day);
+        });
+    };
+
+    collect(data.sleep);
+    collect(data.readiness);
+    collect(data.activity);
+    collect(data.session);
+    collect(data.spo2);
+    collect(data.stress);
+    collect(data.resilience);
+    collect(data.cardiovascularAge as Array<{ day?: string }> | undefined);
+    collect(data.vo2Max as Array<{ day?: string }> | undefined);
+    return Array.from(days).sort((left, right) => right.localeCompare(left)).slice(0, DASHBOARD_SNAPSHOT_DAY_LIMIT);
+};
+
+const selectOnePerDashboardDay = <T extends { day?: string }>(
+    items: T[] | undefined,
+    days: readonly string[]
+): T[] => days.flatMap((day) => {
+    const item = items?.find((candidate) => candidate.day === day);
+    return item ? [item] : [];
+});
+
+const toDashboardActivitySummary = (
+    activity: DailyStats['activity'][number]
+): DailyStats['activity'][number] => {
+    const summary = { ...activity } as DailyStats['activity'][number] & Record<string, unknown>;
+    delete summary.class_5_min;
+    delete summary.met;
+    return summary;
+};
+
+const toDashboardSessionSummary = (session: SleepSession): SleepSession => {
+    const summary = { ...session } as SleepSession & Record<string, unknown>;
+    [
+        'movement_30_sec',
+        'sleep_phase_30_sec',
+        'sleep_phase_5_min',
+        'app_sleep_phase_5_min',
+        'heart_rate',
+        'hrv',
+        'readiness',
+    ].forEach((field) => delete summary[field]);
+    return summary;
+};
+
+/**
+ * Build the bounded data needed by the Today and leaderboard views. Full raw
+ * samples and all-time history remain in their normalized collections and are
+ * fetched only by views that actually need them.
+ */
+export const buildProfileDashboardSnapshot = (
+    profileId: string,
+    data: DailyStats,
+    now: string = new Date().toISOString()
+): ProfileDashboardSnapshot => {
+    const days = selectDashboardDays(data);
+    const sessions = days.flatMap((day) => {
+        const best = pickBestSession((data.session || []).filter((session) => session.day === day));
+        return best ? [toDashboardSessionSummary(best)] : [];
+    });
+
+    return stripUndefinedDeep({
+        profileId,
+        schemaVersion: DASHBOARD_SNAPSHOT_SCHEMA_VERSION,
+        updatedAt: now,
+        data: {
+            sleep: selectOnePerDashboardDay(data.sleep, days),
+            readiness: selectOnePerDashboardDay(data.readiness, days),
+            activity: selectOnePerDashboardDay(data.activity, days).map(toDashboardActivitySummary),
+            session: sessions,
+            spo2: selectOnePerDashboardDay(data.spo2, days),
+            stress: selectOnePerDashboardDay(data.stress, days),
+            resilience: selectOnePerDashboardDay(data.resilience, days),
+            cardiovascularAge: selectOnePerDashboardDay(
+                data.cardiovascularAge as Array<{ day?: string }> | undefined,
+                days
+            ),
+            vo2Max: selectOnePerDashboardDay(
+                data.vo2Max as Array<{ day?: string }> | undefined,
+                days
+            ),
+            resilienceDiagnostic: data.resilienceDiagnostic ?? null,
+            endpointDiagnostics: data.endpointDiagnostics || {},
+        },
+    }) as ProfileDashboardSnapshot;
+};
 
 const normalizeSetOperation = (operation: FirestoreSetOperation): FirestoreSetOperation => ({
     path: operation.path,
@@ -464,6 +598,24 @@ const commitSetOperations = async (
     }
 };
 
+const commitIncrementalMetadata = async (
+    profileId: string,
+    incoming: ProfileStatsMetadata
+): Promise<void> => {
+    await runTransaction(db, async (transaction) => {
+        const metadataRef = doc(db, PROFILE_STATS_COLLECTION, profileId);
+        const snapshot = await transaction.get(metadataRef);
+        const current = snapshot.exists()
+            ? snapshot.data() as ProfileStatsMetadata
+            : null;
+        transaction.set(
+            metadataRef,
+            mergeIncrementalProfileStatsMetadata(current, incoming),
+            { merge: true }
+        );
+    });
+};
+
 const deleteKnownStatsCollection = async (profileId: string, collectionName: string): Promise<void> => {
     const snapshot = await getDocs(collection(db, PROFILE_STATS_COLLECTION, profileId, collectionName));
     const docs = snapshot.docs;
@@ -519,6 +671,7 @@ export const clearProfileStats = async (profileId: string): Promise<void> => {
         await Promise.all([
             deleteKnownStatsCollection(profileId, DAYS_COLLECTION),
             deleteKnownStatsCollection(profileId, HEART_RATE_DAYS_COLLECTION),
+            deleteKnownStatsCollection(profileId, SNAPSHOTS_COLLECTION),
             ...Object.values(RAW_COLLECTIONS).map((collectionName) =>
                 deleteKnownStatsCollection(profileId, collectionName)
             ),
@@ -537,6 +690,11 @@ export const saveProfileStats = async (
 ): Promise<void> => {
     try {
         const built = buildProfileStatsDocuments(profileId, data, mode);
+        const dashboardSnapshot = buildProfileDashboardSnapshot(
+            profileId,
+            data,
+            built.metadata.updatedAt
+        );
         const commitOperations = dependencies.commitOperations ?? commitSetOperations;
         const pruneFullSnapshot = dependencies.pruneFullSnapshot ?? pruneFullProfileStats;
         const dataOperations: FirestoreSetOperation[] = [
@@ -550,6 +708,11 @@ export const saveProfileStats = async (
                 data: heartRateDay,
                 merge: mode !== 'full',
             })),
+            {
+                path: [PROFILE_STATS_COLLECTION, profileId, SNAPSHOTS_COLLECTION, DASHBOARD_SNAPSHOT_DOCUMENT] as FirestoreDocumentPath,
+                data: dashboardSnapshot,
+                merge: false,
+            },
         ];
 
         Object.entries(built.rawCollections).forEach(([collectionName, items]) => {
@@ -590,6 +753,11 @@ export const saveIncrementalProfileStats = async (
 ): Promise<void> => {
     try {
         const built = buildIncrementalProfileStatsDocuments(profileId, mergedData, deltaData);
+        const dashboardSnapshot = buildProfileDashboardSnapshot(
+            profileId,
+            mergedData,
+            built.metadata.updatedAt
+        );
         const dataOperations: FirestoreSetOperation[] = [
             ...built.days.map((day) => ({
                 path: [PROFILE_STATS_COLLECTION, profileId, DAYS_COLLECTION, day.day] as FirestoreDocumentPath,
@@ -599,6 +767,11 @@ export const saveIncrementalProfileStats = async (
                 path: [PROFILE_STATS_COLLECTION, profileId, HEART_RATE_DAYS_COLLECTION, heartRateDay.day] as FirestoreDocumentPath,
                 data: heartRateDay,
             })),
+            {
+                path: [PROFILE_STATS_COLLECTION, profileId, SNAPSHOTS_COLLECTION, DASHBOARD_SNAPSHOT_DOCUMENT] as FirestoreDocumentPath,
+                data: dashboardSnapshot,
+                merge: false,
+            },
         ];
 
         Object.entries(built.rawCollections).forEach(([collectionName, items]) => {
@@ -613,11 +786,11 @@ export const saveIncrementalProfileStats = async (
         });
 
         await commitSetOperations(dataOperations);
-        await commitSetOperations([{
-            path: [PROFILE_STATS_COLLECTION, profileId] as FirestoreDocumentPath,
-            data: built.metadata,
-            merge: true,
-        }]);
+        // A startup client intentionally holds only the compact dashboard
+        // window. Merge coverage transactionally so that incremental syncs can
+        // advance the newest day without erasing the durable oldest day or the
+        // last-full-sync evidence used by complete exports.
+        await commitIncrementalMetadata(profileId, built.metadata);
     } catch (error) {
         logSharedStatsWarning('incremental save', profileId, error);
         throw error;
@@ -632,6 +805,82 @@ export const getProfileStatsMetadata = async (profileId: string): Promise<Profil
     } catch (error) {
         logSharedStatsWarning('read metadata', profileId, error);
         return null;
+    }
+};
+
+const isProfileDashboardSnapshot = (
+    value: unknown,
+    profileId: string
+): value is ProfileDashboardSnapshot => {
+    if (!isRecord(value) || value.profileId !== profileId) return false;
+    if (value.schemaVersion !== DASHBOARD_SNAPSHOT_SCHEMA_VERSION || !isRecord(value.data)) return false;
+    return ['sleep', 'readiness', 'activity', 'session', 'spo2', 'stress', 'resilience']
+        .every((field) => Array.isArray(value.data[field]));
+};
+
+const buildDashboardSourceFromDays = (
+    dayDocs: ProfileStatsDayDocument[],
+    metadata?: ProfileStatsMetadata
+): DailyStats => ({
+    sleep: sortByDayDesc(dayDocs.map((day) => day.sleep).filter(Boolean) as any[]),
+    readiness: sortByDayDesc(dayDocs.map((day) => day.readiness).filter(Boolean) as any[]),
+    activity: sortByDayDesc(dayDocs.map((day) => day.activity).filter(Boolean) as any[]),
+    session: sortByDayDesc(dayDocs.map((day) => day.bestSleepSession).filter(Boolean) as SleepSession[]),
+    spo2: sortByDayDesc(dayDocs.map((day) => day.spo2).filter(Boolean) as any[]),
+    stress: sortByDayDesc(dayDocs.map((day) => day.stress).filter(Boolean) as any[]),
+    resilience: sortByDayDesc(dayDocs.map((day) => day.resilience).filter(Boolean) as any[]),
+    cardiovascularAge: sortByDayDesc(dayDocs.map((day) => day.cardiovascularAge).filter(Boolean) as any[]),
+    vo2Max: sortByDayDesc(dayDocs.map((day) => day.vo2Max).filter(Boolean) as any[]),
+    endpointDiagnostics: metadata?.endpointDiagnostics || {},
+});
+
+/**
+ * Read only the compact Today-view snapshot during application bootstrap. Old
+ * profiles self-heal from a bounded 30-day query; the full-history collections
+ * are intentionally untouched until Trends, export, or another history view is
+ * opened.
+ */
+export const getStoredDashboardStats = async (profileId: string): Promise<DailyStats | null> => {
+    try {
+        const snapshotRef = bootstrapDoc(
+            bootstrapDb,
+            PROFILE_STATS_COLLECTION,
+            profileId,
+            SNAPSHOTS_COLLECTION,
+            DASHBOARD_SNAPSHOT_DOCUMENT
+        );
+        const snapshot = await getBootstrapDoc(snapshotRef);
+        if (snapshot.exists()) {
+            const stored = snapshot.data();
+            if (isProfileDashboardSnapshot(stored, profileId)) {
+                return stored.data;
+            }
+        }
+
+        const [daysSnapshot, metadataSnapshot] = await Promise.all([
+            getBootstrapDocs(bootstrapQuery(
+                bootstrapCollection(bootstrapDb, PROFILE_STATS_COLLECTION, profileId, DAYS_COLLECTION),
+                bootstrapOrderBy('day', 'desc'),
+                bootstrapLimit(DASHBOARD_SNAPSHOT_DAY_LIMIT)
+            )),
+            getBootstrapDoc(bootstrapDoc(bootstrapDb, PROFILE_STATS_COLLECTION, profileId)),
+        ]);
+        if (daysSnapshot.empty && !metadataSnapshot.exists()) return null;
+
+        const dayDocs = daysSnapshot.docs.map((document) => document.data() as ProfileStatsDayDocument);
+        const metadata = metadataSnapshot.exists()
+            ? metadataSnapshot.data() as ProfileStatsMetadata
+            : undefined;
+        const dashboardSnapshot = buildProfileDashboardSnapshot(
+            profileId,
+            buildDashboardSourceFromDays(dayDocs, metadata),
+            metadata?.updatedAt || new Date().toISOString()
+        );
+
+        return dashboardSnapshot.data;
+    } catch (error) {
+        logSharedStatsWarning('dashboard read', profileId, error);
+        throw error;
     }
 };
 

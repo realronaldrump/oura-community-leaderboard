@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ouraService } from '../services/ouraService';
-import { fetchDailyStats } from './useOuraData';
+import { fetchDailyStats, mergeDailyStatsIfLoaded } from './useOuraData';
 
 const ARRAY_METHODS = [
     'getDailySleep',
@@ -66,5 +66,33 @@ describe('fetchDailyStats endpoint coverage', () => {
         expect(result.ringBatteryLevel).toEqual([]);
         expect(result.personalInfo).toEqual({ id: 'oura-user-1', age: 40 });
         expect(result.vo2Max).toHaveLength(2);
+    });
+});
+
+describe('mergeDailyStatsIfLoaded', () => {
+    const recent = {
+        sleep: [{ id: 'recent', day: '2026-08-01', score: 90, contributors: {} }],
+        readiness: [],
+        activity: [],
+        session: [],
+        spo2: [],
+        stress: [],
+        resilience: [],
+    };
+
+    it('does not mislabel a compact launch snapshot as all-time history', () => {
+        expect(mergeDailyStatsIfLoaded(undefined, recent)).toBeUndefined();
+    });
+
+    it('merges recent changes after full history has actually loaded', () => {
+        const history = {
+            ...recent,
+            sleep: [{ id: 'older', day: '2024-01-01', score: 80, contributors: {} }],
+        };
+
+        expect(mergeDailyStatsIfLoaded(history, recent)?.sleep.map((item) => item.id)).toEqual([
+            'recent',
+            'older',
+        ]);
     });
 });

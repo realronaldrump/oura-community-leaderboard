@@ -28,6 +28,8 @@ type DateRangePickerProps = {
     variant?: 'dropdown' | 'field';
     /** Optional profile-local "today" ISO day for highlights and calendar anchoring. */
     todayIsoDay?: string;
+    /** Called when the calendar opens, for lazily loading older availability. */
+    onOpen?: () => void;
 };
 
 /* ─── Constants ──────────────────────────────────────────────────── */
@@ -105,6 +107,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
     label,
     variant = 'dropdown',
     todayIsoDay,
+    onOpen,
 }) => {
     const dates = datesProp ?? [];
     const rootRef = useRef<HTMLDivElement>(null);
@@ -120,6 +123,10 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
     const isRangeMode = mode === 'range';
     const isField = variant === 'field';
     const [isOpen, setIsOpen] = useState(false);
+    const toggleOpen = () => {
+        if (!isOpen) onOpen?.();
+        setIsOpen((open) => !open);
+    };
 
     // Build a Set for O(1) availability lookups
     const availableSet = useMemo(() => new Set(dates), [dates]);
@@ -406,7 +413,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                     ref={triggerRef}
                     type="button"
                     disabled={isDisabled}
-                    onClick={() => setIsOpen((o) => !o)}
+                    onClick={toggleOpen}
                     className={`date-picker-trigger dp-field-trigger ${isDisabled ? 'is-disabled' : ''}`}
                     aria-expanded={isOpen}
                     aria-haspopup="dialog"
@@ -440,7 +447,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                 ref={triggerRef}
                 type="button"
                 disabled={isDisabled}
-                onClick={() => setIsOpen((o) => !o)}
+                onClick={toggleOpen}
                 className={`date-picker-trigger group ${isDisabled ? 'is-disabled' : ''}`}
                 aria-expanded={isOpen}
                 aria-haspopup="dialog"

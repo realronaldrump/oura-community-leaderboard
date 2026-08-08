@@ -104,6 +104,35 @@ describe('UserProvider profile/token boundaries', () => {
         expect(mocks.saveProfile).not.toHaveBeenCalled();
     });
 
+    it('restores a remembered profile before the all-profile subscription emits', async () => {
+        localStorage.setItem('active_profile_id', profile.id);
+        let resolveProfiles: ((profiles: UserProfile[]) => void) | undefined;
+        mocks.getProfiles.mockImplementation(() => new Promise((resolve) => {
+            resolveProfiles = resolve;
+        }));
+        mocks.subscribeToProfiles.mockImplementation(() => () => {});
+
+        render(
+            <UserProvider>
+                <CaptureContext />
+            </UserProvider>
+        );
+
+        await waitFor(() => expect(context?.activeProfile?.id).toBe(profile.id));
+
+        expect(context?.profiles).toEqual([expect.objectContaining({ id: profile.id })]);
+        expect(context?.isLoadingProfiles).toBe(false);
+        expect(mocks.getProfile).toHaveBeenCalledWith(profile.id);
+        expect(mocks.getProfiles).toHaveBeenCalledTimes(1);
+        expect(mocks.subscribeToProfiles).not.toHaveBeenCalled();
+        expect(mocks.getProfile.mock.invocationCallOrder[0]).toBeLessThan(
+            mocks.getProfiles.mock.invocationCallOrder[0]
+        );
+
+        resolveProfiles?.([{ ...profile }]);
+        await waitFor(() => expect(mocks.subscribeToProfiles).toHaveBeenCalledTimes(1));
+    });
+
     it('never carries an existing refresh token into a newly authorized credential set', async () => {
         mocks.getPersonalInfo.mockResolvedValue({
             id: 'oura-user-1',
