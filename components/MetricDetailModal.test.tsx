@@ -5,7 +5,7 @@ import MetricDetailModal from './MetricDetailModal';
 
 afterEach(cleanup);
 
-describe('MetricDetailModal sleep timing', () => {
+describe('MetricDetailModal', () => {
     it('shows the selected sleep session bedtime and wake time in record-local time', () => {
         const props = {
             isOpen: true,
@@ -61,5 +61,22 @@ describe('MetricDetailModal sleep timing', () => {
 
         const timing = screen.getByRole('group', { name: 'Sleep timing' });
         expect(within(timing).getAllByText('Not available')).toHaveLength(2);
+    });
+
+    it('does not present hard-coded category ranges as if they were data-backed', () => {
+        render(
+            <MetricDetailModal
+                isOpen
+                onClose={() => undefined}
+                metricType="sleep_duration"
+                currentValue={28_800}
+                historyData={[]}
+                date="2026-08-11"
+            />
+        );
+
+        expect(screen.queryByText('Category Ranges')).not.toBeInTheDocument();
+        expect(screen.queryByText(/^Reference:/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/General reference bands/i)).not.toBeInTheDocument();
     });
 });
