@@ -1893,6 +1893,7 @@ const Dashboard: React.FC = () => {
         unit?: string;
         color?: string;
         date?: string;
+        sleepSession?: Pick<SleepSession, 'bedtime_start' | 'bedtime_end'>;
     }>({ isOpen: false, metricType: null, currentValue: null, historyData: [] });
 
     const [leaderboardUserDetail, setLeaderboardUserDetail] = useState<{
@@ -2405,6 +2406,10 @@ const Dashboard: React.FC = () => {
         : null;
     const currentBedtimeMinutes = getNormalizedBedtimeMinutes(currentSession?.bedtime_start);
     const currentWakeTimeMinutes = getMinutesOfDay(currentSession?.bedtime_end);
+    const currentSleepSession = currentSession ? {
+        bedtime_start: currentSession.bedtime_start,
+        bedtime_end: currentSession.bedtime_end,
+    } : undefined;
     const distanceMilesValue = currentActivity?.equivalent_walking_distance != null
         ? Number((currentActivity.equivalent_walking_distance * METERS_TO_MILES).toFixed(1))
         : null;
@@ -2634,7 +2639,8 @@ const Dashboard: React.FC = () => {
         currentValue: number | null,
         unit?: string,
         color?: string,
-        currentTimestamp?: string
+        currentTimestamp?: string,
+        sleepSession?: Pick<SleepSession, 'bedtime_start' | 'bedtime_end'>
     ) => {
         if (!activeProfile?.id) return;
 
@@ -2646,7 +2652,7 @@ const Dashboard: React.FC = () => {
         const historyData = bestAvailable
             ? getMetricHistoryData(metricType, bestAvailable)
             : [];
-        setMetricDetailModal({ isOpen: true, metricType, currentValue, currentTimestamp, historyData, unit, color, date: referenceDay });
+        setMetricDetailModal({ isOpen: true, metricType, currentValue, currentTimestamp, historyData, unit, color, date: referenceDay, sleepSession });
 
         if (!cachedAllTime) {
             void queryClient.fetchQuery({
@@ -3239,12 +3245,13 @@ const Dashboard: React.FC = () => {
                 <Suspense fallback={null}>
                     <MetricDetailModal
                         isOpen
-                        onClose={() => setMetricDetailModal({ isOpen: false, metricType: null, currentValue: null, currentTimestamp: undefined, historyData: [] })}
+                        onClose={() => setMetricDetailModal({ isOpen: false, metricType: null, currentValue: null, currentTimestamp: undefined, historyData: [], sleepSession: undefined })}
                         metricType={metricDetailModal.metricType || 'hrv'}
                         currentValue={metricDetailModal.currentValue}
                         currentTimestamp={metricDetailModal.currentTimestamp}
                         historyData={metricDetailModal.historyData}
                         unit={metricDetailModal.unit} color={metricDetailModal.color} date={metricDetailModal.date}
+                        sleepSession={metricDetailModal.sleepSession}
                     />
                 </Suspense>
             ) : null}
@@ -3436,7 +3443,7 @@ const Dashboard: React.FC = () => {
                             </div>
                             {/* Featured */}
                             <div className="grid grid-cols-2 gap-3 mb-3">
-                                <MetricCard title="Total Sleep" value={formatDuration(currentSession?.total_sleep_duration)} color="var(--color-sleep)" showDrillDownIndicator onClick={() => handleMetricCardClick('sleep_duration', currentSession?.total_sleep_duration ?? null, 'hours', 'var(--color-sleep)')} />
+                                <MetricCard title="Total Sleep" value={formatDuration(currentSession?.total_sleep_duration)} color="var(--color-sleep)" subtext="Bedtime & wake time" showDrillDownIndicator onClick={() => handleMetricCardClick('sleep_duration', currentSession?.total_sleep_duration ?? null, 'hours', 'var(--color-sleep)', undefined, currentSleepSession)} />
                                 <MetricCard title="Efficiency" value={currentSession?.efficiency} unit="%" color="var(--color-readiness)" showDrillDownIndicator onClick={() => handleMetricCardClick('efficiency', currentSession?.efficiency ?? null, '%', 'var(--color-readiness)')} />
                             </div>
                             <details

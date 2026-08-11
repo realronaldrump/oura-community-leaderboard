@@ -15,12 +15,14 @@ import {
     Trophy,
     Flame,
     Thermometer,
+    Sunrise,
 } from 'lucide-react';
 import { IOSModal, IOSListItem, IOSButton } from './ios';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatISODateForDisplay } from '../utils/date';
 import { CHART_TOOLTIP_STYLE } from '../utils/chartStyles';
 import { formatRecordLocalClockTime, getLocalMinutesOfDayFromIso } from '../utils/temporal';
+import type { SleepSession } from '../types';
 
 interface MetricDataPoint {
     date: string;
@@ -65,6 +67,7 @@ interface MetricDetailModalProps {
     unit?: string;
     color?: string;
     date?: string;
+    sleepSession?: Pick<SleepSession, 'bedtime_start' | 'bedtime_end'>;
 }
 
 type MetricValueFormat = 'number' | 'duration' | 'clock' | 'signed';
@@ -639,6 +642,7 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
     unit,
     color,
     date,
+    sleepSession,
 }) => {
     const config = METRIC_CONFIGS[metricType] || METRIC_CONFIGS.hrv;
     const effectiveColor = color || config.color;
@@ -702,6 +706,11 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
         }
 
         return formatMetricValue(resolvedCurrentValue);
+    };
+
+    const formatSleepTiming = (timestamp?: string): string => {
+        const formatted = formatRecordLocalClockTime(timestamp);
+        return formatted === '--' ? 'Not available' : formatted;
     };
 
     const compareMetricValues = (left: number, right: number, sortBy: 'best' | 'worst') => {
@@ -965,6 +974,41 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                             </div>
                         )}
                     </div>
+
+                    {metricType === 'sleep_duration' && (
+                        <section
+                            role="group"
+                            aria-label="Sleep timing"
+                            className="bg-surface-raised p-4 rounded-xl border border-line"
+                        >
+                            <div className="mb-4">
+                                <h4 className="text-sm font-medium text-ink">Sleep timing</h4>
+                                <p className="mt-1 text-xs text-ink-muted">When this sleep session started and ended.</p>
+                            </div>
+                            <dl className="grid grid-cols-2 gap-3">
+                                <div className="rounded-lg bg-surface-subtle p-3">
+                                    <dt className="flex items-center gap-2 text-xs font-medium text-ink-muted">
+                                        <Moon className="h-4 w-4 text-metric-sleep" aria-hidden="true" />
+                                        Bedtime
+                                    </dt>
+                                    <dd className="mt-2 font-mono text-xl font-semibold text-ink">
+                                        {formatSleepTiming(sleepSession?.bedtime_start)}
+                                    </dd>
+                                    <dd className="mt-1 text-xs text-ink-muted">Fell asleep</dd>
+                                </div>
+                                <div className="rounded-lg bg-surface-subtle p-3">
+                                    <dt className="flex items-center gap-2 text-xs font-medium text-ink-muted">
+                                        <Sunrise className="h-4 w-4 text-metric-activity" aria-hidden="true" />
+                                        Wake time
+                                    </dt>
+                                    <dd className="mt-2 font-mono text-xl font-semibold text-ink">
+                                        {formatSleepTiming(sleepSession?.bedtime_end)}
+                                    </dd>
+                                    <dd className="mt-1 text-xs text-ink-muted">Woke up</dd>
+                                </div>
+                            </dl>
+                        </section>
+                    )}
 
                     <div className="flex gap-2 p-4 bg-surface-raised rounded-xl border border-line">
                         <Info className="w-5 h-5 text-metric-sleep flex-shrink-0 mt-0.5" />

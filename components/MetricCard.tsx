@@ -50,11 +50,12 @@ const MetricCard: React.FC<MetricCardProps> = ({
   }
 
   const spokenValue = value == null ? 'Not available' : `${value}${unit ? ` ${unit}` : ''}`;
+  const spokenSupport = subtext?.trim().replace(/[.!?]+$/, '');
   return (
     <button
       type="button"
       className="metric-card metric-card--interactive"
-      aria-label={`${title}: ${spokenValue}. View details`}
+      aria-label={`${title}: ${spokenValue}.${spokenSupport ? ` ${spokenSupport}.` : ''} View details`}
       onClick={() => {
         if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(10);
         onClick();
