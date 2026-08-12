@@ -21,6 +21,7 @@ import { IOSModal, IOSListItem, IOSButton } from './ios';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatISODateForDisplay } from '../utils/date';
 import { CHART_TOOLTIP_STYLE } from '../utils/chartStyles';
+import { getDataAwareChartDomain } from '../utils/chartScale';
 import { formatRecordLocalClockTime, getLocalMinutesOfDayFromIso } from '../utils/temporal';
 import type { SleepSession } from '../types';
 
@@ -91,6 +92,7 @@ type MetricConfig = {
     topListWorstLabel?: string;
     bestBadge?: string;
     worstBadge?: string;
+    chartMaximum?: number;
 };
 
 const formatDurationFromSeconds = (seconds: number | null | undefined): string => {
@@ -178,6 +180,7 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         valueFormat: 'number',
         evaluation: 'higher_better',
         decimals: 1,
+        chartMaximum: 100,
     },
     stress: {
         title: 'High Stress Time',
@@ -204,6 +207,7 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         valueFormat: 'number',
         evaluation: 'higher_better',
         decimals: 0,
+        chartMaximum: 100,
     },
     steps: {
         title: 'Daily Steps',
@@ -302,6 +306,7 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
         valueFormat: 'number',
         evaluation: 'higher_better',
         decimals: 0,
+        chartMaximum: 100,
     },
     bedtime: {
         title: 'Bedtime',
@@ -464,6 +469,18 @@ const METRIC_CONFIGS: Record<MetricDetailType, MetricConfig> = {
     },
 };
 
+export const getMetricHistoryChartDomain = (
+    metricType: MetricDetailType,
+    values: Array<number | null | undefined>
+): [number, number] => {
+    const config = METRIC_CONFIGS[metricType] || METRIC_CONFIGS.hrv;
+    return getDataAwareChartDomain(values, {
+        min: config.valueFormat === 'signed' ? undefined : 0,
+        max: config.chartMaximum,
+        includeZero: config.valueFormat === 'signed',
+    });
+};
+
 const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
     isOpen,
     onClose,
@@ -564,6 +581,10 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
     };
 
     const filteredData = filterDataByRange(historyData, selectedTimeRange);
+    const chartDomain = getMetricHistoryChartDomain(
+        metricType,
+        filteredData.map((point) => point.value)
+    );
 
     const calculateTrend = () => {
         if (!showTrend || filteredData.length < 2) return null;
@@ -808,8 +829,10 @@ const MetricDetailModal: React.FC<MetricDetailModalProps> = ({
                                             axisLine={{ stroke: 'rgba(0,0,0,0.06)' }}
                                         />
                                         <YAxis
+                                            domain={chartDomain}
                                             tick={{ fill: '#A8A29E', fontSize: 11 }}
                                             axisLine={{ stroke: 'rgba(0,0,0,0.06)' }}
+                                            tickCount={5}
                                             tickFormatter={(value: number) => formatMetricValue(value)}
                                         />
                                         <Tooltip

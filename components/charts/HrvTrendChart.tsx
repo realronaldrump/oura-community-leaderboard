@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import type { SleepSession } from '../../types';
 import { CHART_TOOLTIP_STYLE } from '../../utils/chartStyles';
+import { getDataAwareChartDomain } from '../../utils/chartScale';
 
 interface HrvTrendChartProps {
     data: SleepSession[];
@@ -31,11 +32,12 @@ const HrvTrendChart: React.FC<HrvTrendChartProps> = ({ data }) => (
                 tickFormatter={(value: string) => value.slice(5)}
             />
             <YAxis
-                domain={['dataMin - 2', 'dataMax + 2']}
+                domain={getDataAwareChartDomain(data.map((session) => session.average_hrv), { min: 0 })}
                 tick={{ fill: 'var(--color-ink-muted)', fontSize: 12 }}
                 axisLine={false}
                 tickLine={false}
                 unit=" ms"
+                tickCount={5}
             />
             <Tooltip
                 contentStyle={CHART_TOOLTIP_STYLE}

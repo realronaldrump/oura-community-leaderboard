@@ -6,6 +6,7 @@ import {
 
 import { getProfileDisplayName } from '../utils/profileName';
 import { getUTCDateFromISODate } from '../utils/temporal';
+import { getDataAwareChartDomain } from '../utils/chartScale';
 
 interface AllTimeHistoryProps {
     profiles: { id: string; firstName?: string | null; lastName?: string | null; email?: string | null }[];
@@ -306,6 +307,14 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
         [chartData, chartProfiles, hiddenChartUserIds]
     );
 
+    const chartDomain = useMemo(
+        () => getDataAwareChartDomain(
+            visibleChartPoints.map((point) => point.y),
+            { min: 0, max: 100 }
+        ),
+        [visibleChartPoints]
+    );
+
     // Friendly chart summary
     const chartSummary = useMemo(() => {
         if (visibleChartPoints.length < 3) return null;
@@ -443,9 +452,10 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                                     dataKey="y"
                                     name="Score"
                                     unit=""
-                                    domain={[50, 100]}
+                                    domain={chartDomain}
                                     stroke="#A8A29E"
                                     tick={{ fill: '#A8A29E', fontSize: 12 }}
+                                    tickCount={5}
                                 />
                                 <Tooltip
                                     cursor={{ stroke: '#2D2A26', strokeOpacity: 0.2 }}

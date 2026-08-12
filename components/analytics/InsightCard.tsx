@@ -1,16 +1,38 @@
-import React, { useId, useState } from 'react';
+import React, { useId, useMemo, useState } from 'react';
 import { AutomatedInsight } from '../../types/analyticsTypes';
 import { ChevronDown, ChevronUp, TrendingUp, TrendingDown, Lightbulb, Activity, Moon, Heart } from 'lucide-react';
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { CHART_TOOLTIP_STYLE } from '../../utils/chartStyles';
+import { getDataAwareChartDomain } from '../../utils/chartScale';
+import type { DataAwareDomainOptions } from '../../utils/chartScale';
 
 interface InsightCardProps {
     insight: AutomatedInsight;
 }
 
+const getCorrelationScaleOptions = (metricKey: string): DataAwareDomainOptions => ({
+    min: metricKey === 'body_temp' ? undefined : 0,
+    max: metricKey.endsWith('_score') ? 100 : undefined,
+    includeZero: metricKey === 'body_temp',
+});
+
 const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const evidenceId = useId();
+    const xDomain = useMemo(
+        () => getDataAwareChartDomain(
+            insight.correlationData.dataPoints.map((point) => point.x),
+            getCorrelationScaleOptions(insight.metricXKey)
+        ),
+        [insight.correlationData.dataPoints, insight.metricXKey]
+    );
+    const yDomain = useMemo(
+        () => getDataAwareChartDomain(
+            insight.correlationData.dataPoints.map((point) => point.y),
+            getCorrelationScaleOptions(insight.metricYKey)
+        ),
+        [insight.correlationData.dataPoints, insight.metricYKey]
+    );
 
     // Use a solid semantic tint for strong relationships; the coefficient and
     // sample size carry the meaning, so decorative gradients are unnecessary.
@@ -124,7 +146,8 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
                                     tick={{ fill: '#A8A29E', fontSize: 11 }}
                                     axisLine={{ stroke: 'rgba(0,0,0,0.15)' }}
                                     tickLine={false}
-                                    domain={['auto', 'auto']}
+                                    domain={xDomain}
+                                    tickCount={5}
                                 />
                                 <YAxis
                                     type="number"
@@ -133,7 +156,8 @@ const InsightCard: React.FC<InsightCardProps> = ({ insight }) => {
                                     tick={{ fill: '#A8A29E', fontSize: 11 }}
                                     axisLine={{ stroke: 'rgba(0,0,0,0.15)' }}
                                     tickLine={false}
-                                    domain={['auto', 'auto']}
+                                    domain={yDomain}
+                                    tickCount={5}
                                 />
                                 <RechartsTooltip
                                     cursor={{ strokeDasharray: '3 3' }}

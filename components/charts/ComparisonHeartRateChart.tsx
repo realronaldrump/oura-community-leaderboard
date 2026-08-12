@@ -15,6 +15,7 @@ import {
     formatClockTimeFromHourMinute,
     getLocalMinutesOfDayFromIso,
 } from '../../utils/temporal';
+import { getDataAwareChartDomain } from '../../utils/chartScale';
 
 export interface ComparisonHeartRateSeries {
     id: string;
@@ -64,6 +65,12 @@ const ComparisonHeartRateChart: React.FC<ComparisonHeartRateChartProps> = ({ ser
     const activeSeries = series.filter((entry) => entry.data.length > 0);
 
     const formattedData = useMemo(() => buildComparisonHeartRateChartData(activeSeries), [activeSeries]);
+    const chartDomain = getDataAwareChartDomain(
+        formattedData.flatMap((point) => Object.entries(point).flatMap(([key, value]) => (
+            key.startsWith('series_') && typeof value === 'number' ? [value] : []
+        ))),
+        { min: 0 }
+    );
 
     if (activeSeries.length === 0) {
         return <div className="text-center text-ink-muted">No heart rate data available</div>;
@@ -92,7 +99,8 @@ const ComparisonHeartRateChart: React.FC<ComparisonHeartRateChartProps> = ({ ser
                         stroke="#A8A29E"
                         fontSize={12}
                         tick={{ fill: '#A8A29E' }}
-                        domain={['dataMin - 5', 'dataMax + 5']}
+                        domain={chartDomain}
+                        tickCount={5}
                     />
                     <Tooltip
                         contentStyle={CHART_TOOLTIP_STYLE}

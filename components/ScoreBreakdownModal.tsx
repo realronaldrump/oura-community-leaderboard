@@ -5,6 +5,7 @@ import { DailyReadiness, DailySleep, DailyActivity, SleepSession } from '../type
 import { IOSModal, IOSListItem, IOSButton } from './ios';
 import { formatISODateForDisplay } from '../utils/date';
 import { CHART_TOOLTIP_STYLE, CHART_GRID_STROKE, CHART_AXIS_STYLE, CHART_ACTIVE_DOT } from '../utils/chartStyles';
+import { getDataAwareChartDomain } from '../utils/chartScale';
 
 interface ScoreHistoryPoint {
     date: string;
@@ -240,14 +241,10 @@ const ScoreBreakdownModal: React.FC<ScoreBreakdownModalProps> = ({
     );
 
     const chartDomain = useMemo<[number, number]>(() => {
-        if (!filteredHistory.length) return [0, 100];
-        const values = filteredHistory.map((entry) => entry.value);
-        const min = Math.max(0, Math.min(...values) - 4);
-        const max = Math.min(100, Math.max(...values) + 4);
-        if (min === max) {
-            return [Math.max(0, min - 4), Math.min(100, max + 4)];
-        }
-        return [min, max];
+        return getDataAwareChartDomain(
+            filteredHistory.map((entry) => entry.value),
+            { min: 0, max: 100 }
+        );
     }, [filteredHistory]);
 
     const trend = useMemo(() => {

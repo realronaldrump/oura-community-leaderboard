@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { SleepSession } from '../../types';
 import { IOSModal, IOSButton } from '../ios';
 import { formatISODateForDisplay } from '../../utils/date';
+import { getDataAwareChartDomain } from '../../utils/chartScale';
 
 // Custom tooltip component with total
 interface CustomTooltipProps {
@@ -127,6 +128,10 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
             sessionData: session,
         };
     });
+    const chartDomain = getDataAwareChartDomain(
+        chartData.map((point) => point.totalWithAwake),
+        { min: 0, includeZero: true, paddingRatio: 0.08 }
+    );
 
     const handleMouseMove = useCallback((state: any) => {
         if (state?.activePayload?.[0]?.payload?.day) {
@@ -201,11 +206,13 @@ const SleepStagesChart: React.FC<Props> = ({ data, onStageClick }) => {
                                 tickLine={false}
                             />
                             <YAxis
+                                domain={chartDomain}
                                 stroke="#A8A29E"
                                 fontSize={11}
                                 unit="h"
                                 axisLine={false}
                                 tickLine={false}
+                                tickCount={5}
                             />
                             <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.05)' }} />
                             <Legend

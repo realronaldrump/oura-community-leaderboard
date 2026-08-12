@@ -11,6 +11,7 @@ import {
     getWallClockTimestampMsFromIso,
 } from '../../utils/temporal';
 import { formatISODateForDisplay } from '../../utils/date';
+import { getDataAwareChartDomain } from '../../utils/chartScale';
 
 type TimeRange = '6h' | '12h' | '24h' | '48h';
 
@@ -72,6 +73,7 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
         : null;
     const minBpm = bpmValues.length > 0 ? Math.min(...bpmValues) : null;
     const maxBpm = bpmValues.length > 0 ? Math.max(...bpmValues) : null;
+    const chartDomain = getDataAwareChartDomain(bpmValues, { min: 0 });
 
     if (chartData.length === 0) {
         return (
@@ -146,7 +148,7 @@ const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
                             minTickGap={40}
                         />
                         <YAxis
-                            domain={['auto', 'auto']}
+                            domain={chartDomain}
                             hide
                         />
                         {avgBpm && (
