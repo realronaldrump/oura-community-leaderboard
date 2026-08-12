@@ -22,6 +22,15 @@ export const isAuthorizedCronRequest = (authorization: unknown, secret: string |
 
 export const maxDuration = 60;
 
+export const hasCompleteWebhookCoverage = (payload: any): boolean => {
+    if (!payload?.configured || !Array.isArray(payload.dataTypes) || !Array.isArray(payload.eventTypes)) {
+        return false;
+    }
+    const activeCount = ['created', 'renewed', 'existing']
+        .reduce((count, key) => count + (Array.isArray(payload[key]) ? payload[key].length : 0), 0);
+    return activeCount >= payload.dataTypes.length * payload.eventTypes.length;
+};
+
 const maintainWebhookSubscriptions = async (req: any): Promise<boolean> => {
     const protocol = String(req.headers?.['x-forwarded-proto'] || 'https').split(',')[0].trim();
     const host = String(req.headers?.['x-forwarded-host'] || req.headers?.host || '').split(',')[0].trim();
@@ -32,7 +41,8 @@ const maintainWebhookSubscriptions = async (req: any): Promise<boolean> => {
             method: 'POST',
             headers: { Authorization: authorization },
         });
-        return response.ok;
+        if (!response.ok) return false;
+        return hasCompleteWebhookCoverage(await response.json());
     } catch {
         return false;
     }
