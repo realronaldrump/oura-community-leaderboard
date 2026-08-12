@@ -2,17 +2,25 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Profiles: any client can read/write
-    // (no Firebase Auth – app uses Oura OAuth only)
+    // Public profile metadata remains readable for the shared leaderboard.
+    // OAuth secrets and destructive lifecycle operations are server-only.
     match /profiles/{profileId} {
       allow read: if true;
-      allow create, update: if true;
-      allow delete: if true;
+      allow create: if false;
+      allow update: if !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['token', 'refreshToken', 'tokenExpiresAt', 'ouraUserId', 'lastSyncError', 'lastSyncErrorAt', 'lastSuccessfulSyncAt']);
+      allow delete: if false;
     }
 
-    // Webhook signals: read/write by clients and server
+    // Webhook delivery and consumption are entirely server-owned.
     match /webhookSignals/{signalId} {
-      allow read, write: if true;
+      allow read, write: if false;
+    }
+
+    // OAuth credentials are written and read only through Firebase Admin in
+    // server functions. Browser clients must never access this collection.
+    match /ouraCredentials/{profileId} {
+      allow read, write: if false;
     }
 
     // Competitions: any authenticated-or-anonymous client can read/write
@@ -31,14 +39,15 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Shared Oura metric history. The current app uses Oura OAuth
-    // without Firebase Auth, so client-orchestrated syncs need open
-    // read/write access just like profiles and competitions.
+    // Shared Oura metric history is readable by the leaderboard and written
+    // only by background server functions.
     match /profileStats/{profileId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if false;
 
       match /{statsCollection}/{statsDocument} {
-        allow read, write: if true;
+        allow read: if true;
+        allow write: if false;
       }
     }
 

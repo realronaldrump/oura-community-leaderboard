@@ -66,7 +66,7 @@ const createDevOAuthPlugin = (env: Record<string, string>): Plugin => ({
   configureServer(server) {
     server.middlewares.use(async (req, res, next) => {
       const pathname = (req.url || '').split('?')[0];
-      if (pathname !== '/api/oauth/token' && pathname !== '/api/oauth/refresh') {
+      if (pathname !== '/api/oauth/token') {
         next();
         return;
       }
@@ -96,51 +96,24 @@ const createDevOAuthPlugin = (env: Record<string, string>): Plugin => ({
       }
 
       try {
-        if (pathname === '/api/oauth/token') {
-          const code = typeof requestBody.code === 'string' ? requestBody.code : '';
-          const redirectUriInput = typeof requestBody.redirectUri === 'string' ? requestBody.redirectUri : '';
-          const effectiveRedirectUri = redirectUriInput || env.OURA_REDIRECT_URI;
+        const code = typeof requestBody.code === 'string' ? requestBody.code : '';
+        const redirectUriInput = typeof requestBody.redirectUri === 'string' ? requestBody.redirectUri : '';
+        const effectiveRedirectUri = redirectUriInput || env.OURA_REDIRECT_URI;
 
-          if (!code) {
-            sendJson(res, 400, { error: 'missing_code' });
-            return;
-          }
-
-          if (!effectiveRedirectUri) {
-            sendJson(res, 400, { error: 'missing_redirect_uri' });
-            return;
-          }
-
-          const tokenBody = new URLSearchParams({
-            grant_type: 'authorization_code',
-            code,
-            redirect_uri: effectiveRedirectUri,
-            client_id: clientId,
-            client_secret: clientSecret,
-          });
-
-          const tokenResponse = await postOuraTokenRequest(tokenBody);
-          if (!tokenResponse.ok) {
-            sendJson(res, tokenResponse.status, {
-              error: 'token_exchange_failed',
-              details: sanitizeOuraTokenError(tokenResponse.payload),
-            });
-            return;
-          }
-
-          sendJson(res, 200, mapOAuthTokenResponse(tokenResponse.payload));
+        if (!code) {
+          sendJson(res, 400, { error: 'missing_code' });
           return;
         }
 
-        const refreshToken = typeof requestBody.refreshToken === 'string' ? requestBody.refreshToken : '';
-        if (!refreshToken) {
-          sendJson(res, 400, { error: 'missing_refresh_token' });
+        if (!effectiveRedirectUri) {
+          sendJson(res, 400, { error: 'missing_redirect_uri' });
           return;
         }
 
         const tokenBody = new URLSearchParams({
-          grant_type: 'refresh_token',
-          refresh_token: refreshToken,
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: effectiveRedirectUri,
           client_id: clientId,
           client_secret: clientSecret,
         });
@@ -148,7 +121,7 @@ const createDevOAuthPlugin = (env: Record<string, string>): Plugin => ({
         const tokenResponse = await postOuraTokenRequest(tokenBody);
         if (!tokenResponse.ok) {
           sendJson(res, tokenResponse.status, {
-            error: 'refresh_failed',
+            error: 'token_exchange_failed',
             details: sanitizeOuraTokenError(tokenResponse.payload),
           });
           return;
@@ -171,13 +144,6 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: '0.0.0.0',
-      proxy: {
-        '/api/oura': {
-          target: 'https://api.ouraring.com/v2/usercollection',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/oura/, ''),
-        },
-      },
     },
     plugins: [
       react(),

@@ -129,7 +129,7 @@ const DailySnapshot: React.FC<DailySnapshotProps> = ({ profiles, usersData }) =>
                 </div>
                 <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">No Data Available</h3>
                 <p className="text-[var(--text-muted)] text-sm">
-                    Sync your data to create shareable daily snapshots.
+                    More Oura history will appear here automatically.
                 </p>
             </div>
         );

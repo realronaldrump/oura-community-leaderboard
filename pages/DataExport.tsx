@@ -94,7 +94,7 @@ const DataExport: React.FC = () => {
                 setData(storedData);
                 setMetadata(storedMetadata);
             })
-            .catch(() => setError('Failed to load synced data. Try syncing again from the dashboard.'))
+            .catch(() => setError('Saved history is temporarily unavailable. It will keep filling in automatically.'))
             .finally(() => setIsLoading(false));
     }, [activeProfile?.id]);
 
@@ -501,10 +501,6 @@ const DataExport: React.FC = () => {
         }))
         : [];
 
-    const endpointWarningCount = completeBundle
-        ? Object.values(completeBundle.manifest.endpoint_diagnostics).filter(Boolean).length
-        : 0;
-
     if (!activeProfile) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center p-8">
@@ -666,7 +662,7 @@ const DataExport: React.FC = () => {
                         Data Export
                     </h1>
                     <p className="text-text-secondary">
-                        Download a lossless snapshot of every current Oura V2 collection, or create analysis-ready CSVs from your synced data. No additional API calls are needed.
+                        Download a lossless snapshot of every current Oura V2 collection, or create analysis-ready CSVs from your saved history.
                     </p>
                 </div>
 
@@ -674,7 +670,7 @@ const DataExport: React.FC = () => {
                 {isLoading && (
                     <div className="ui-card ui-card--default mb-5 flex items-center gap-3 p-4 sm:p-6">
                         <div className="w-5 h-5 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
-                        <p className="text-text-secondary">Loading synced data...</p>
+                        <p className="text-text-secondary">Loading saved history...</p>
                     </div>
                 )}
 
@@ -692,9 +688,9 @@ const DataExport: React.FC = () => {
                 {!isLoading && !error && !data && (
                     <div className="ui-card ui-card--default mb-5 p-6 text-center sm:p-8">
                         <RefreshCw className="w-12 h-12 text-text-muted mx-auto mb-4" />
-                        <h2 className="text-lg font-bold text-text-primary mb-2">No Synced Data Yet</h2>
+                        <h2 className="text-lg font-bold text-text-primary mb-2">History Is Still Arriving</h2>
                         <p className="text-text-secondary">
-                            Sync from the dashboard first. Once a sync finishes, the saved history is available here for export.
+                            Oura history is prepared automatically in the background. Check back later.
                         </p>
                     </div>
                 )}
@@ -710,11 +706,10 @@ const DataExport: React.FC = () => {
                                             All 19 collections in Oura OpenAPI 1.37, with original IDs, units, nulls, nested samples, and no profile exclusions. Access and refresh tokens are never included.
                                         </p>
                                         <p className="text-text-muted text-xs mt-2">
-                                            Snapshot: {completeBundle.manifest.snapshot_status === 'full-sync' ? 'full sync' : 'incremental or unknown'}
+                                            Coverage: {completeBundle.manifest.snapshot_status === 'full-sync' ? 'complete history' : 'available history'}
                                             {completeBundle.manifest.snapshot_status === 'full-sync' && completeBundle.manifest.last_full_sync_at
-                                                ? ` · Last full sync ${new Date(completeBundle.manifest.last_full_sync_at).toLocaleString()}`
-                                                : ' · Run a Full Sync for verified full-history coverage'}
-                                            {endpointWarningCount > 0 ? ` · ${endpointWarningCount} endpoint ${endpointWarningCount === 1 ? 'diagnostic' : 'diagnostics'} recorded` : ''}
+                                                ? ` · Prepared ${new Date(completeBundle.manifest.last_full_sync_at).toLocaleString()}`
+                                                : ' · Full-history coverage expands automatically in the background'}
                                         </p>
                                     </div>
                                     <button
@@ -759,7 +754,7 @@ const DataExport: React.FC = () => {
                                     <div>
                                         <h2 className="text-xl font-bold text-text-primary mb-1">Export Range</h2>
                                         <p className="text-text-secondary text-sm">
-                                            Choose the start and end dates for the analysis CSVs below. Complete raw exports always include the entire synced snapshot.
+                                            Choose the start and end dates for the analysis CSVs below. Complete raw exports always include all currently saved history.
                                         </p>
                                     </div>
                                     <button
@@ -767,7 +762,7 @@ const DataExport: React.FC = () => {
                                         onClick={resetRange}
                                         className="ui-button ui-button--secondary ui-button--sm self-start"
                                     >
-                                        Use Full Synced Range
+                                        Use Available Range
                                     </button>
                                 </div>
 
@@ -805,7 +800,7 @@ const DataExport: React.FC = () => {
                                     <span className="text-text-primary font-medium">
                                         {formatISODateForDisplay(selectedRange.end, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                     </span>
-                                    . Synced data is available from {availableRange.start} to {availableRange.end}.
+                                    . Saved history is available from {availableRange.start} to {availableRange.end}.
                                     {excludedDayCount > 0 ? ` ${excludedDayCount} profile-excluded ${excludedDayCount === 1 ? 'day is' : 'days are'} omitted.` : ''}
                                 </p>
                             </div>

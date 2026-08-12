@@ -283,7 +283,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
     }, [calendarView.startDate, calendarView.endDate, calendarView.visibleTrackedDays, metricScoreLabel]);
 
     const availabilitySummary = useMemo(() => {
-        if (!calendarView.firstDataDate) return 'No synced history is available for this user yet.';
+        if (!calendarView.firstDataDate) return 'No Oura history is available for this user yet.';
 
         const firstLabel = formatDateForDisplay(calendarView.firstDataDate, {
             month: 'short',
@@ -342,7 +342,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                 </div>
                 <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">No Milestones Yet</h3>
                 <p className="text-[var(--text-muted)] text-sm">
-                    Sync your data to start tracking milestones.
+                    More Oura history will appear here automatically.
                 </p>
             </div>
         );
@@ -380,12 +380,12 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                     <h3 className="section-header mb-0">Long-Term Milestones</h3>
                     <InfoTooltip
                         title="Milestone Tracking"
-                        description="Long-running totals from synced history, including personal and group milestones."
+                        description="Long-running totals from Oura history, including personal and group milestones."
                         calculation="Milestones track total progress like days tracked, total steps, and sleep hours. The score history heatmap supports 1-year, 2-year, or all available data windows per selected user."
                     />
                 </div>
                 <p className="text-sm text-[var(--text-muted)] mt-1">
-                    Long-running totals from synced history
+                    Long-running totals from Oura history
                 </p>
 
                 <PrimaryProfileSwitcher
@@ -597,7 +597,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                                                 ? `${day.date}: ${day.value.toFixed(0)}`
                                                 : day.hasAnyData
                                                     ? `${day.date}: No ${metricScoreLabel}`
-                                                    : `${day.date}: No synced data`
+                                                    : `${day.date}: No Oura data`
                                             : ''}
                                     >
                                         {day && (
@@ -614,7 +614,7 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                                                         ? `${metricLabel}: ${day.value.toFixed(0)}`
                                                         : day.hasAnyData
                                                             ? `No ${metricScoreLabel}`
-                                                            : 'No synced data'}
+                                                            : 'No Oura data'}
                                                 </p>
                                             </div>
                                         )}
@@ -628,12 +628,12 @@ const MilestoneTracker: React.FC<MilestoneTrackerProps> = ({ profiles, usersData
                     <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
                         <div className="flex items-center gap-2">
                             <div className="w-3 h-3 rounded-sm bg-[var(--bg-elevated)]" />
-                            <span className="text-xs text-[var(--text-muted)]">No synced day</span>
+                            <span className="text-xs text-[var(--text-muted)]">No Oura day</span>
                         </div>
 
                         <div className="flex items-center gap-2">
                             <div className="w-3 h-3 rounded-sm bg-[var(--bg-elevated)]/70 border border-[var(--border-subtle)]" />
-                            <span className="text-xs text-[var(--text-muted)]">Synced day, no {metricScoreLabel}</span>
+                            <span className="text-xs text-[var(--text-muted)]">Oura day, no {metricScoreLabel}</span>
                         </div>
 
                         <div className="flex items-center gap-2">

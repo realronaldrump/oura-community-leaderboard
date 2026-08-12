@@ -176,7 +176,7 @@ const CompetitionCard: React.FC<CompetitionCardProps> = ({
                     <div className="mt-4 overflow-hidden rounded-[var(--radius-lg)] border border-line bg-surface-raised divide-y divide-line">
                         {evaluation.leaderboard.length === 0 ? (
                             <div className="px-4 py-5 text-sm text-ink-muted">
-                                Standings will appear once accepted participants start syncing data.
+                                Standings will appear once accepted participants have Oura days in the date range.
                             </div>
                         ) : evaluation.leaderboard.map((entry) => (
                             <div

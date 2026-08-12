@@ -22,7 +22,8 @@ export interface UserProfile {
   height?: number | null;
   biological_sex?: string | null;
   email?: string | null;
-  token: string; // Access Token
+  /** Legacy field removed from public profiles after server credential migration. */
+  token?: string | null;
   refreshToken?: string | null;
   grantedScopes?: string[];
   tokenExpiresAt?: string | null;

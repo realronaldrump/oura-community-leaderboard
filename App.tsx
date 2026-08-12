@@ -333,9 +333,8 @@ const Router = () => {
 const queryClient = new QueryClient({
     defaultOptions: {
         queries: {
-            // Oura requests already apply bounded, Retry-After-aware retries.
-            // One query-level replay recovers transient orchestration failures
-            // without multiplying every endpoint burst three more times.
+            // Browser queries read saved Firestore data only. One quiet replay
+            // covers transient reads; focus and reconnect never start polling.
             retry: 1,
             refetchOnWindowFocus: false,
             refetchOnReconnect: false,

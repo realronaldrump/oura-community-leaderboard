@@ -3,7 +3,6 @@ import {
     ArrowRight,
     CalendarDays,
     CircleUserRound,
-    Clock3,
     CloudOff,
     Plus,
     RefreshCw,
@@ -12,93 +11,11 @@ import {
 } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { useCompetitionInvitePreview } from '../hooks/useCompetitions';
-import type { UserProfile } from '../types';
 import { AuthStatus } from '../types';
 import { formatISODateForDisplay } from '../utils/date';
 import { getCompetitionInviteToken, isInviteLocation } from '../utils/inviteLink';
 import { getProfileDisplayName } from '../utils/profileName';
-import { profileRequiresReconnect } from '../utils/profileSyncHealth';
-import { Badge, Button, Card, Skeleton, StatePanel, type BadgeTone } from '../components/ui';
-
-const RECENT_SYNC_WINDOW_MS = 15 * 60 * 1000;
-const STALE_SYNC_WINDOW_MS = 18 * 60 * 60 * 1000;
-
-export interface ProfileFreshness {
-    label: string;
-    description: string;
-    tone: BadgeTone;
-    timestamp: string | null;
-}
-
-const formatElapsed = (elapsedMs: number): string => {
-    const minutes = Math.floor(Math.max(0, elapsedMs) / (60 * 1000));
-    if (minutes < 1) return 'just now';
-    if (minutes < 60) return `${minutes}m ago`;
-
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-
-    const days = Math.floor(hours / 24);
-    if (days < 14) return `${days}d ago`;
-    return '';
-};
-
-const formatExactTimestamp = (timestamp: string): string => new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-}).format(new Date(timestamp));
-
-export const getProfileFreshness = (
-    profile: Pick<UserProfile, 'lastSuccessfulSyncAt' | 'lastSyncError'>,
-    nowMs: number = Date.now(),
-): ProfileFreshness => {
-    if (profileRequiresReconnect(profile)) {
-        return {
-            label: 'Connection needs attention',
-            description: 'Saved sync metadata reports an Oura connection issue.',
-            tone: 'error',
-            timestamp: profile.lastSuccessfulSyncAt || null,
-        };
-    }
-
-    if (!profile.lastSuccessfulSyncAt) {
-        return {
-            label: 'No sync recorded',
-            description: 'A successful sync time has not been recorded for this profile yet.',
-            tone: 'neutral',
-            timestamp: null,
-        };
-    }
-
-    const syncMs = new Date(profile.lastSuccessfulSyncAt).getTime();
-    if (!Number.isFinite(syncMs)) {
-        return {
-            label: 'Sync time unavailable',
-            description: 'The saved sync timestamp could not be read.',
-            tone: 'neutral',
-            timestamp: null,
-        };
-    }
-
-    const elapsedMs = Math.max(0, nowMs - syncMs);
-    const relative = formatElapsed(elapsedMs);
-    const exact = formatExactTimestamp(profile.lastSuccessfulSyncAt);
-    const label = relative ? `Last sync ${relative}` : `Last sync ${formatISODateForDisplay(profile.lastSuccessfulSyncAt.slice(0, 10), 'en-US', { month: 'short', day: 'numeric' })}`;
-
-    return {
-        label,
-        description: `Successful sync recorded ${exact}.`,
-        tone: elapsedMs < RECENT_SYNC_WINDOW_MS
-            ? 'success'
-            : elapsedMs < STALE_SYNC_WINDOW_MS
-                ? 'info'
-                : 'warning',
-        timestamp: profile.lastSuccessfulSyncAt,
-    };
-};
+import { Badge, Button, Card, Skeleton, StatePanel } from '../components/ui';
 
 const ProfileListSkeleton: React.FC = () => (
     <div className="space-y-3" role="status" aria-label="Loading member profiles">
@@ -139,7 +56,6 @@ const Welcome: React.FC<WelcomeProps> = ({ isCompletingOAuth = false }) => {
         login,
         firebaseError,
         isLoadingProfiles,
-        retryFirebaseConnection,
         authStatus,
     } = useUser();
 
@@ -282,19 +198,13 @@ const Welcome: React.FC<WelcomeProps> = ({ isCompletingOAuth = false }) => {
                         <StatePanel
                             className="mt-5"
                             eyebrow="Profile list"
-                            title="We couldn’t refresh the profiles"
+                            title="Reconnecting to the circle"
                             description={profiles.length > 0
-                                ? 'Anything already shown may be older. Retry when you’re ready.'
-                                : 'The profile list is unavailable right now. Retry before choosing a profile.'}
+                                ? 'Saved profiles remain available while the app reconnects automatically.'
+                                : 'The app is reconnecting automatically. There is nothing you need to troubleshoot.'}
                             icon={<CloudOff />}
-                            tone="error"
-                            action={(
-                                <Button variant="secondary" onClick={retryFirebaseConnection}>
-                                    <RefreshCw aria-hidden="true" className="h-4 w-4" />
-                                    Retry profile list
-                                </Button>
-                            )}
-                            role="alert"
+                            tone="neutral"
+                            role="status"
                         />
                     ) : null}
 
@@ -304,7 +214,6 @@ const Welcome: React.FC<WelcomeProps> = ({ isCompletingOAuth = false }) => {
                         ) : profiles.length > 0 ? (
                             <div className="space-y-3">
                                 {profiles.map((profile) => {
-                                    const freshness = getProfileFreshness(profile);
                                     const displayName = getProfileDisplayName(profile);
                                     const initial = displayName.trim().charAt(0).toUpperCase() || 'O';
 
@@ -320,14 +229,6 @@ const Welcome: React.FC<WelcomeProps> = ({ isCompletingOAuth = false }) => {
                                                 <div className="min-w-0 flex-1">
                                                     <p className="truncate text-[1rem] font-semibold text-[var(--color-ink)]">{displayName}</p>
                                                     <p className="truncate text-sm text-[var(--color-ink-muted)]">Oura sleeper</p>
-                                                    <div className="mt-2">
-                                                        <Badge tone={freshness.tone} title={freshness.description}>
-                                                            <Clock3 aria-hidden="true" className="h-3.5 w-3.5" />
-                                                            {freshness.timestamp ? (
-                                                                <time dateTime={freshness.timestamp}>{freshness.label}</time>
-                                                            ) : freshness.label}
-                                                        </Badge>
-                                                    </div>
                                                 </div>
                                             </div>
 
@@ -340,10 +241,6 @@ const Welcome: React.FC<WelcomeProps> = ({ isCompletingOAuth = false }) => {
                                         </div>
                                     );
                                 })}
-
-                                <p className="px-1 text-sm leading-6 text-[var(--color-ink-muted)]">
-                                    Sync labels use saved timestamps only. They do not run a new ring connection test.
-                                </p>
                             </div>
                         ) : firebaseError ? null : (
                             <StatePanel

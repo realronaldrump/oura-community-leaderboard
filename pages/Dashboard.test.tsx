@@ -33,15 +33,6 @@ vi.mock('../hooks/useProfileStatsHydration', () => ({
     }),
 }));
 
-vi.mock('../hooks/useAutoSync', () => ({
-    useAutoSync: vi.fn(),
-    formatLastSync: () => 'Just now',
-}));
-
-vi.mock('../hooks/useWebhookRefresh', () => ({
-    useWebhookRefresh: vi.fn(),
-}));
-
 vi.mock('../components/MetricDetailModal', () => ({
     default: (props: Record<string, unknown>) => {
         mocks.metricDetailProps = props;
@@ -104,6 +95,25 @@ const makeStats = (day: string): DailyStats => ({
 });
 
 describe('Dashboard sleep details', () => {
+    it('launches from saved data without exposing sync controls or freshness alarms', async () => {
+        const day = new Date().toISOString().slice(0, 10);
+        const queryClient = new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+        });
+        queryClient.setQueryData(['dailyStats', mocks.profile.id], makeStats(day));
+
+        render(
+            <QueryClientProvider client={queryClient}>
+                <Dashboard />
+            </QueryClientProvider>
+        );
+
+        expect(await screen.findByRole('heading', { name: /today/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /refresh oura data/i })).not.toBeInTheDocument();
+        expect(screen.queryByText(/sync attention needed|try sync again|sync is stale/i)).not.toBeInTheDocument();
+        expect(screen.queryByText('Just now')).not.toBeInTheDocument();
+    });
+
     it('opens Total Sleep with the selected main session timing', async () => {
         const day = new Date().toISOString().slice(0, 10);
         const stats = makeStats(day);

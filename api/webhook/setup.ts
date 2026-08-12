@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 const OURA_WEBHOOK_BASE_URL = 'https://api.ouraring.com/v2/webhook/subscription';
 const DEFAULT_OURA_CLIENT_ID = '92e4c379-b278-4c42-a7c0-db088b67680f';
 export const WEBHOOK_EVENT_TYPES = ['create', 'update', 'delete'] as const;
@@ -59,6 +61,21 @@ type WebhookConfig = {
 };
 
 const subscriptionKey = (eventType: string, dataType: string): string => `${eventType}:${dataType}`;
+
+const safeEqual = (left: string, right: string): boolean => {
+    const leftBuffer = Buffer.from(left);
+    const rightBuffer = Buffer.from(right);
+    return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
+};
+
+export const isAuthorizedWebhookMaintenanceRequest = (
+    authorization: unknown,
+    secret: string | undefined
+): boolean => {
+    const configuredSecret = secret?.trim() || '';
+    const provided = typeof authorization === 'string' ? authorization.trim() : '';
+    return Boolean(configuredSecret && provided && safeEqual(provided, `Bearer ${configuredSecret}`));
+};
 
 export const getExpectedWebhookSubscriptionKeys = (dataTypes: string[]): string[] => (
     dataTypes.flatMap((dataType) => WEBHOOK_EVENT_TYPES.map((eventType) => subscriptionKey(eventType, dataType)))
@@ -122,6 +139,8 @@ const resolveWebhookConfig = (): WebhookConfig => {
         configured: Boolean(clientId && clientSecret && verificationToken),
     };
 };
+
+export const maxDuration = 60;
 
 const listSubscriptions = async (clientId: string, clientSecret: string): Promise<WebhookSubscription[]> => {
     const response = await fetch(OURA_WEBHOOK_BASE_URL, {
@@ -212,6 +231,10 @@ const summarizeSubscriptions = (subscriptions: WebhookSubscription[], callbackUr
 export default async function handler(req: any, res: any) {
     if (req.method !== 'GET' && req.method !== 'POST') {
         sendJson(res, 405, { error: 'method_not_allowed' });
+        return;
+    }
+    if (!isAuthorizedWebhookMaintenanceRequest(req.headers?.authorization, process.env.CRON_SECRET)) {
+        sendJson(res, 401, { error: 'unauthorized' });
         return;
     }
 

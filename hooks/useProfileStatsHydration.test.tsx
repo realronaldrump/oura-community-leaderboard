@@ -1,12 +1,13 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { createEmptyDailyStats } from '../test/helpers';
-import { getStoredDashboardStats } from '../services/firestoreStatsService';
+import { getStoredDashboardStats, subscribeToDashboardStats } from '../services/firestoreStatsService';
 import { useProfileStatsHydration } from './useProfileStatsHydration';
 
 vi.mock('../services/firestoreStatsService', () => ({
     getStoredDashboardStats: vi.fn(),
+    subscribeToDashboardStats: vi.fn(() => () => undefined),
 }));
 
 const Harness: React.FC<{ profileIds: string[]; priorityProfileId?: string }> = ({ profileIds, priorityProfileId }) => {
@@ -36,6 +37,28 @@ const renderHarness = (profileIds: string[], priorityProfileId?: string) => {
 describe('useProfileStatsHydration', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(subscribeToDashboardStats).mockReturnValue(() => undefined);
+    });
+
+    it('accepts server-published replacements without starting an Oura request', async () => {
+        const initial = createEmptyDailyStats({
+            sleep: [{ id: 'sleep-1', day: '2026-07-30', score: 88, contributors: {} }],
+        });
+        const updated = createEmptyDailyStats({
+            sleep: [{ id: 'sleep-2', day: '2026-07-31', score: 92, contributors: {} }],
+        });
+        let publish: ((stats: typeof updated) => void) | undefined;
+        vi.mocked(getStoredDashboardStats).mockResolvedValue(initial);
+        vi.mocked(subscribeToDashboardStats).mockImplementation((_profileId, callback) => {
+            publish = callback;
+            return () => undefined;
+        });
+
+        const queryClient = renderHarness(['profile-1']);
+        await waitFor(() => expect(screen.getByText('hydrated:cached:profile-1')).toBeInTheDocument());
+
+        act(() => publish?.(updated));
+        await waitFor(() => expect(queryClient.getQueryData(['dailyStats', 'profile-1'])).toEqual(updated));
     });
 
     it('loads the compact dashboard snapshot without pretending full history is hydrated', async () => {

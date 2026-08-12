@@ -348,7 +348,7 @@ const AllTimeHistory: React.FC<AllTimeHistoryProps> = ({ profiles, userQueries }
                         <div>
                             <h3 className="text-xl font-bold">History Visualization</h3>
                             {isHistoryFetching && (
-                                <p className="text-xs text-text-muted mt-1">Syncing older history in the background...</p>
+                                <p className="text-xs text-text-muted mt-1">Older history will appear automatically.</p>
                             )}
                             {chartSummary && (
                                 <p className="text-sm text-text-secondary mt-2 max-w-xl leading-relaxed">{chartSummary.text}</p>

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarPlus, Check, Flag, RefreshCw, Trophy, Users } from 'lucide-react';
+import { CalendarPlus, Check, Flag, Trophy, Users } from 'lucide-react';
 import { COMPETITION_TEMPLATES } from '../../constants/competitionMetrics';
 import { useCompetitionInvitePreview, useCompetitions } from '../../hooks/useCompetitions';
 import { competitionService, CreateCompetitionInput } from '../../services/competitionService';
@@ -392,26 +392,8 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             ) : null}
 
             {error ? (
-                <div className="rounded-[1.35rem] border border-error/20 bg-surface p-5 sm:p-6">
-                    <div className="flex flex-col items-center text-center gap-4 sm:flex-row sm:items-start sm:text-left">
-                        <span className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-error-soft">
-                            <AlertTriangle className="h-5 w-5 text-error" />
-                        </span>
-                        <div className="flex-1 min-w-0">
-                            <h2 className="text-base font-semibold text-ink">Couldn't load competitions</h2>
-                            <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
-                                {error} This is usually temporary. Try again to load saved competitions and progress.
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => window.location.reload()}
-                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-line px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-surface-raised flex-shrink-0"
-                        >
-                            <RefreshCw className="h-4 w-4" />
-                            Try again
-                        </button>
-                    </div>
+                <div className="rounded-[1.35rem] border border-line bg-surface p-5 text-sm text-ink-secondary sm:p-6" role="status">
+                    {error}
                 </div>
             ) : null}
 

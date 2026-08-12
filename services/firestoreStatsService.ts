@@ -5,6 +5,7 @@ import {
     FirestoreError,
     getDoc,
     getDocs,
+    onSnapshot,
     query,
     runTransaction,
     writeBatch,
@@ -817,6 +818,28 @@ const isProfileDashboardSnapshot = (
     return ['sleep', 'readiness', 'activity', 'session', 'spo2', 'stress', 'resilience']
         .every((field) => Array.isArray(value.data[field]));
 };
+
+/**
+ * Listen only to the compact server-published dashboard snapshot. The browser
+ * never contacts Oura here; background functions publish a replacement when
+ * Oura reports new data.
+ */
+export const subscribeToDashboardStats = (
+    profileId: string,
+    callback: (data: DailyStats | null) => void,
+    onError?: (error: unknown) => void
+): (() => void) => onSnapshot(
+    doc(db, PROFILE_STATS_COLLECTION, profileId, SNAPSHOTS_COLLECTION, DASHBOARD_SNAPSHOT_DOCUMENT),
+    (snapshot) => {
+        if (!snapshot.exists()) {
+            callback(null);
+            return;
+        }
+        const stored = snapshot.data();
+        callback(isProfileDashboardSnapshot(stored, profileId) ? stored.data : null);
+    },
+    (error) => onError?.(error)
+);
 
 const buildDashboardSourceFromDays = (
     dayDocs: ProfileStatsDayDocument[],

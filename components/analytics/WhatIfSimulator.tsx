@@ -174,7 +174,7 @@ const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ profiles, usersData }
                 </div>
                 <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">No data yet</h3>
                 <p className="text-[var(--text-muted)] text-sm">
-                    Sync your data to run what-if simulations.
+                    More Oura history will appear here automatically.
                 </p>
             </div>
         );

@@ -7,16 +7,14 @@ import { useUser } from '../contexts/UserContext';
 import MetricCard from '../components/MetricCard';
 import type { MetricDetailType } from '../components/MetricDetailModal';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
-import { mergeDailyStats, mergeDailyStatsIfLoaded, syncDailyStats } from '../hooks/useOuraData';
-import SyncModal from '../components/SyncModal';
+import { mergeDailyStats } from '../utils/mergeDailyStats';
+import { readLaunchDashboardStats } from '../services/launchCache';
 import PrimaryProfileSwitcher from '../components/PrimaryProfileSwitcher';
 import DateRangePicker from '../components/DateRangePicker';
 import InviteLinkModal from '../components/InviteLinkModal';
 import type { ComparisonRow } from '../components/MultiProfileComparisonTable';
 import { Button, SegmentedControl, Skeleton } from '../components/ui';
 import { getStoredDailyStats } from '../services/firestoreStatsService';
-import { smartSync, SyncProgress } from '../services/syncService';
-import { isReconnectRequiredError } from '../services/ouraTokenLifecycle';
 
 // Lazily load the heavier secondary views so the Today view (the mobile
 // landing screen) ships in a much smaller initial bundle.
@@ -51,10 +49,8 @@ const ViewLoadingFallback: React.FC = () => (
         </div>
     </div>
 );
-import { useAutoSync, formatLastSync } from '../hooks/useAutoSync';
-import { useProfileStatsHydration } from '../hooks/useProfileStatsHydration';
-import { useWebhookRefresh } from '../hooks/useWebhookRefresh';
-import { RefreshCw, Settings, Plus, Moon, Heart, Flame, Brain, Users, Trophy, TrendingUp, TrendingDown, Minus, BarChart3, Swords, Download, CalendarDays, Search, GitCompareArrows, ArrowRight, ChevronLeft } from 'lucide-react';
+import { createEmptyDailyStats, useProfileStatsHydration } from '../hooks/useProfileStatsHydration';
+import { Settings, Plus, Moon, Heart, Flame, Brain, Users, Trophy, TrendingUp, TrendingDown, Minus, BarChart3, Swords, Download, CalendarDays, Search, GitCompareArrows, ArrowRight, ChevronLeft } from 'lucide-react';
 import { getProfileDisplayName } from '../utils/profileName';
 import { getCompetitionInviteToken } from '../utils/inviteLink';
 import {
@@ -71,17 +67,12 @@ import {
     getMillisecondsUntilNextProfileMidnight,
     getProfileCurrentHour,
     getProfileLocalISODate,
-    getProfileOffsetMinutes,
 } from '../utils/profileTemporal';
 import { filterDailyStatsForProfile, isDayExcludedByRanges } from '../utils/dataExclusions';
 import { buildAlignedDailyScoreAverages } from '../utils/scoreTrends';
-import { profileRequiresReconnect } from '../utils/profileSyncHealth';
 
 const METERS_TO_MILES = 0.000621371;
 const CELSIUS_DELTA_TO_FAHRENHEIT_DELTA = 9 / 5;
-const DEFAULT_DAILY_STATS_STALE_MS = 1000 * 60 * 60;
-const LIVE_DAILY_STATS_STALE_MS = 1000 * 60 * 5;
-const LIVE_DAILY_STATS_REFETCH_MS = 1000 * 60 * 5;
 type DayRange = { start: string; end: string };
 type ScoreType = 'readiness' | 'sleep' | 'activity';
 type ViewMode = 'today' | 'compare' | 'compete' | 'trends' | 'streaks' | 'insights' | 'more' | 'export';
@@ -1817,9 +1808,8 @@ const DailyRankSummary: React.FC<{
     participantCount: number;
     average: number | null;
     scores: Array<{ type: ScoreType; label: string; value: number | null | undefined; color: string }>;
-    freshnessLabel: string;
     onSelectScore: (type: ScoreType) => void;
-}> = ({ rank, participantCount, average, scores, freshnessLabel, onSelectScore }) => (
+}> = ({ rank, participantCount, average, scores, onSelectScore }) => (
     <section className="daily-rank" aria-labelledby="daily-rank-title">
         <div className="daily-rank__lead">
             <div>
@@ -1828,7 +1818,7 @@ const DailyRankSummary: React.FC<{
                     {rank ? <>Rank <span>#{rank}</span></> : 'Rank pending'}
                 </h2>
                 <p className="daily-rank__context">
-                    {participantCount > 0 ? `Among ${participantCount} synced ${participantCount === 1 ? 'sleeper' : 'sleepers'}` : 'Waiting for comparable scores'}
+                    {participantCount > 0 ? `Among ${participantCount} ${participantCount === 1 ? 'sleeper' : 'sleepers'}` : 'Waiting for comparable scores'}
                 </p>
             </div>
             <div className="daily-rank__average" aria-label={average == null ? 'Daily average unavailable' : `Daily average ${average}`}>
@@ -1852,11 +1842,6 @@ const DailyRankSummary: React.FC<{
                 </button>
             ))}
         </div>
-
-        <div className="daily-rank__freshness">
-            <span className="daily-rank__pulse" aria-hidden="true" />
-            <span>{freshnessLabel}</span>
-        </div>
     </section>
 );
 
@@ -1865,20 +1850,11 @@ const Dashboard: React.FC = () => {
         activeProfile,
         profiles,
         login,
-        getAccessTokenForProfile,
-        markProfileSyncSuccess,
-        markProfileSyncError,
     } = useUser();
     const [competitionInviteToken, setCompetitionInviteToken] = useState<string | null>(() => (
         typeof window !== 'undefined' ? getCompetitionInviteToken(window.location.search) : null
     ));
     const [viewMode, setViewMode] = useState<ViewMode>(viewFromLocation);
-    const [isSyncing, setIsSyncing] = useState(false);
-    const [showSyncModal, setShowSyncModal] = useState(false);
-    const [syncProgress, setSyncProgress] = useState<SyncProgress>({
-        status: 'idle', currentStep: '', stepsCompleted: 0, totalSteps: 0, details: '',
-    });
-
     const [scoreBreakdownModal, setScoreBreakdownModal] = useState<{
         isOpen: boolean;
         scoreType: ScoreType | null;
@@ -1914,81 +1890,12 @@ const Dashboard: React.FC = () => {
 
     const queryClient = useQueryClient();
 
-    const getDashboardErrorState = (error: unknown): { title: string; message: string; requiresReconnect: boolean } => {
-        const raw = error instanceof Error ? error.message : String(error || '');
-        const message = raw.toLowerCase();
-
-        if (isReconnectRequiredError(error)) {
-            return {
-                title: 'Oura connection expired',
-                message: 'Oura rejected the saved refresh credential. Reconnect this account to resume syncing.',
-                requiresReconnect: true,
-            };
-        }
-
-        if (message.includes('missing required oura consent') || message.includes('missing oura consent scopes')) {
-            return {
-                title: 'Permission needed',
-                message: 'Your Oura connection is active, but required permissions were not granted. Reconnect your ring and approve the requested access to continue syncing.',
-                requiresReconnect: true,
-            };
-        }
-
-        return {
-            title: 'Sync paused',
-            message: 'Oura or the network did not complete this request. Your saved connection is still intact; wait a moment and try again.',
-            requiresReconnect: false,
-        };
-    };
-
-    const runWithAutoTokenRefresh = useCallback(async <T,>(profileId: string, operation: (token: string) => Promise<T>): Promise<T> => {
-        const firstToken = await getAccessTokenForProfile(profileId);
-        try {
-            return await operation(firstToken);
-        } catch (error) {
-            const message = error instanceof Error ? error.message.toLowerCase() : '';
-            const shouldRetry = message.includes('unauthorized') || message.includes('401');
-            if (!shouldRetry) throw error;
-            const refreshedToken = await getAccessTokenForProfile(profileId, { forceRefresh: true });
-            return operation(refreshedToken);
-        }
-    }, [getAccessTokenForProfile]);
-
-    const mergeIntoAllTimeCache = useCallback((profileId: string, data: DailyStats) => {
-        queryClient.setQueryData(
-            ['allTimeStats', profileId],
-            (current: DailyStats | undefined) => mergeDailyStatsIfLoaded(current, data)
-        );
-    }, [queryClient]);
-
     const primeStoredStatsCache = useCallback((profileId: string, stored: DailyStats) => {
         queryClient.setQueryData(['dailyStats', profileId], (current: DailyStats | undefined) => current ?? stored);
         queryClient.setQueryData(['allTimeStats', profileId], (current: DailyStats | undefined) => (
             current ? mergeDailyStats(current, stored) : stored
         ));
     }, [queryClient]);
-
-    const loadProfileDailyStats = useCallback(async (profile: UserProfile): Promise<DailyStats> => {
-        try {
-            const cached = queryClient.getQueryData(['dailyStats', profile.id]) as DailyStats | undefined;
-            const synced = await runWithAutoTokenRefresh(profile.id, (token) =>
-                syncDailyStats(token, cached, {
-                    mode: 'incremental',
-                    grantedScopes: profile.grantedScopes,
-                    availabilityKey: profile.id,
-                    profileId: profile.id,
-                    profileOffsetMinutes: getProfileOffsetMinutes(profile),
-                })
-            );
-            queryClient.setQueryData(['dailyStats', profile.id], synced);
-            mergeIntoAllTimeCache(profile.id, synced);
-            await markProfileSyncSuccess(profile.id);
-            return synced;
-        } catch (error) {
-            await markProfileSyncError(profile.id, error);
-            throw error;
-        }
-    }, [markProfileSyncError, markProfileSyncSuccess, mergeIntoAllTimeCache, queryClient, runWithAutoTokenRefresh]);
 
     const loadProfileAllTimeStats = useCallback(async (profile: UserProfile): Promise<DailyStats> => {
         const cachedAllTime = queryClient.getQueryData(['allTimeStats', profile.id]) as DailyStats | undefined;
@@ -2004,28 +1911,18 @@ const Dashboard: React.FC = () => {
 
         // The compact daily cache remains available as placeholder UI, but it
         // must never be cached under the all-time key. Keeping this query in an
-        // error state lets a later attempt read history after a sync completes.
+        // error state lets a later attempt read history after background history arrives.
         throw new Error('Saved full history is not available yet.');
     }, [primeStoredStatsCache, queryClient]);
 
     const profileIds = useMemo(() => profiles.map((profile) => profile.id), [profiles]);
-    const { hydratedProfileIds, allProfilesHydrated } = useProfileStatsHydration(
+    const { hydratedProfileIds } = useProfileStatsHydration(
         profileIds,
         activeProfile?.id
     );
     const isActiveProfileStatsHydrated = Boolean(
         activeProfile?.id && hydratedProfileIds.has(activeProfile.id)
     );
-
-    // Auto-sync stale profiles independently. Freshness comes from each
-    // profile's durable successful-sync marker, never shared browser state.
-    const autoSyncProfiles = useMemo(() => profiles.map((profile) => ({
-        id: profile.id,
-        lastSuccessfulSyncAt: profile.lastSuccessfulSyncAt,
-    })), [profiles]);
-    useAutoSync(autoSyncProfiles, Boolean(activeProfile) && allProfilesHydrated);
-    const activeProfileLastSuccessfulSyncAt = activeProfile?.lastSuccessfulSyncAt ?? null;
-    useWebhookRefresh(activeProfile, viewMode === 'today' && isActiveProfileStatsHydrated);
 
     const navigateToView = useCallback((nextView: ViewMode) => {
         const nextUrl = new URL(pathForView(nextView), window.location.origin);
@@ -2052,59 +1949,22 @@ const Dashboard: React.FC = () => {
         return () => window.removeEventListener('popstate', syncLocation);
     }, []);
 
-    // Manual sync
-    const handleSyncAllData = async () => {
-        if (!activeProfile) return;
-        setIsSyncing(true);
-        setShowSyncModal(true);
-        try {
-            const existingData = queryClient.getQueryData(['dailyStats', activeProfile.id]) as DailyStats | undefined;
-            const syncedData = await runWithAutoTokenRefresh(activeProfile.id, (token) =>
-                smartSync(token, existingData, (progress) => {
-                    setSyncProgress(progress);
-                }, {
-                    grantedScopes: activeProfile.grantedScopes,
-                    availabilityKey: activeProfile.id,
-                    profileId: activeProfile.id,
-                    profileOffsetMinutes: getProfileOffsetMinutes(activeProfile),
-                })
-            );
-            queryClient.setQueryData(['dailyStats', activeProfile.id], syncedData);
-            mergeIntoAllTimeCache(activeProfile.id, syncedData);
-            await markProfileSyncSuccess(activeProfile.id);
-        } catch (err) {
-            console.error('Sync failed:', err);
-            const message = err instanceof Error ? err.message.toLowerCase() : '';
-            const errorMessage = (message.includes('missing required oura consent') || message.includes('missing oura consent scopes'))
-                ? 'Reconnect your Oura account to grant the required scopes.'
-                : 'Something went wrong. Please try again.';
-            setSyncProgress(prev => ({ ...prev, status: 'error', error: errorMessage }));
-            await markProfileSyncError(activeProfile.id, err);
-        } finally {
-            setIsSyncing(false);
-        }
-    };
-
     // Data queries
     const userQueries = useQueries({
-        queries: profiles.map(p => {
-            const isLiveProfile = viewMode === 'today' && p.id === activeProfile?.id;
-            return ({
-                queryKey: ['dailyStats', p.id],
-                queryFn: () => loadProfileDailyStats(p),
-                enabled: Boolean(activeProfile) && hydratedProfileIds.has(p.id),
-                staleTime: viewMode === 'today' && p.id === activeProfile?.id
-                    ? LIVE_DAILY_STATS_STALE_MS
-                    : DEFAULT_DAILY_STATS_STALE_MS,
-                refetchInterval: isLiveProfile
-                    ? LIVE_DAILY_STATS_REFETCH_MS
-                    : (false as const),
-                refetchIntervalInBackground: false,
-                // Webhook signals and the active-profile interval own freshness;
-                // tab focus must not start a synchronized multi-profile burst.
-                refetchOnWindowFocus: false,
-            });
-        })
+        queries: profiles.map((profile) => ({
+            queryKey: ['dailyStats', profile.id],
+            queryFn: async () => (
+                queryClient.getQueryData(['dailyStats', profile.id]) as DailyStats | undefined
+            ) ?? createEmptyDailyStats(),
+            initialData: () => readLaunchDashboardStats(profile.id) || undefined,
+            // The compact Firestore snapshot listener owns this cache. Keeping
+            // the query disabled makes launch and navigation read-only with
+            // respect to Oura and avoids focus/interval request loops.
+            enabled: false,
+            staleTime: Number.POSITIVE_INFINITY,
+            refetchOnWindowFocus: false,
+            refetchOnReconnect: false,
+        }))
     });
 
     const shouldLoadAllTimeStats = viewMode === 'trends' ||
@@ -2167,52 +2027,6 @@ const Dashboard: React.FC = () => {
         }))
     ), [analysisUserQueries, profiles]);
 
-    const profileHealthById = useMemo(() => {
-        const staleThresholdMs = 18 * 60 * 60 * 1000;
-        const now = Date.now();
-        const map = new Map<string, { level: 'ok' | 'warning' | 'error'; label: string }>();
-
-        profiles.forEach((profile, idx) => {
-            const query = userQueries[idx];
-            const lastSuccessfulSyncMs = profile.lastSuccessfulSyncAt ? new Date(profile.lastSuccessfulSyncAt).getTime() : 0;
-            const tokenExpiryMs = profile.tokenExpiresAt ? new Date(profile.tokenExpiresAt).getTime() : 0;
-            const missingRefresh = !profile.refreshToken;
-
-            if (profileRequiresReconnect(profile)) {
-                map.set(profile.id, { level: 'error', label: 'Needs reconnect' });
-                return;
-            }
-
-            if (query?.isError) {
-                map.set(profile.id, { level: 'warning', label: 'Sync retry needed' });
-                return;
-            }
-
-            if (!lastSuccessfulSyncMs) {
-                map.set(profile.id, { level: 'warning', label: 'Initial sync pending' });
-                return;
-            }
-
-            if (now - lastSuccessfulSyncMs > staleThresholdMs) {
-                map.set(profile.id, { level: 'warning', label: 'Sync is stale' });
-                return;
-            }
-
-            if (tokenExpiryMs && tokenExpiryMs <= (now + (10 * 60 * 1000)) && missingRefresh) {
-                map.set(profile.id, { level: 'warning', label: 'Will require reconnect soon' });
-                return;
-            }
-
-            map.set(profile.id, { level: 'ok', label: 'Up to date' });
-        });
-
-        return map;
-    }, [profiles, userQueries]);
-
-    const profilesNeedingAttention = useMemo(() => {
-        return profiles.filter((profile) => (profileHealthById.get(profile.id)?.level || 'ok') !== 'ok');
-    }, [profiles, profileHealthById]);
-
     const [dateIndex, setDateIndex] = useState(0);
     const [todayOverrideDay, setTodayOverrideDay] = useState<string | null>(null);
     const [trendsRange, setTrendsRange] = useState<DayRange | null>(null);
@@ -2236,7 +2050,6 @@ const Dashboard: React.FC = () => {
     const allTimeWorkoutHistory = activeAllTimeData?.workout || activeData?.workout || [];
     const allTimeCardiovascularAgeHistory = activeAllTimeData?.cardiovascularAge || activeData?.cardiovascularAge || [];
     const allTimeVo2MaxHistory = activeAllTimeData?.vo2Max || activeData?.vo2Max || [];
-    const resilienceDiagnostic = activeData?.resilienceDiagnostic ?? activeAllTimeData?.resilienceDiagnostic ?? null;
     const hrData = activeHistoryData?.heartrate || [];
 
     const availableDays = useMemo(() => {
@@ -2278,11 +2091,6 @@ const Dashboard: React.FC = () => {
         if (isDayExcludedByRanges(todayIsoDay, activeProfile?.dataExclusionRanges)) return todayReferenceDays;
         if (todayReferenceDays.includes(todayIsoDay)) return todayReferenceDays;
         return [todayIsoDay, ...todayReferenceDays];
-    }, [activeProfile?.dataExclusionRanges, todayIsoDay, todayReferenceDays]);
-
-    const hasIncompleteTodayCoverage = useMemo(() => {
-        if (isDayExcludedByRanges(todayIsoDay, activeProfile?.dataExclusionRanges)) return false;
-        return !todayReferenceDays.includes(todayIsoDay);
     }, [activeProfile?.dataExclusionRanges, todayIsoDay, todayReferenceDays]);
 
     // All days across all profiles from full-history queries, falling back to incremental data
@@ -2397,9 +2205,9 @@ const Dashboard: React.FC = () => {
         ? getResilienceLevelLabel(currentResilience.level)
         : null;
     const currentResilienceScore = getResilienceScore(currentResilience);
-    const resilienceCardValue = currentResilienceDisplayValue ?? (resilienceDiagnostic ? 'Unavailable' : null);
-    const resilienceCardSubtext = !currentResilience ? resilienceDiagnostic?.message : undefined;
-    const resilienceCardColor = resilienceDiagnostic ? '#D4897B' : getResilienceColor(currentResilience?.level);
+    const resilienceCardValue = currentResilienceDisplayValue;
+    const resilienceCardSubtext = undefined;
+    const resilienceCardColor = getResilienceColor(currentResilience?.level);
     const canOpenResilienceDetail = resilienceHistory.length > 0;
     const bodyTempDeviationF = (currentReadiness?.temperature_deviation ?? currentReadiness?.temperature_trend_deviation) != null
         ? (currentReadiness!.temperature_deviation ?? currentReadiness!.temperature_trend_deviation!) * CELSIUS_DELTA_TO_FAHRENHEIT_DELTA
@@ -3113,7 +2921,7 @@ const Dashboard: React.FC = () => {
         const hrv = currentSession?.average_hrv;
 
         if (rScore && rScore >= 85) parts.push('Body well recovered');
-        else if (rScore && rScore < 60) parts.push('Recovery needs attention');
+        else if (rScore && rScore < 60) parts.push('Recovery is running low');
 
         if (currentSession?.total_sleep_duration) {
             const hours = currentSession.total_sleep_duration / 3600;
@@ -3144,39 +2952,6 @@ const Dashboard: React.FC = () => {
     // ============================================
     // LOADING STATE
     // ============================================
-    const activeQueryError = userQueries.find((q, idx) => profiles[idx].id === activeProfile?.id && q.isError);
-
-    if (isActiveProfileStatsHydrated && !activeData && activeQueryError) {
-        const errorState = getDashboardErrorState(activeQueryError.error);
-        return (
-            <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-canvas">
-                <div className="w-full max-w-sm text-center">
-                    <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border border-line bg-surface shadow-sm">
-                        <Settings className="w-8 h-8 text-error" />
-                    </div>
-                    <h1 className="text-xl font-bold tracking-tight text-ink mb-2">{errorState.title}</h1>
-                    <p className="text-ink-muted text-sm mb-8">
-                        {errorState.message}
-                    </p>
-                    <button
-                        onClick={() => errorState.requiresReconnect ? login() : activeQueryError.refetch()}
-                        className="w-full py-3.5 bg-accent text-white font-semibold rounded-lg hover:opacity-90 transition-opacity text-sm mb-4"
-                    >
-                        {errorState.requiresReconnect ? 'Reconnect Oura' : 'Try Sync Again'}
-                    </button>
-                    {errorState.requiresReconnect ? (
-                        <button
-                            onClick={() => navigateToView('more')}
-                            className="text-ink-muted hover:text-ink text-sm transition-colors"
-                        >
-                            Manage profile
-                        </button>
-                    ) : null}
-                </div>
-            </div>
-        );
-    }
-
     if (!activeData && (!isActiveProfileStatsHydrated || activeUserQuery?.isLoading)) {
         return (
             <div className="min-h-screen bg-canvas px-4 py-6" aria-label="Loading your Oura dashboard" role="status">
@@ -3189,7 +2964,7 @@ const Dashboard: React.FC = () => {
                         <Skeleton className="h-8 w-44" />
                         {showSlowStartupMessage ? (
                             <p className="max-w-md text-sm leading-6 text-ink-muted">
-                                Saved scores are taking longer than expected. The app will keep trying without discarding your existing Oura connection.
+                                Your saved scores are still arriving. You can leave this page; updates continue in the background.
                             </p>
                         ) : (
                             <p className="text-sm text-ink-muted">Loading your saved scores…</p>
@@ -3227,7 +3002,6 @@ const Dashboard: React.FC = () => {
     // ============================================
     return (
         <div className="min-h-screen text-ink">
-            <SyncModal isOpen={showSyncModal} progress={syncProgress} onClose={() => setShowSyncModal(false)} />
             <InviteLinkModal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} />
             {scoreBreakdownModal.isOpen ? (
                 <Suspense fallback={null}>
@@ -3271,7 +3045,6 @@ const Dashboard: React.FC = () => {
                         <span className="app-brand__mark" aria-hidden="true">D</span>
                         <span>
                             <strong>Davis Watches You Sleep</strong>
-                            <small>{formatLastSync(activeProfileLastSuccessfulSyncAt)}</small>
                         </span>
                     </button>
                     <PrimaryProfileSwitcher
@@ -3280,15 +3053,6 @@ const Dashboard: React.FC = () => {
                         labelClassName="app-header__profile-label"
                     />
                     <div className="app-header__actions">
-                        <Button
-                            variant="quiet"
-                            size="icon"
-                            onClick={handleSyncAllData}
-                            disabled={isSyncing}
-                            aria-label={isSyncing ? 'Refreshing Oura data' : 'Refresh Oura data'}
-                        >
-                            <RefreshCw className={isSyncing ? 'animate-spin' : ''} aria-hidden="true" />
-                        </Button>
                         <Button
                             variant="quiet"
                             size="icon"
@@ -3359,34 +3123,6 @@ const Dashboard: React.FC = () => {
                         />
                     </div>
                 ) : null}
-                {profilesNeedingAttention.length > 0 && (
-                    <div className="mt-6 p-4 bg-surface-raised border border-line rounded-2xl shadow-sm">
-                        <p className="text-ink text-sm font-medium mb-2">Sync attention needed</p>
-                        <div className="space-y-1">
-                            {profilesNeedingAttention.map((profile) => {
-                                const status = profileHealthById.get(profile.id);
-                                const name = getProfileDisplayName(profile);
-                                const isReconnect = status?.level === 'error';
-                                return (
-                                    <p key={profile.id} className={`text-xs ${isReconnect ? 'text-error' : 'text-warning'}`}>
-                                        {name}: {status?.label || 'Needs attention'}
-                                    </p>
-                                );
-                            })}
-                        </div>
-                        <button
-                            onClick={() => profilesNeedingAttention.some((profile) => profileHealthById.get(profile.id)?.level === 'error')
-                                ? login()
-                                : handleSyncAllData()}
-                            className="mt-3 inline-flex min-h-11 items-center rounded-md bg-accent px-3 text-xs font-semibold text-white transition-opacity hover:opacity-90"
-                        >
-                            {profilesNeedingAttention.some((profile) => profileHealthById.get(profile.id)?.level === 'error')
-                                ? 'Reconnect Oura'
-                                : 'Try Sync Again'}
-                        </button>
-                    </div>
-                )}
-
                 {/* ======== TODAY VIEW ======== */}
                 {viewMode === 'today' && (
                     <div className="pt-6 animate-fade-in sm:pt-8">
@@ -3400,13 +3136,6 @@ const Dashboard: React.FC = () => {
                                     <p className="mt-2 max-w-xl text-sm leading-relaxed text-ink-secondary">
                                         {getDailyInsight()}
                                     </p>
-                                    {hasIncompleteTodayCoverage && (
-                                        <p className="mt-2 text-xs text-warning">
-                                            {referenceDay === todayIsoDay
-                                                ? 'This Oura day is still syncing. Some metrics may not be available yet.'
-                                                : 'The latest Oura day is still syncing. Showing your latest complete day.'}
-                                        </p>
-                                    )}
                                 </div>
                                 <div className="w-full sm:w-auto shrink-0 mt-1 space-y-2">
                                     <DateRangePicker
@@ -3426,7 +3155,6 @@ const Dashboard: React.FC = () => {
                             rank={activeReferenceRank}
                             participantCount={referenceLeaderboardData.length}
                             average={activeReferenceAverage}
-                            freshnessLabel={formatLastSync(activeProfileLastSuccessfulSyncAt)}
                             scores={[
                                 { type: 'readiness', label: 'Readiness', value: currentReadiness?.score, color: 'var(--color-readiness)' },
                                 { type: 'sleep', label: 'Sleep', value: currentSleep?.score, color: 'var(--color-sleep)' },
@@ -3619,7 +3347,7 @@ const Dashboard: React.FC = () => {
                                             : 'Choose a shared date'}
                                     </h1>
                                     <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-secondary">
-                                        Compare any two or more people on the same Oura day. If the selected group has no shared day yet, remove one person or sync more recent data.
+                                        Compare any two or more people on the same Oura day. If the selected group has no shared day yet, remove one person or wait for another shared Oura day.
                                     </p>
                                 </div>
                                 {compareAvailableDays.length > 0 ? (
@@ -3784,7 +3512,7 @@ const Dashboard: React.FC = () => {
                             </>
                         ) : (
                             <div className="rounded-[1.25rem] border border-line bg-surface p-5 text-sm text-ink-secondary shadow-sm">
-                                The current selection does not share a comparable Oura day yet. Remove one person from the selection or sync more recent data to view the multi-user comparison tables.
+                                The current selection does not share a comparable Oura day yet. Remove one person from the selection or check back after another shared Oura day.
                             </div>
                         )}
                     </div>
@@ -3797,7 +3525,7 @@ const Dashboard: React.FC = () => {
                 )}
                 {viewMode === 'compare' && profiles.length >= 2 && compareParticipantPool.length < 2 && (
                     <div className="pt-16 text-center">
-                        <p className="text-ink-muted">Waiting for enough synced data to compare everyone.</p>
+                        <p className="text-ink-muted">Waiting for enough shared Oura days to compare everyone.</p>
                     </div>
                 )}
 
@@ -3902,17 +3630,12 @@ const Dashboard: React.FC = () => {
                         <div className="more-hub__intro">
                             <p className="ui-eyebrow">Davis’s control panel</p>
                             <h1 className="page-title">Settings and tools</h1>
-                            <p>Invite someone, sync now, manage profiles, or export your data.</p>
+                            <p>Invite someone, manage profiles, or export your data.</p>
                         </div>
                         <div className="more-hub__grid">
                             <button type="button" className="more-action" onClick={() => setIsInviteModalOpen(true)}>
                                 <Users aria-hidden="true" />
                                 <span><strong>Recruit a sleeper</strong><small>Share the leaderboard join link</small></span>
-                                <ArrowRight aria-hidden="true" />
-                            </button>
-                            <button type="button" className="more-action" onClick={handleSyncAllData} disabled={isSyncing}>
-                                <RefreshCw className={isSyncing ? 'animate-spin' : ''} aria-hidden="true" />
-                                <span><strong>{isSyncing ? 'Refreshing data' : 'Refresh Oura data'}</strong><small>{formatLastSync(activeProfileLastSuccessfulSyncAt)}</small></span>
                                 <ArrowRight aria-hidden="true" />
                             </button>
                             <button type="button" className="more-action" onClick={login}>
@@ -3929,7 +3652,7 @@ const Dashboard: React.FC = () => {
                                 }}
                             >
                                 <Settings aria-hidden="true" />
-                                <span><strong>Settings</strong><small>Profiles, exclusions, and diagnostics</small></span>
+                                <span><strong>Settings</strong><small>Profiles and excluded days</small></span>
                                 <ArrowRight aria-hidden="true" />
                             </button>
                             <button type="button" className="more-action" onClick={() => navigateToView('export')}>

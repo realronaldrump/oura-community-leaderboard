@@ -1,14 +1,14 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { UserProfile, AuthStatus } from '../types';
 import { createOAuthState, getAuthUrl, OAUTH_STATE_KEY, POST_AUTH_DESTINATION_KEY } from '../constants';
-import { ouraService } from '../services/ouraService';
 import { firebaseService } from '../services/firebaseService';
 import { oauthService } from '../services/oauthService';
 import {
-    createOuraTokenLifecycle,
-    isReconnectRequiredError,
-} from '../services/ouraTokenLifecycle';
-import { deleteProfileStats } from '../services/firestoreStatsService';
+    clearLaunchDashboardStats,
+    clearLaunchProfile,
+    readLaunchProfile,
+    writeLaunchProfile,
+} from '../services/launchCache';
 import { sanitizeGrantedOuraScopes } from '../utils/ouraScopes';
 
 interface AddProfileOptions {
@@ -28,9 +28,6 @@ interface UserContextType {
     removeProfile: (id: string) => Promise<void>;
     updateProfile: (profile: Partial<UserProfile>) => Promise<void>;
     updateProfileById: (id: string, profile: Partial<UserProfile>) => Promise<void>;
-    getAccessTokenForProfile: (profileId: string, options?: { forceRefresh?: boolean }) => Promise<string>;
-    markProfileSyncSuccess: (profileId: string) => Promise<void>;
-    markProfileSyncError: (profileId: string, error: unknown) => Promise<void>;
     authStatus: AuthStatus;
     login: () => void;
     // New: Error and loading states
@@ -60,24 +57,18 @@ const withBootstrapTimeout = <T,>(task: Promise<T>): Promise<T> => new Promise((
     );
 });
 
-const withCrossTabRefreshLock = <T,>(
-    profileId: string,
-    task: () => Promise<T>
-): Promise<T> => {
-    if (typeof navigator === 'undefined' || !navigator.locks?.request) {
-        return task();
-    }
-
-    return navigator.locks.request(`oura-token-refresh:${profileId}`, task);
-};
-
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [profiles, setProfiles] = useState<UserProfile[]>([]);
     const [activeProfileId, setActiveProfileIdState] = useState<string | null>(() => {
         if (typeof window !== 'undefined') {
             return localStorage.getItem('active_profile_id') || null;
         }
         return null;
+    });
+    const [profiles, setProfiles] = useState<UserProfile[]>(() => {
+        if (typeof window === 'undefined') return [];
+        const rememberedId = localStorage.getItem('active_profile_id') || null;
+        const rememberedProfile = readLaunchProfile(rememberedId);
+        return rememberedProfile ? [rememberedProfile] : [];
     });
 
     const [authStatus, setAuthStatus] = useState<AuthStatus>(AuthStatus.UNAUTHENTICATED);
@@ -86,23 +77,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [firebaseError, setFirebaseError] = useState<string | null>(null);
     const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
     const [retryCount, setRetryCount] = useState(0);
+    const automaticRetryRef = useRef<number | null>(null);
     const profilesRef = useRef(profiles);
     useEffect(() => { profilesRef.current = profiles; }, [profiles]);
-    const tokenLifecycleRef = useRef<ReturnType<typeof createOuraTokenLifecycle> | null>(null);
-    if (!tokenLifecycleRef.current) {
-        tokenLifecycleRef.current = createOuraTokenLifecycle({
-            loadProfile: firebaseService.getProfile,
-            persistRotation: firebaseService.persistRotatedProfileTokens,
-            refreshTokens: async (refreshToken) => {
-                const refreshed = await oauthService.refreshAccessToken(refreshToken);
-                return {
-                    ...refreshed,
-                    grantedScopes: sanitizeGrantedOuraScopes(refreshed.grantedScopes),
-                };
-            },
-            withRefreshLock: withCrossTabRefreshLock,
-        });
-    }
 
     // Restore the remembered profile with a direct REST-backed document read
     // before starting the all-profile realtime listener. This keeps a cold
@@ -118,7 +95,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (cancelled) return;
             console.error(`Firebase ${operation} error:`, error);
             setIsLoadingProfiles(false);
-            setFirebaseError('Having trouble connecting. Tap to try again!');
+            setFirebaseError('Reconnecting automatically.');
+            if (automaticRetryRef.current == null) {
+                automaticRetryRef.current = window.setTimeout(() => {
+                    automaticRetryRef.current = null;
+                    setRetryCount((current) => current + 1);
+                }, 3_000);
+            }
         };
 
         const applyProfiles = (updatedProfiles: UserProfile[]) => {
@@ -193,6 +176,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return () => {
             cancelled = true;
             unsubscribe?.();
+            if (automaticRetryRef.current != null) {
+                window.clearTimeout(automaticRetryRef.current);
+                automaticRetryRef.current = null;
+            }
         };
     }, [activeProfileId, retryCount]);
 
@@ -218,6 +205,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const activeProfile = profiles.find(p => p.id === activeProfileId) || null;
 
+    useEffect(() => {
+        if (activeProfile) writeLaunchProfile(activeProfile);
+        else if (!activeProfileId) clearLaunchProfile();
+    }, [activeProfile, activeProfileId]);
+
     const login = useCallback(() => {
         setAuthStatus(AuthStatus.LOADING);
         const state = createOAuthState();
@@ -232,70 +224,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const addProfile = useCallback(async (options: AddProfileOptions): Promise<UserProfile> => {
         setAuthStatus(AuthStatus.LOADING);
         try {
-            const { accessToken, refreshToken = null } = options;
-            const grantedScopes = sanitizeGrantedOuraScopes(options.grantedScopes);
-            // Fetch user details to identify them
-            const personalInfo = await ouraService.getPersonalInfo(accessToken);
-            const ouraUserId =
-                (personalInfo as unknown as { id?: string | number })?.id != null
-                    ? String((personalInfo as unknown as { id?: string | number }).id)
-                    : null;
-            const normalizedEmail = personalInfo.email?.toLowerCase() || null;
-
-            // Match by stable Oura user id first, then email as fallback.
-            // Use the ref if profiles are already loaded; otherwise fetch directly
-            // from Firebase to avoid the race where the snapshot hasn't arrived yet.
-            let currentProfiles = profilesRef.current;
-            if (currentProfiles.length === 0) {
-                // Failing open here can create a duplicate profile and split
-                // one member's credential history. Abort and retry the safe
-                // lookup instead of guessing that no profile exists.
-                currentProfiles = await firebaseService.getProfiles();
-            }
-            const ouraUserIdStr = ouraUserId ? String(ouraUserId) : null;
-            const existingProfile = currentProfiles.find(
-                (p) => {
-                    const existingIdStr = p.ouraUserId ? String(p.ouraUserId) : null;
-                    return (ouraUserIdStr && existingIdStr === ouraUserIdStr) ||
-                           (normalizedEmail && p.email?.toLowerCase() === normalizedEmail);
-                }
-            );
-            const profileId = existingProfile ? existingProfile.id : crypto.randomUUID();
-            const expiresInSeconds =
-                typeof options.expiresInSeconds === 'number' && Number.isFinite(options.expiresInSeconds)
-                    ? options.expiresInSeconds
-                    : null;
-            const tokenExpiresAt =
-                expiresInSeconds && expiresInSeconds > 0
-                    ? new Date(Date.now() + (expiresInSeconds * 1000)).toISOString()
-                    : null;
-            const resolvedGrantedScopes = grantedScopes.length > 0
-                ? grantedScopes
-                : existingProfile?.grantedScopes;
-
-            const newProfile: UserProfile = {
-                ...existingProfile,
-                ...personalInfo,
-                id: profileId,
-                ouraUserId: ouraUserId || existingProfile?.ouraUserId || null,
-                email: normalizedEmail || existingProfile?.email || null,
-                token: accessToken,
-                // A new authorization is one credential set. Never retain an
-                // older refresh token when Oura omits the replacement.
-                refreshToken: refreshToken || null,
-                grantedScopes: resolvedGrantedScopes || [],
-                tokenExpiresAt,
-                lastSuccessfulSyncAt: existingProfile?.lastSuccessfulSyncAt || null,
-                lastSyncError: null,
-                lastSyncErrorAt: null,
-                lastUpdated: new Date().toISOString(),
-            };
-
-            // Clear any cached unavailable-endpoint blacklists for the new token
-            ouraService.clearUnavailableEndpoints(accessToken, profileId);
-
-            await firebaseService.saveProfile(newProfile);
-            setActiveProfileId(profileId);
+            const newProfile = await oauthService.saveProfileConnection({
+                accessToken: options.accessToken,
+                refreshToken: options.refreshToken || null,
+                grantedScopes: sanitizeGrantedOuraScopes(options.grantedScopes),
+                expiresInSeconds: options.expiresInSeconds ?? null,
+            });
+            setActiveProfileId(newProfile.id);
             setAuthStatus(AuthStatus.AUTHENTICATED);
             return newProfile;
         } catch (error) {
@@ -309,13 +244,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (profilesRef.current.length <= 1) {
             throw new Error('Cannot remove the only remaining profile.');
         }
-        // Remove health history first. If profile deletion ran first and the
-        // stats cleanup failed, the shared collection would retain orphaned
-        // health data with no in-app way to retry the cleanup.
-        await deleteProfileStats(id);
-        await firebaseService.deleteProfile(id);
+        // Server cleanup removes saved history, private OAuth credentials,
+        // sync state, and the public profile as one managed lifecycle.
+        await oauthService.removeProfileConnection(id);
+        clearLaunchDashboardStats(id);
+        if (activeProfileId === id) clearLaunchProfile();
         setActiveProfileIdState((current) => (current === id ? null : current));
-    }, []);
+    }, [activeProfileId]);
 
     const updateProfileById = useCallback(async (id: string, profileData: Partial<UserProfile>) => {
         const profileToUpdate = profilesRef.current.find(p => p.id === id);
@@ -337,69 +272,6 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await updateProfileById(activeProfileId, profileData);
     }, [activeProfileId, updateProfileById]);
 
-    const markProfileSyncError = useCallback(async (profileId: string, error: unknown) => {
-        const profile = profilesRef.current.find((p) => p.id === profileId);
-        if (!profile) return;
-
-        const message = error instanceof Error ? error.message : '';
-        const normalizedMessage = message.toLowerCase();
-        const requiresConsent =
-            normalizedMessage.includes('missing required oura consent') ||
-            normalizedMessage.includes('missing oura consent scopes');
-        if (!isReconnectRequiredError(error) && !requiresConsent) {
-            // Transient Oura, network, Firestore, and rate-limit failures must
-            // not become durable "reconnect" state. React Query retains the
-            // previous successful data while a later retry can recover.
-            return;
-        }
-
-        const now = new Date().toISOString();
-        await firebaseService.patchProfile(profileId, {
-            lastSyncError: message || 'oura_reconnect_required',
-            lastSyncErrorAt: now,
-            lastUpdated: now,
-        });
-    }, []);
-
-    const markProfileSyncSuccess = useCallback(async (profileId: string) => {
-        const profile = profilesRef.current.find((p) => p.id === profileId);
-        if (!profile) return;
-
-        // Always clear durable reconnect state after a successful pull. A
-        // local subscription snapshot can lag another tab's error write, so
-        // using it to skip this patch can leave a false reconnect prompt.
-        const now = new Date().toISOString();
-        await firebaseService.patchProfile(profileId, {
-            lastSuccessfulSyncAt: now,
-            lastSyncError: null,
-            lastSyncErrorAt: null,
-            lastUpdated: now,
-        });
-    }, []);
-
-    const getAccessTokenForProfile = useCallback(async (
-        profileId: string,
-        options?: { forceRefresh?: boolean }
-    ): Promise<string> => {
-        const profile = profilesRef.current.find((p) => p.id === profileId);
-        if (!profile) {
-            throw new Error(`Profile not found: ${profileId}`);
-        }
-
-        try {
-            const token = await tokenLifecycleRef.current!.getAccessToken(profile, options);
-            if (token !== profile.token) {
-                ouraService.clearUnavailableEndpoints(token, profile.id);
-            }
-            return token;
-        } catch (error) {
-            if (isReconnectRequiredError(error)) {
-                await markProfileSyncError(profileId, error);
-            }
-            throw error;
-        }
-    }, [markProfileSyncError]);
-
     const contextValue = useMemo<UserContextType>(() => ({
         profiles,
         activeProfileId,
@@ -410,9 +282,6 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         removeProfile,
         updateProfile,
         updateProfileById,
-        getAccessTokenForProfile,
-        markProfileSyncSuccess,
-        markProfileSyncError,
         authStatus,
         login,
         firebaseError,
@@ -428,9 +297,6 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         removeProfile,
         updateProfile,
         updateProfileById,
-        getAccessTokenForProfile,
-        markProfileSyncSuccess,
-        markProfileSyncError,
         authStatus,
         login,
         firebaseError,

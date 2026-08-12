@@ -108,7 +108,7 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
                     <h3 className="section-header mb-0">Pattern summary</h3>
                     <InfoTooltip
                         title="Pattern Detection"
-                        description="Compares recurring differences across days, weekends, and matched metrics in synced history."
+                        description="Compares recurring differences across days, weekends, and matched metrics in Oura history."
                         calculation="Sample size is the number of values used. Difference is the percentage gap between the compared groups; it does not establish cause."
                     />
                 </div>
@@ -267,7 +267,7 @@ const PatternDetector: React.FC<PatternDetectorProps> = ({ profiles, usersData }
                 <div className="card p-6 text-center border border-dashed border-[var(--border-subtle)] bg-[var(--bg-elevated)]">
                     <Search className="w-8 h-8 text-[var(--text-muted)] opacity-40 mx-auto mb-3" />
                     <p className="text-sm text-[var(--text-secondary)] font-medium mb-1">More history may reveal more comparisons</p>
-                    <p className="text-xs text-[var(--text-muted)]">Check again after more days have synced.</p>
+                    <p className="text-xs text-[var(--text-muted)]">More patterns will appear automatically as Oura days arrive.</p>
                 </div>
             )}
         </div>

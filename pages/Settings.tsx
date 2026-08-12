@@ -1,82 +1,18 @@
 import React, { useState } from 'react';
 import { useUser } from '../contexts/UserContext';
-import { useQueryClient } from '@tanstack/react-query';
-import { fullSync, SyncProgress } from '../services/syncService';
-import SyncModal from '../components/SyncModal';
 import PrimaryProfileSwitcher from '../components/PrimaryProfileSwitcher';
 import InviteLinkCard from '../components/InviteLinkCard';
 import { Button, Dialog } from '../components/ui';
-import { ouraService } from '../services/ouraService';
-import { isReconnectRequiredError } from '../services/ouraTokenLifecycle';
-import { webhookService } from '../services/webhookService';
-import { DailyStats, DataExclusionRange } from '../types';
+import { DataExclusionRange } from '../types';
 import { getProfileDisplayName } from '../utils/profileName';
-import { formatISODateForDisplay, isISODateString, shiftLocalISODate } from '../utils/date';
-import { getProfileLocalISODate, getProfileOffsetMinutes } from '../utils/profileTemporal';
+import { formatISODateForDisplay, isISODateString } from '../utils/date';
+import { getProfileLocalISODate } from '../utils/profileTemporal';
+import { profileRequiresReconnect } from '../utils/profileSyncHealth';
 import {
     getDataExclusionRangeDayCount,
     getTotalExcludedDayCount,
     normalizeDataExclusionRanges,
 } from '../utils/dataExclusions';
-
-type QuickCheckStatus = 'idle' | 'running' | 'ok' | 'warning' | 'error';
-
-type QuickCheckState = {
-    status: QuickCheckStatus;
-    message: string;
-    details: string[];
-    checkedAt: string | null;
-};
-
-type WebhookStatusState = {
-    status: 'idle' | 'running' | 'ok' | 'warning' | 'error';
-    message: string;
-    details: string[];
-    checkedAt: string | null;
-};
-
-const QUICK_CHECK_LOOKBACK_DAYS = 3;
-
-const getLatestDay = (items?: Array<{ day?: string }>): string | null => {
-    if (!items?.length) return null;
-
-    return items.reduce<string | null>((latest, item) => {
-        const day = item?.day;
-        if (!day) return latest;
-        return !latest || day > latest ? day : latest;
-    }, null);
-};
-
-const findLatestForDay = <T extends { day?: string; timestamp?: string }>(items: T[] | undefined, day?: string): T | undefined => {
-    if (!items?.length || !day) return undefined;
-    return items
-        .filter((item) => item.day === day)
-        .sort((a, b) => {
-            const bTs = b.timestamp ? new Date(b.timestamp).getTime() : Number.NEGATIVE_INFINITY;
-            const aTs = a.timestamp ? new Date(a.timestamp).getTime() : Number.NEGATIVE_INFINITY;
-            return bTs - aTs;
-        })[0];
-};
-
-const buildQuickCheckBaseline = (sleep: any[], readiness: any[], activity: any[]): DailyStats => ({
-    sleep,
-    readiness,
-    activity,
-    session: [],
-    spo2: [],
-    stress: [],
-    resilience: [],
-    heartrate: [],
-    workout: [],
-    guidedSession: [],
-    sleepTime: [],
-    tag: [],
-    enhancedTag: [],
-    restModePeriod: [],
-    ringConfiguration: [],
-    cardiovascularAge: [],
-    vo2Max: [],
-});
 
 const Settings: React.FC = () => {
     const {
@@ -86,20 +22,11 @@ const Settings: React.FC = () => {
         removeProfile,
         login,
         updateProfile,
-        getAccessTokenForProfile,
-        markProfileSyncSuccess,
-        markProfileSyncError,
     } = useUser();
-    const queryClient = useQueryClient();
-
-    const [showSyncModal, setShowSyncModal] = useState(false);
     const [isProfileManagerOpen, setIsProfileManagerOpen] = useState(false);
     const [profileToRemoveId, setProfileToRemoveId] = useState<string | null>(null);
     const [isRemovingProfile, setIsRemovingProfile] = useState(false);
     const [profileManagerError, setProfileManagerError] = useState('');
-    const [syncProgress, setSyncProgress] = useState<SyncProgress>({
-        status: 'idle', currentStep: '', stepsCompleted: 0, totalSteps: 0, details: '',
-    });
 
     const [firstName, setFirstName] = useState(activeProfile?.firstName || '');
     const [lastName, setLastName] = useState(activeProfile?.lastName || '');
@@ -110,36 +37,12 @@ const Settings: React.FC = () => {
     const [exclusionLabel, setExclusionLabel] = useState('');
     const [isSavingExclusion, setIsSavingExclusion] = useState(false);
     const [exclusionMessage, setExclusionMessage] = useState('');
-    const [quickCheck, setQuickCheck] = useState<QuickCheckState>({
-        status: 'idle',
-        message: '',
-        details: [],
-        checkedAt: null,
-    });
-    const [webhookStatus, setWebhookStatus] = useState<WebhookStatusState>({
-        status: 'idle',
-        message: '',
-        details: [],
-        checkedAt: null,
-    });
 
     React.useEffect(() => {
         if (activeProfile) {
             setFirstName(activeProfile.firstName || '');
             setLastName(activeProfile.lastName || '');
         }
-        setQuickCheck({
-            status: 'idle',
-            message: '',
-            details: [],
-            checkedAt: null,
-        });
-        setWebhookStatus({
-            status: 'idle',
-            message: '',
-            details: [],
-            checkedAt: null,
-        });
     }, [activeProfile]);
 
     React.useEffect(() => {
@@ -159,53 +62,6 @@ const Settings: React.FC = () => {
         () => getTotalExcludedDayCount(dataExclusionRanges),
         [dataExclusionRanges]
     );
-
-    React.useEffect(() => {
-        if (!activeProfile) return;
-        let cancelled = false;
-
-        webhookService.getStatus()
-            .then((result) => {
-                if (cancelled) return;
-                if (!result.configured) {
-                    const missing = result.missing?.length ? result.missing.join(', ') : 'server webhook configuration';
-                    setWebhookStatus({
-                        status: 'warning',
-                        message: 'Live updates are not configured on the server yet.',
-                        details: [`Missing: ${missing}`],
-                        checkedAt: new Date().toISOString(),
-                    });
-                    return;
-                }
-
-                const activeSubscriptions = result.subscriptions?.length || 0;
-                const expectedSubscriptions = result.dataTypes.length * (result.eventTypes?.length || 1);
-                const allSubscriptionsActive = activeSubscriptions >= expectedSubscriptions;
-                const details = [
-                    `Callback URL: ${result.callbackUrl}`,
-                    `Data types: ${result.dataTypes.join(', ')}`,
-                    `Event types: ${(result.eventTypes || ['update']).join(', ')}`,
-                    `Subscriptions active: ${activeSubscriptions}/${expectedSubscriptions}`,
-                ];
-
-                setWebhookStatus({
-                    status: allSubscriptionsActive ? 'ok' : 'warning',
-                    message: allSubscriptionsActive
-                        ? 'Live webhook updates are enabled.'
-                        : 'Webhook config is ready, but some subscriptions are not active yet.',
-                    details,
-                    checkedAt: new Date().toISOString(),
-                });
-            })
-            .catch(() => {
-                if (cancelled) return;
-                // Keep status idle; manual "Enable Live Updates" can surface full diagnostics.
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [activeProfile?.id]);
 
     const handleSaveProfile = async () => {
         if (!activeProfile) return;
@@ -272,44 +128,6 @@ const Settings: React.FC = () => {
         );
     };
 
-    const handleFullSync = async () => {
-        if (!activeProfile) return;
-        setShowSyncModal(true);
-        try {
-            const runSync = async (forceRefresh: boolean = false) => {
-                const token = await getAccessTokenForProfile(activeProfile.id, { forceRefresh });
-                return fullSync(token, (progress) => { setSyncProgress(progress); }, {
-                    grantedScopes: activeProfile.grantedScopes,
-                    availabilityKey: activeProfile.id,
-                    profileId: activeProfile.id,
-                    profileOffsetMinutes: getProfileOffsetMinutes(activeProfile),
-                });
-            };
-
-            let syncedData;
-            try {
-                syncedData = await runSync(false);
-            } catch (error) {
-                const message = error instanceof Error ? error.message.toLowerCase() : '';
-                const shouldRetry = message.includes('unauthorized') || message.includes('401');
-                if (!shouldRetry) throw error;
-                syncedData = await runSync(true);
-            }
-
-            queryClient.setQueryData(['dailyStats', activeProfile.id], syncedData);
-            queryClient.setQueryData(['allTimeStats', activeProfile.id], syncedData);
-            await markProfileSyncSuccess(activeProfile.id);
-        } catch (err) {
-            console.error('Full sync failed:', err);
-            const message = err instanceof Error ? err.message.toLowerCase() : '';
-            const errorMessage = (message.includes('missing required oura consent') || message.includes('missing oura consent scopes'))
-                ? 'Reconnect your Oura account to grant the required scopes.'
-                : 'Something went wrong. Please try again.';
-            setSyncProgress(prev => ({ ...prev, status: 'error', error: errorMessage }));
-            await markProfileSyncError(activeProfile.id, err);
-        }
-    };
-
     const handleBackToDashboard = () => {
         window.history.pushState({}, '', '/');
         window.dispatchEvent(new PopStateEvent('popstate'));
@@ -347,227 +165,6 @@ const Settings: React.FC = () => {
     };
     const profileToRemove = profiles.find((profile) => profile.id === profileToRemoveId) || null;
 
-    const handleQuickCheck = async () => {
-        if (!activeProfile) return;
-
-        setQuickCheck({
-            status: 'running',
-            message: 'Checking Oura API and recent metrics...',
-            details: [],
-            checkedAt: null,
-        });
-
-        try {
-            const endDay = getProfileLocalISODate(activeProfile);
-            const startDay = shiftLocalISODate(endDay, -QUICK_CHECK_LOOKBACK_DAYS);
-
-            const runCheck = async (forceRefresh: boolean = false) => {
-                const token = await getAccessTokenForProfile(activeProfile.id, { forceRefresh });
-                return Promise.all([
-                    ouraService.getDailySleep(token, startDay, endDay, { availabilityKey: activeProfile.id }),
-                    ouraService.getDailyReadiness(token, startDay, endDay, { availabilityKey: activeProfile.id }),
-                    ouraService.getDailyActivity(token, startDay, endDay, { availabilityKey: activeProfile.id }),
-                ]);
-            };
-
-            let sleep: any[] = [];
-            let readiness: any[] = [];
-            let activity: any[] = [];
-
-            try {
-                [sleep, readiness, activity] = await runCheck(false);
-            } catch (error) {
-                const message = error instanceof Error ? error.message.toLowerCase() : '';
-                const shouldRetry = message.includes('unauthorized') || message.includes('401');
-                if (!shouldRetry) throw error;
-                [sleep, readiness, activity] = await runCheck(true);
-            }
-
-            const apiLatestDays = {
-                sleep: getLatestDay(sleep),
-                readiness: getLatestDay(readiness),
-                activity: getLatestDay(activity),
-            };
-
-            const cached = queryClient.getQueryData(['dailyStats', activeProfile.id]) as DailyStats | undefined;
-            const hasLocalBaseline = Boolean(
-                getLatestDay(cached?.sleep) ||
-                getLatestDay(cached?.readiness) ||
-                getLatestDay(cached?.activity)
-            );
-
-            let effectiveCached = cached;
-            let hydratedFromQuickCheck = false;
-
-            if (!hasLocalBaseline) {
-                hydratedFromQuickCheck = true;
-
-                effectiveCached = cached
-                    ? {
-                        ...cached,
-                        sleep: cached.sleep?.length ? cached.sleep : sleep,
-                        readiness: cached.readiness?.length ? cached.readiness : readiness,
-                        activity: cached.activity?.length ? cached.activity : activity,
-                    }
-                    : buildQuickCheckBaseline(sleep, readiness, activity);
-
-                queryClient.setQueryData(['dailyStats', activeProfile.id], effectiveCached);
-            }
-
-            const localLatestDays = {
-                sleep: getLatestDay(effectiveCached?.sleep),
-                readiness: getLatestDay(effectiveCached?.readiness),
-                activity: getLatestDay(effectiveCached?.activity),
-            };
-
-            const staleMetrics: string[] = [];
-            const noRecentApiData: string[] = [];
-            const valueMismatches: string[] = [];
-            const metrics: Array<keyof typeof apiLatestDays> = ['sleep', 'readiness', 'activity'];
-
-            metrics.forEach((metric) => {
-                const apiDay = apiLatestDays[metric];
-                const localDay = localLatestDays[metric];
-
-                if (!apiDay) {
-                    noRecentApiData.push(metric);
-                    return;
-                }
-
-                if (!localDay || localDay < apiDay) {
-                    staleMetrics.push(metric);
-                }
-            });
-
-            const apiLatestActivity = findLatestForDay(activity, apiLatestDays.activity || undefined);
-            const localLatestActivity = findLatestForDay(effectiveCached?.activity, localLatestDays.activity || undefined);
-            if (
-                apiLatestDays.activity &&
-                localLatestDays.activity &&
-                apiLatestDays.activity === localLatestDays.activity &&
-                apiLatestActivity &&
-                localLatestActivity
-            ) {
-                const apiSteps = Number(apiLatestActivity.steps ?? 0);
-                const localSteps = Number(localLatestActivity.steps ?? 0);
-                const stepDelta = Math.abs(apiSteps - localSteps);
-                if (stepDelta >= 500) {
-                    valueMismatches.push(
-                        `Activity steps differ on ${apiLatestDays.activity}: cache ${localSteps.toLocaleString()} vs API ${apiSteps.toLocaleString()}`
-                    );
-                }
-            }
-
-            const details = [
-                `Oura latest days - Sleep: ${apiLatestDays.sleep ?? 'n/a'}, Readiness: ${apiLatestDays.readiness ?? 'n/a'}, Activity: ${apiLatestDays.activity ?? 'n/a'}`,
-                `Local cached days - Sleep: ${localLatestDays.sleep ?? 'n/a'}, Readiness: ${localLatestDays.readiness ?? 'n/a'}, Activity: ${localLatestDays.activity ?? 'n/a'}`,
-            ];
-
-            if (staleMetrics.length > 0) {
-                details.push(`Behind latest Oura data: ${staleMetrics.join(', ')}`);
-            }
-
-            if (noRecentApiData.length > 0) {
-                details.push(`No recent Oura data returned for: ${noRecentApiData.join(', ')}`);
-            }
-
-            valueMismatches.forEach((detail) => details.push(detail));
-
-            if (hydratedFromQuickCheck) {
-                details.push('Local metric cache was empty and has been hydrated from this quick check.');
-            }
-
-            let status: QuickCheckStatus = 'ok';
-            let message = 'Oura API is working and cached metrics look up to date.';
-
-            if (hydratedFromQuickCheck) {
-                status = 'ok';
-                message = 'Oura API is working and local metrics cache has been refreshed.';
-            } else if (staleMetrics.length > 0 || valueMismatches.length > 0) {
-                status = 'warning';
-                message = valueMismatches.length > 0
-                    ? 'Oura API is working, but cached values differ from the latest API data.'
-                    : 'Oura API is working, but some cached metrics are behind the latest Oura data.';
-            } else if (metrics.every((metric) => !apiLatestDays[metric])) {
-                status = 'warning';
-                message = 'Oura API is working, but no recent daily metrics were returned to compare freshness.';
-            }
-
-            setQuickCheck({
-                status,
-                message,
-                details,
-                checkedAt: new Date().toISOString(),
-            });
-        } catch (error) {
-            const rawMessage = error instanceof Error ? error.message : 'Unknown error';
-            const lower = rawMessage.toLowerCase();
-            const requiresConsent = lower.includes('missing required oura consent') ||
-                lower.includes('missing oura consent scopes');
-            const message = (isReconnectRequiredError(error) || requiresConsent)
-                ? 'Oura check failed: the saved connection needs attention. Reconnect your Oura account.'
-                : 'Oura check failed. Please try again.';
-
-            setQuickCheck({
-                status: 'error',
-                message,
-                details: [rawMessage],
-                checkedAt: new Date().toISOString(),
-            });
-        }
-    };
-
-    const handleEnableLiveUpdates = async () => {
-        setWebhookStatus({
-            status: 'running',
-            message: 'Configuring Oura webhook subscriptions...',
-            details: [],
-            checkedAt: null,
-        });
-
-        try {
-            const result = await webhookService.ensureSetup();
-            if (!result.configured) {
-                const missing = result.missing?.length ? result.missing.join(', ') : 'server webhook configuration';
-                setWebhookStatus({
-                    status: 'warning',
-                    message: 'Live updates are not configured on the server yet.',
-                    details: [`Missing: ${missing}`],
-                    checkedAt: new Date().toISOString(),
-                });
-                return;
-            }
-
-            const createdCount = result.created?.length || 0;
-            const renewedCount = result.renewed?.length || 0;
-            const existingCount = result.existing?.length || 0;
-            const totalActive = createdCount + renewedCount + existingCount;
-            const expectedSubscriptions = result.dataTypes.length * (result.eventTypes?.length || 1);
-            const details = [
-                `Callback URL: ${result.callbackUrl}`,
-                `Data types: ${result.dataTypes.join(', ')}`,
-                `Event types: ${(result.eventTypes || ['update']).join(', ')}`,
-                `Subscriptions active: ${totalActive}/${expectedSubscriptions}`,
-                `Created: ${createdCount} | Renewed: ${renewedCount} | Existing: ${existingCount}`,
-            ];
-
-            setWebhookStatus({
-                status: 'ok',
-                message: 'Live webhook updates are enabled.',
-                details,
-                checkedAt: new Date().toISOString(),
-            });
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Unknown webhook setup error';
-            setWebhookStatus({
-                status: 'error',
-                message: 'Could not enable live webhook updates.',
-                details: [message],
-                checkedAt: new Date().toISOString(),
-            });
-        }
-    };
-
     if (!activeProfile) {
         return (
             <main className="min-h-screen bg-canvas text-ink flex flex-col items-center justify-center p-4">
@@ -591,7 +188,6 @@ const Settings: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-canvas text-ink">
-            <SyncModal isOpen={showSyncModal} progress={syncProgress} onClose={() => setShowSyncModal(false)} />
             <Dialog
                 isOpen={isProfileManagerOpen}
                 title={profileToRemoveId ? 'Remove this sleeper?' : 'Manage sleepers'}
@@ -725,6 +321,20 @@ const Settings: React.FC = () => {
                     </div>
                 </section>
 
+                {profileRequiresReconnect(activeProfile) ? (
+                    <section className="mb-8" aria-labelledby="oura-connection-heading">
+                        <div className="rounded-[18px] border border-line bg-surface p-5 shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-5">
+                            <div>
+                                <h2 id="oura-connection-heading" className="text-sm font-semibold text-ink">Reconnect Oura</h2>
+                                <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+                                    Oura needs a fresh connection before automatic updates can continue.
+                                </p>
+                            </div>
+                            <Button className="mt-4 w-full sm:mt-0 sm:w-auto" onClick={login}>Reconnect</Button>
+                        </div>
+                    </section>
+                ) : null}
+
                 {/* Data Quality */}
                 <section className="mb-8">
                     <h2 className="text-sm font-medium text-ink-secondary uppercase tracking-wider mb-4">Data Quality</h2>
@@ -821,113 +431,6 @@ const Settings: React.FC = () => {
                                             </div>
                                         );
                                     })}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </section>
-
-                {/* Data Sync */}
-                <section className="mb-8">
-                    <h2 className="text-sm font-medium text-ink-secondary uppercase tracking-wider mb-4">Data Sync</h2>
-                    <div className="rounded-[18px] border border-line bg-surface p-5 shadow-sm">
-                        <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="flex-1">
-                                <p className="text-ink font-medium text-sm">Full Data Sync</p>
-                                <p className="text-ink-muted text-xs mt-1 leading-relaxed">
-                                    Download your complete Oura history. This may take a few minutes.<br />
-                                    The dashboard syncs recent data automatically every hour. Use Full Sync here to backfill your complete history.
-                                </p>
-                            </div>
-                            <button onClick={handleFullSync} className="min-h-11 w-full rounded-[12px] border border-line-strong px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-raised sm:w-auto whitespace-nowrap">
-                                Sync All Data
-                            </button>
-                        </div>
-
-                        <div className="mt-5 pt-5 border-t border-line">
-                            <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between">
-                                <div className="flex-1">
-                                    <p className="text-ink font-medium text-sm">Quick API & Freshness Check</p>
-                                    <p className="text-ink-muted text-xs mt-1 leading-relaxed">
-                                        Fast verification against Oura `daily_sleep`, `daily_readiness`, and `daily_activity` endpoints over the last {QUICK_CHECK_LOOKBACK_DAYS + 1} days.
-                                    </p>
-                                </div>
-                                <button
-                                    onClick={handleQuickCheck}
-                                    disabled={quickCheck.status === 'running'}
-                                    className="min-h-11 w-full rounded-[12px] border border-line-strong px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-raised disabled:opacity-50 sm:w-auto whitespace-nowrap"
-                                >
-                                    {quickCheck.status === 'running' ? 'Checking...' : 'Run Check'}
-                                </button>
-                            </div>
-
-                            {quickCheck.status !== 'idle' && (
-                                <div
-                                    className={`mt-3 rounded-[12px] border px-3 py-2.5 text-xs ${
-                                        quickCheck.status === 'ok'
-                                            ? 'border-[#6B9E8A]/40 bg-accent/10 text-[#4A7A64]'
-                                            : quickCheck.status === 'warning'
-                                                ? 'border-[#D4A574]/40 bg-[#D4A574]/10 text-[#A07A4A]'
-                                                : quickCheck.status === 'error'
-                                                    ? 'border-[#D4897B]/40 bg-error/10 text-[#A0574A]'
-                                                    : 'border-line-strong bg-canvas text-ink-secondary'
-                                    }`}
-                                >
-                                    <p className="font-medium">{quickCheck.message}</p>
-                                    {quickCheck.details.map((detail, index) => (
-                                        <p key={`${detail}-${index}`} className="mt-1.5">{detail}</p>
-                                    ))}
-                                    {quickCheck.checkedAt && (
-                                        <p className="mt-2 text-[11px] opacity-80">
-                                            Checked {new Date(quickCheck.checkedAt).toLocaleString()}
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="mt-5 pt-5 border-t border-line">
-                            <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between">
-                                <div className="flex-1">
-                                    <p className="text-ink font-medium text-sm">Live Webhook Updates</p>
-                                    <p className="text-ink-muted text-xs mt-1 leading-relaxed">
-                                        Configure Oura webhooks so the Today view refreshes as soon as Oura publishes new data.
-                                    </p>
-                                </div>
-                                <button
-                                    onClick={handleEnableLiveUpdates}
-                                    disabled={webhookStatus.status === 'running'}
-                                    className="min-h-11 w-full rounded-[12px] border border-line-strong px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-raised disabled:opacity-50 sm:w-auto whitespace-nowrap"
-                                >
-                                    {webhookStatus.status === 'running'
-                                        ? 'Configuring...'
-                                        : webhookStatus.status === 'ok'
-                                            ? 'Manage Live Updates'
-                                            : 'Enable Live Updates'}
-                                </button>
-                            </div>
-
-                            {webhookStatus.status !== 'idle' && (
-                                <div
-                                    className={`mt-3 rounded-[12px] border px-3 py-2.5 text-xs ${
-                                        webhookStatus.status === 'ok'
-                                            ? 'border-[#6B9E8A]/40 bg-accent/10 text-[#4A7A64]'
-                                            : webhookStatus.status === 'warning'
-                                                ? 'border-[#D4A574]/40 bg-[#D4A574]/10 text-[#A07A4A]'
-                                                : webhookStatus.status === 'error'
-                                                    ? 'border-[#D4897B]/40 bg-error/10 text-[#A0574A]'
-                                                    : 'border-line-strong bg-canvas text-ink-secondary'
-                                    }`}
-                                >
-                                    <p className="font-medium">{webhookStatus.message}</p>
-                                    {webhookStatus.details.map((detail, index) => (
-                                        <p key={`${detail}-${index}`} className="mt-1.5">{detail}</p>
-                                    ))}
-                                    {webhookStatus.checkedAt && (
-                                        <p className="mt-2 text-[11px] opacity-80">
-                                            Checked {new Date(webhookStatus.checkedAt).toLocaleString()}
-                                        </p>
-                                    )}
                                 </div>
                             )}
                         </div>

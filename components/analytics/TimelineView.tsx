@@ -100,7 +100,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ profiles, usersData }) => {
                 </div>
                 <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">No Timeline Data</h3>
                 <p className="text-[var(--text-muted)] text-sm">
-                    Sync your data to see the daily timeline view.
+                    More Oura history will appear here automatically.
                 </p>
             </div>
         );

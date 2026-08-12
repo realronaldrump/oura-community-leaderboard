@@ -17,7 +17,6 @@ import {
 } from "firebase/firestore/lite";
 import { bootstrapDb, db } from "./firebaseConfig";
 import { UserProfile, WebhookSignal } from "../types";
-import type { TokenRotationPatch, TokenRotationResult } from "./ouraTokenLifecycle";
 import {
     shouldReplaceProfileTemporalMetadata,
     type ProfileTemporalMetadata,
@@ -96,36 +95,6 @@ export const firebaseService = {
             console.error("Error patching profile in Firebase:", error);
             throw error;
         }
-    },
-
-    /**
-     * Persist rotated credentials only if the refresh token used to obtain them
-     * is still current. This prevents a delayed tab from overwriting a newer
-     * rotation without adding fields to the profile document contract.
-     */
-    persistRotatedProfileTokens: async (
-        id: string,
-        expectedRefreshToken: string,
-        patch: TokenRotationPatch
-    ): Promise<TokenRotationResult> => {
-        return runTransaction(db, async (transaction) => {
-            const profileRef = doc(db, PROFILES_COLLECTION, id);
-            const snapshot = await transaction.get(profileRef);
-            if (!snapshot.exists()) {
-                throw new Error('profile_not_found');
-            }
-
-            const current = snapshot.data() as UserProfile;
-            if (current.refreshToken !== expectedRefreshToken) {
-                return { status: 'conflict', profile: current };
-            }
-
-            transaction.set(profileRef, patch, { merge: true });
-            return {
-                status: 'updated',
-                profile: { ...current, ...patch },
-            };
-        });
     },
 
     /**

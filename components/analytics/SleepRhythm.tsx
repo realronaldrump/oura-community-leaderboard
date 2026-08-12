@@ -716,7 +716,7 @@ const SleepRhythm: React.FC<SleepRhythmProps> = ({ profiles, usersData }) => {
                     </div>
                     <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">No sleep data yet</h3>
                     <p className="text-[var(--text-muted)] text-sm">
-                        Sync your Oura data to see your sleep rhythm take shape.
+                        More Oura history will appear here automatically.
                     </p>
                 </div>
             ) : (

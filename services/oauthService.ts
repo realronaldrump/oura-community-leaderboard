@@ -1,4 +1,5 @@
 import { REDIRECT_URI } from '../constants';
+import type { UserProfile } from '../types';
 
 const REQUEST_TIMEOUT_MS = 20_000;
 
@@ -89,16 +90,15 @@ export const oauthService = {
         return payload;
     },
 
-    refreshAccessToken: async (refreshToken: string): Promise<OAuthTokenResponse> => {
-        const payload = await postJson<OAuthTokenResponse>('/api/oauth/refresh', { refreshToken });
-        if (!payload?.accessToken || typeof payload.accessToken !== 'string') {
-            throw new OAuthRequestError(
-                'invalid_refresh_response',
-                502,
-                null,
-                'OAuth refresh response missing accessToken.'
-            );
+    saveProfileConnection: async (tokens: OAuthTokenResponse): Promise<UserProfile> => {
+        const payload = await postJson<{ profile: UserProfile }>('/api/profiles/connect', { ...tokens });
+        if (!payload?.profile?.id) {
+            throw new OAuthRequestError('invalid_profile_response', 502, null);
         }
-        return payload;
+        return payload.profile;
+    },
+
+    removeProfileConnection: async (profileId: string): Promise<void> => {
+        await postJson<{ ok: true }>('/api/profiles/remove', { profileId });
     },
 };

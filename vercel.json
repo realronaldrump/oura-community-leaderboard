@@ -1,4 +1,10 @@
 {
+    "crons": [
+        {
+            "path": "/api/cron/oura-sync",
+            "schedule": "15 13 * * *"
+        }
+    ],
     "headers": [
         {
             "source": "/.well-known/apple-app-site-association",
@@ -11,10 +17,6 @@
         }
     ],
     "rewrites": [
-        {
-            "source": "/api/oura/(.*)",
-            "destination": "https://api.ouraring.com/v2/usercollection/$1"
-        },
         {
             "source": "/((?!api/).*)",
             "destination": "/index.html"

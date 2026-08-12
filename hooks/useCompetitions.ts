@@ -14,23 +14,39 @@ export const useCompetitions = (activeProfileId?: string | null) => {
             return;
         }
 
+        let cancelled = false;
+        let retryTimer: number | null = null;
+        let unsubscribe: (() => void) | null = null;
         setIsLoading(true);
         setError(null);
 
-        const unsubscribe = competitionService.subscribeToCompetitions(
-            activeProfileId,
-            (nextCompetitions) => {
-                setCompetitions(nextCompetitions);
-                setIsLoading(false);
-            },
-            (nextError) => {
-                console.error('Competition subscription failed:', nextError);
-                setError('Could not load competitions right now.');
-                setIsLoading(false);
-            }
-        );
+        const subscribe = () => {
+            if (cancelled) return;
+            unsubscribe?.();
+            unsubscribe = competitionService.subscribeToCompetitions(
+                activeProfileId,
+                (nextCompetitions) => {
+                    if (cancelled) return;
+                    setCompetitions(nextCompetitions);
+                    setError(null);
+                    setIsLoading(false);
+                },
+                (nextError) => {
+                    if (cancelled) return;
+                    console.error('Competition subscription failed:', nextError);
+                    setError('Competitions are temporarily unavailable. They will return automatically.');
+                    setIsLoading(false);
+                    retryTimer = window.setTimeout(subscribe, 5_000);
+                }
+            );
+        };
+        subscribe();
 
-        return () => unsubscribe();
+        return () => {
+            cancelled = true;
+            unsubscribe?.();
+            if (retryTimer != null) window.clearTimeout(retryTimer);
+        };
     }, [activeProfileId]);
 
     const visibleCompetitions = useMemo(() => {

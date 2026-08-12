@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useUser } from '../contexts/UserContext';
 import { useCompetitionInvitePreview } from '../hooks/useCompetitions';
 import { AuthStatus, type UserProfile } from '../types';
-import Welcome, { getProfileFreshness } from './Welcome';
+import Welcome from './Welcome';
 
 vi.mock('../contexts/UserContext', () => ({
     useUser: vi.fn(),
@@ -61,38 +61,6 @@ afterEach(() => {
     vi.clearAllMocks();
 });
 
-describe('getProfileFreshness', () => {
-    const now = new Date('2026-07-24T16:00:00.000Z').getTime();
-
-    it('reports saved timestamps without claiming a live connection check', () => {
-        expect(getProfileFreshness(profile(), now)).toMatchObject({
-            label: 'Last sync 10m ago',
-            tone: 'success',
-            timestamp: '2026-07-24T15:50:00.000Z',
-        });
-
-        expect(getProfileFreshness(profile({ lastSuccessfulSyncAt: '2026-07-23T18:00:00.000Z' }), now)).toMatchObject({
-            label: 'Last sync 22h ago',
-            tone: 'warning',
-        });
-    });
-
-    it('keeps missing and error metadata distinct', () => {
-        expect(getProfileFreshness(profile({ lastSuccessfulSyncAt: null }), now)).toMatchObject({
-            label: 'No sync recorded',
-            tone: 'neutral',
-        });
-        expect(getProfileFreshness(profile({ lastSyncError: 'oura_reconnect_required' }), now)).toMatchObject({
-            label: 'Connection needs attention',
-            tone: 'error',
-        });
-        expect(getProfileFreshness(profile({ lastSyncError: 'Critical data fetch failed: 503' }), now)).toMatchObject({
-            label: 'Last sync 10m ago',
-            tone: 'success',
-        });
-    });
-});
-
 describe('Welcome', () => {
     it('selects an existing profile without fetching dashboard data first', () => {
         const setActiveProfileId = vi.fn();
@@ -105,7 +73,7 @@ describe('Welcome', () => {
 
         fireEvent.click(screen.getByRole('button', { name: /open dashboard/i }));
         expect(setActiveProfileId).toHaveBeenCalledWith('profile-1');
-        expect(screen.getByText(/saved timestamps only/i)).toBeInTheDocument();
+        expect(screen.queryByText(/last sync|sync recorded|connection needs attention|saved timestamps/i)).not.toBeInTheDocument();
     });
 
     it('shows competition context while preserving profile choice', () => {
@@ -165,16 +133,14 @@ describe('Welcome', () => {
         expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument();
     });
 
-    it('offers a retry when the profile subscription fails', () => {
-        const retryFirebaseConnection = vi.fn();
+    it('keeps profile connection recovery automatic and action-free', () => {
         vi.mocked(useUser).mockReturnValue(mockUserState({
             firebaseError: 'Having trouble connecting.',
-            retryFirebaseConnection,
         }) as ReturnType<typeof useUser>);
 
         render(<Welcome />);
 
-        fireEvent.click(screen.getByRole('button', { name: /retry profile list/i }));
-        expect(retryFirebaseConnection).toHaveBeenCalledTimes(1);
+        expect(screen.queryByRole('button', { name: /retry|refresh/i })).not.toBeInTheDocument();
+        expect(screen.getByText(/reconnecting automatically/i)).toBeInTheDocument();
     });
 });

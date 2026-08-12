@@ -88,7 +88,7 @@ const getStreakLabel = (type: StreakType): string => {
         case 'step_goal': return 'Step Goal Streak';
         case 'early_bedtime': return 'Early Bedtime';
         case 'hrv_improvement': return 'HRV Improvement';
-        case 'activity_sync': return 'Activity Sync';
+        case 'activity_sync': return 'Activity Alignment';
         default: {
             const fallback = String(type);
             return fallback.split('_').map(w => `${w[0].toUpperCase()}${w.slice(1)}`).join(' ');

@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react';
 import type { UserProfile } from '../types';
-import { OuraTokenLifecycleError } from '../services/ouraTokenLifecycle';
+import { writeLaunchProfile } from '../services/launchCache';
 import { UserProvider, useUser } from './UserContext';
 
 const mocks = vi.hoisted(() => ({
@@ -10,12 +10,9 @@ const mocks = vi.hoisted(() => ({
     getProfile: vi.fn(),
     saveProfile: vi.fn(),
     patchProfile: vi.fn(),
-    persistRotatedProfileTokens: vi.fn(),
     deleteProfile: vi.fn(),
-    deleteProfileStats: vi.fn(),
-    clearUnavailableEndpoints: vi.fn(),
-    getPersonalInfo: vi.fn(),
-    refreshAccessToken: vi.fn(),
+    saveProfileConnection: vi.fn(),
+    removeProfileConnection: vi.fn(),
 }));
 
 vi.mock('../services/firebaseService', () => ({
@@ -25,19 +22,7 @@ vi.mock('../services/firebaseService', () => ({
         getProfile: mocks.getProfile,
         saveProfile: mocks.saveProfile,
         patchProfile: mocks.patchProfile,
-        persistRotatedProfileTokens: mocks.persistRotatedProfileTokens,
         deleteProfile: mocks.deleteProfile,
-    },
-}));
-
-vi.mock('../services/firestoreStatsService', () => ({
-    deleteProfileStats: mocks.deleteProfileStats,
-}));
-
-vi.mock('../services/ouraService', () => ({
-    ouraService: {
-        clearUnavailableEndpoints: mocks.clearUnavailableEndpoints,
-        getPersonalInfo: mocks.getPersonalInfo,
     },
 }));
 
@@ -47,7 +32,8 @@ vi.mock('../services/oauthService', async (importOriginal) => {
         ...actual,
         oauthService: {
             ...actual.oauthService,
-            refreshAccessToken: mocks.refreshAccessToken,
+            saveProfileConnection: mocks.saveProfileConnection,
+            removeProfileConnection: mocks.removeProfileConnection,
         },
     };
 });
@@ -133,13 +119,32 @@ describe('UserProvider profile/token boundaries', () => {
         await waitFor(() => expect(mocks.subscribeToProfiles).toHaveBeenCalledTimes(1));
     });
 
-    it('never carries an existing refresh token into a newly authorized credential set', async () => {
-        mocks.getPersonalInfo.mockResolvedValue({
-            id: 'oura-user-1',
-            email: 'member@example.com',
+    it('paints the remembered public profile without waiting for Firestore', () => {
+        localStorage.setItem('active_profile_id', profile.id);
+        writeLaunchProfile(profile);
+        mocks.getProfile.mockImplementation(() => new Promise(() => undefined));
+        mocks.getProfiles.mockImplementation(() => new Promise(() => undefined));
+        mocks.subscribeToProfiles.mockImplementation(() => () => {});
+
+        render(
+            <UserProvider>
+                <CaptureContext />
+            </UserProvider>
+        );
+
+        expect(context?.activeProfile).toMatchObject({ id: profile.id, firstName: 'Before' });
+        expect(context?.activeProfile).not.toHaveProperty('token');
+        expect(context?.activeProfile).not.toHaveProperty('refreshToken');
+    });
+
+    it('hands a newly authorized credential set to the server without writing it to public Firestore', async () => {
+        mocks.saveProfileConnection.mockResolvedValue({
+            id: profile.id,
+            ouraUserId: profile.ouraUserId,
+            email: profile.email,
             firstName: 'Member',
+            grantedScopes: ['daily', 'personal'],
         });
-        mocks.saveProfile.mockResolvedValue(undefined);
         render(
             <UserProvider>
                 <CaptureContext />
@@ -156,22 +161,23 @@ describe('UserProvider profile/token boundaries', () => {
             });
         });
 
-        expect(mocks.saveProfile).toHaveBeenCalledWith(expect.objectContaining({
-            id: profile.id,
-            token: 'access-from-new-authorization',
+        expect(mocks.saveProfileConnection).toHaveBeenCalledWith(expect.objectContaining({
+            accessToken: 'access-from-new-authorization',
             refreshToken: null,
         }));
+        expect(mocks.saveProfile).not.toHaveBeenCalled();
     });
 
     it('omits unknown scopes when saving a legacy profile instead of writing Firestore undefined', async () => {
         const legacyProfile = { ...profile, grantedScopes: undefined };
         mocks.getProfiles.mockResolvedValueOnce([legacyProfile]);
-        mocks.getPersonalInfo.mockResolvedValue({
-            id: 'oura-user-1',
-            email: 'member@example.com',
+        mocks.saveProfileConnection.mockResolvedValue({
+            id: profile.id,
+            ouraUserId: profile.ouraUserId,
+            email: profile.email,
             firstName: 'Member',
+            grantedScopes: [],
         });
-        mocks.saveProfile.mockResolvedValue(undefined);
         render(
             <UserProvider>
                 <CaptureContext />
@@ -186,82 +192,19 @@ describe('UserProvider profile/token boundaries', () => {
             });
         });
 
-        const savedProfile = mocks.saveProfile.mock.calls[0][0];
-        expect(savedProfile).toHaveProperty('grantedScopes', []);
-        expect(Object.values(savedProfile)).not.toContain(undefined);
+        expect(mocks.saveProfileConnection).toHaveBeenCalledWith(expect.objectContaining({
+            grantedScopes: [],
+        }));
     });
 
-    it('does not persist transient sync failures as reconnect-required profile state', async () => {
-        render(
-            <UserProvider>
-                <CaptureContext />
-            </UserProvider>
-        );
-        await waitFor(() => expect(context?.profiles).toHaveLength(1));
-
-        await act(async () => {
-            await context!.markProfileSyncError(profile.id, new Error('Critical data fetch failed: 503'));
-        });
-
-        expect(mocks.patchProfile).not.toHaveBeenCalled();
-    });
-
-    it('persists only a typed unrecoverable refresh rejection as reconnect-required state', async () => {
-        render(
-            <UserProvider>
-                <CaptureContext />
-            </UserProvider>
-        );
-        await waitFor(() => expect(context?.profiles).toHaveLength(1));
-
-        await act(async () => {
-            await context!.markProfileSyncError(
-                profile.id,
-                new OuraTokenLifecycleError('reconnect_required', 'invalid_grant', 400)
-            );
-        });
-
-        expect(mocks.patchProfile).toHaveBeenCalledWith(profile.id, {
-            lastSyncError: 'invalid_grant',
-            lastSyncErrorAt: expect.any(String),
-            lastUpdated: expect.any(String),
-        });
-    });
-
-    it('always clears durable reconnect state after a successful pull, even from a recent stale snapshot', async () => {
-        mocks.getProfiles.mockResolvedValueOnce([{
-                ...profile,
-                lastSuccessfulSyncAt: new Date().toISOString(),
-                lastSyncError: null,
-            }]);
-        render(
-            <UserProvider>
-                <CaptureContext />
-            </UserProvider>
-        );
-        await waitFor(() => expect(context?.profiles).toHaveLength(1));
-
-        await act(async () => {
-            await context!.markProfileSyncSuccess(profile.id);
-        });
-
-        expect(mocks.patchProfile).toHaveBeenCalledWith(profile.id, {
-            lastSuccessfulSyncAt: expect.any(String),
-            lastSyncError: null,
-            lastSyncErrorAt: null,
-            lastUpdated: expect.any(String),
-        });
-    });
-
-    it('deletes stored health history before removing a profile record', async () => {
+    it('asks the server to remove the profile and all private state', async () => {
         const secondProfile = { ...profile, id: 'profile-2', ouraUserId: 'oura-user-2' };
         mocks.subscribeToProfiles.mockImplementation((onProfiles: (profiles: UserProfile[]) => void) => {
             onProfiles([{ ...profile }, secondProfile]);
             return () => {};
         });
         mocks.getProfiles.mockResolvedValueOnce([{ ...profile }, secondProfile]);
-        mocks.deleteProfileStats.mockResolvedValue(undefined);
-        mocks.deleteProfile.mockResolvedValue(undefined);
+        mocks.removeProfileConnection.mockResolvedValue(undefined);
 
         render(
             <UserProvider>
@@ -274,11 +217,7 @@ describe('UserProvider profile/token boundaries', () => {
             await context!.removeProfile(secondProfile.id);
         });
 
-        expect(mocks.deleteProfileStats).toHaveBeenCalledWith(secondProfile.id);
-        expect(mocks.deleteProfile).toHaveBeenCalledWith(secondProfile.id);
-        expect(mocks.deleteProfileStats.mock.invocationCallOrder[0]).toBeLessThan(
-            mocks.deleteProfile.mock.invocationCallOrder[0]
-        );
+        expect(mocks.removeProfileConnection).toHaveBeenCalledWith(secondProfile.id);
     });
 
     it('does not remove the only profile', async () => {
@@ -290,7 +229,6 @@ describe('UserProvider profile/token boundaries', () => {
         await waitFor(() => expect(context?.profiles).toHaveLength(1));
 
         await expect(context!.removeProfile(profile.id)).rejects.toThrow('only remaining profile');
-        expect(mocks.deleteProfileStats).not.toHaveBeenCalled();
-        expect(mocks.deleteProfile).not.toHaveBeenCalled();
+        expect(mocks.removeProfileConnection).not.toHaveBeenCalled();
     });
 });
