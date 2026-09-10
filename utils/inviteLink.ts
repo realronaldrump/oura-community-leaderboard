@@ -2,8 +2,8 @@ export const INVITE_PATH = '/join';
 export const COMPETITION_INVITE_PARAM = 'competitionInvite';
 
 const INVITE_SHARE_TITLE = 'Join Davis Watches You Sleep';
-const INVITE_SHARE_TEXT = 'Bring your Oura ring and join our shared leaderboard. Bragging rights are not guaranteed.';
-const COMPETITION_INVITE_SHARE_TEXT = 'Join my Oura competition and start tomorrow.';
+const INVITE_SHARE_TEXT = 'Bring your Oura ring and join Davis Watches You Sleep. Bragging rights are not guaranteed.';
+const COMPETITION_INVITE_SHARE_TEXT = 'Join my competition on Davis Watches You Sleep and start tomorrow.';
 
 export type InviteShareResult = 'shared' | 'copied' | 'dismissed';
 
