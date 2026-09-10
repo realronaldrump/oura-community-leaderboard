@@ -106,8 +106,8 @@ const Welcome: React.FC<WelcomeProps> = ({ isCompletingOAuth = false }) => {
 
         return {
             eyebrow: 'Davis Watches You Sleep',
-            title: 'A lovingly overbuilt leaderboard for two.',
-            description: 'Compare sleep, readiness, activity, records, and competitions from your Oura data.',
+            title: 'Your data. Better company.',
+            description: 'Find the days that stand out, follow your progress, and compare the details with friends.',
         };
     }, [competitionInviteClosed, competitionInvitePreview, competitionInviteToken, isCompetitionInviteLoading, inviteLanding, profiles.length]);
 
@@ -205,8 +205,8 @@ const Welcome: React.FC<WelcomeProps> = ({ isCompletingOAuth = false }) => {
                         <StatePanel
                             className="mt-5"
                             eyebrow="Profile list"
-                            title="Reconnecting to the circle"
-                            description={profiles.length > 0
+                            title={firebaseError === 'quota_exceeded' ? 'The circle is taking a breather' : 'Reconnecting to the circle'}
+                            description={firebaseError === 'quota_exceeded' ? 'The data service has reached its current limit. Saved profiles remain available; new data will return when the limit resets.' : profiles.length > 0
                                 ? 'Saved profiles remain available while the app reconnects automatically.'
                                 : 'The app is reconnecting automatically. There is nothing you need to troubleshoot.'}
                             icon={<CloudOff />}

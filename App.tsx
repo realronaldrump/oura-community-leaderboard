@@ -24,6 +24,10 @@ const APP_PATHS = new Set([
     '/more',
     '/more/export',
     '/settings',
+    '/settings/export',
+    '/friends',
+    '/friends/challenges',
+    '/records',
 ]);
 
 export const getSafeAppDestination = (candidate: string | null | undefined): string => {
@@ -31,7 +35,7 @@ export const getSafeAppDestination = (candidate: string | null | undefined): str
 
     try {
         const url = new URL(candidate, window.location.origin);
-        if (url.origin !== window.location.origin || !APP_PATHS.has(url.pathname)) return '/';
+        if (url.origin !== window.location.origin || !(APP_PATHS.has(url.pathname) || /^\/(metrics|records)\/[^/]+$/.test(url.pathname))) return '/';
         if (url.pathname === '/join' && !getCompetitionInviteToken(url.search)) return '/';
         return `${url.pathname}${url.search}`;
     } catch {
@@ -285,7 +289,7 @@ const Router = () => {
             });
     }, [addProfile]);
 
-    const routeIsKnown = APP_PATHS.has(path);
+    const routeIsKnown = APP_PATHS.has(path) || /^\/(metrics|records)\/[^/]+$/.test(path);
     const routedPage = !routeIsKnown
         ? (
             <main className="grid min-h-[100dvh] place-items-center bg-canvas px-4">

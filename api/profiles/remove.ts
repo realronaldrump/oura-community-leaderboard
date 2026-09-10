@@ -52,6 +52,7 @@ export default async function handler(req: any, res: any) {
         const batch = db.batch();
         batch.delete(db.collection(CREDENTIALS_COLLECTION).doc(profileId));
         batch.delete(db.collection(SYNC_STATE_COLLECTION).doc(profileId));
+        batch.delete(db.collection('insightJobs').doc(profileId));
         if (profile.ouraUserId != null) {
             batch.delete(db.collection(WEBHOOK_SIGNALS_COLLECTION).doc(String(profile.ouraUserId)));
         }

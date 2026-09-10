@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
         lastKnownUtcOffsetMinutes: 0,
     } as UserProfile,
     metricDetailProps: null as Record<string, unknown> | null,
+    dayDetail: vi.fn(),
     competitionProps: null as { profileData: Array<{ data?: DailyStats; isLoading: boolean; isError: boolean }> } | null,
     loadHistory: vi.fn(),
 }));
@@ -32,6 +33,8 @@ beforeEach(() => {
     window.history.replaceState({}, '', '/');
     mocks.loadHistory.mockReset().mockResolvedValue(null);
     mocks.competitionProps = null;
+    mocks.dayDetail.mockReset().mockImplementation(async () => makeStats(new Date().toISOString().slice(0, 10)));
+    window.scrollTo = vi.fn();
 });
 
 vi.mock('../contexts/UserContext', () => ({
@@ -52,12 +55,13 @@ vi.mock('../hooks/useProfileStatsHydration', () => ({
     }),
 }));
 
-vi.mock('../components/MetricDetailModal', () => ({
-    default: (props: Record<string, unknown>) => {
-        mocks.metricDetailProps = props;
-        return <div role="dialog" aria-label="Total Sleep Duration">Sleep details</div>;
-    },
+vi.mock('../hooks/useInsights', () => ({ useInsights: () => ({ data: null, rebuilding: false }) }));
+vi.mock('../services/insightsService', () => ({
+    readDayDetail: (...args: unknown[]) => mocks.dayDetail(...args),
+    readInsightSummary: vi.fn().mockResolvedValue(null),
+    readMetricHistory: vi.fn().mockResolvedValue([]),
 }));
+vi.mock('../components/charts/SleepStagesChart', () => ({ default: () => <div>Sleep stage detail</div> }));
 
 afterEach(() => {
     cleanup();
@@ -149,16 +153,15 @@ describe('Dashboard sleep details', () => {
         );
 
         fireEvent.click(await screen.findByRole('button', {
-            name: /Total Sleep: 7h 45m\. Bedtime & wake time\. View details/i,
+            name: /Time asleep7h 45mBedtime & wake time/i,
         }));
 
-        await waitFor(() => {
-            expect(screen.getByRole('dialog', { name: 'Total Sleep Duration' })).toBeInTheDocument();
-        });
-        expect(mocks.metricDetailProps?.sleepSession).toEqual({
-            bedtime_start: '2026-08-10T22:47:00-06:00',
-            bedtime_end: '2026-08-11T06:32:00-06:00',
-        });
+        expect(await screen.findByRole('heading', { name: 'Time asleep', level: 1 })).toBeInTheDocument();
+        expect(window.location.pathname).toBe('/metrics/sleep_duration');
+        expect(await screen.findByText('22:47', { selector: '.sleep-clock strong' })).toBeInTheDocument();
+        expect(screen.getByText('06:32', { selector: '.sleep-clock strong' })).toBeInTheDocument();
+        expect(screen.queryByText('14:00', { selector: '.sleep-clock strong' })).not.toBeInTheDocument();
+        expect(mocks.loadHistory).not.toHaveBeenCalled();
     });
 });
 

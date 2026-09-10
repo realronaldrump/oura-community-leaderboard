@@ -659,7 +659,7 @@ const DataExport: React.FC = () => {
                 <div className="mb-6">
                     <h1 className="page-title mb-2 flex items-center gap-3 text-3xl text-text-primary">
                         <Database className="w-8 h-8 text-accent" />
-                        Data Export
+                        Your data, to go
                     </h1>
                     <p className="text-text-secondary">
                         Download a lossless snapshot of every current Oura V2 collection, or create analysis-ready CSVs from your saved history.
@@ -701,9 +701,9 @@ const DataExport: React.FC = () => {
                             <section className="ui-card ui-card--subtle mb-5 p-4 sm:p-6">
                                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                                     <div>
-                                        <h2 className="text-xl font-bold text-text-primary mb-1">Complete Raw Export</h2>
+                                        <h2 className="text-xl font-bold text-text-primary mb-1">Complete data</h2>
                                         <p className="text-text-secondary text-sm">
-                                            All 19 collections in Oura OpenAPI 1.37, with original IDs, units, nulls, nested samples, and no profile exclusions. Access and refresh tokens are never included.
+                                            Everything currently saved from Oura, including original measurements and detailed samples. Profile exclusions do not apply to this download.
                                         </p>
                                         <p className="text-text-muted text-xs mt-2">
                                             Coverage: {completeBundle.manifest.snapshot_status === 'full-sync' ? 'complete history' : 'available history'}
@@ -718,11 +718,11 @@ const DataExport: React.FC = () => {
                                         className="ui-button ui-button--primary self-start"
                                     >
                                         <Download className="w-4 h-4" />
-                                        Download Complete JSON
+                                        Download complete JSON
                                     </button>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-6">
+                                <details className="quiet-disclosure"><summary>Choose individual collections</summary><div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
                                     {rawCollectionButtons.map(({ name, count, onClick }) => (
                                         <button
                                             key={name}
@@ -744,7 +744,7 @@ const DataExport: React.FC = () => {
                                             </div>
                                         </button>
                                     ))}
-                                </div>
+                                </div></details>
                             </section>
                         )}
 
@@ -807,8 +807,7 @@ const DataExport: React.FC = () => {
                         )}
 
                         {/* Individual analysis exports */}
-                        <section className="ui-card ui-card--subtle mb-5 p-4 sm:p-6">
-                            <h2 className="text-xl font-bold text-text-primary mb-1">Analysis CSVs</h2>
+                        <details className="ui-card ui-card--subtle mb-5 p-4 sm:p-6"><summary className="text-lg font-semibold cursor-pointer">Individual analysis CSVs</summary>
                             <p className="text-text-secondary text-sm mb-6">Curated, selected-range tables. Profile ring-break exclusions apply only in this section.</p>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 {exportButtons.map((btn) => (
@@ -832,11 +831,11 @@ const DataExport: React.FC = () => {
                                     </button>
                                 ))}
                             </div>
-                        </section>
+                        </details>
 
                         {/* Combined export */}
                         <section className="ui-card ui-card--subtle p-4 sm:p-6">
-                            <h2 className="text-xl font-bold text-text-primary mb-1">Combined Daily Export</h2>
+                            <h2 className="text-xl font-bold text-text-primary mb-1">Analysis CSV</h2>
                             <p className="text-text-secondary text-sm mb-6">
                                 All daily metrics joined by date into a single wide CSV — ideal for spreadsheet or notebook analysis.
                             </p>

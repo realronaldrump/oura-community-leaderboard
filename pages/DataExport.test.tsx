@@ -64,12 +64,13 @@ describe('DataExport', () => {
     it('offers a lossless JSON bundle and current per-collection CSVs', async () => {
         render(<DataExport />);
 
-        expect(await screen.findByRole('heading', { name: 'Complete Raw Export' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Complete data' })).toBeInTheDocument();
+        fireEvent.click(screen.getByText('Choose individual collections'));
         expect(screen.getByText('Ring Battery Level')).toBeInTheDocument();
         expect(screen.getByText('personal_info')).toBeInTheDocument();
-        expect(screen.getByText(/All 19 collections/)).toBeInTheDocument();
+        expect(screen.getByText(/Everything currently saved from Oura/)).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: /Download Complete JSON/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Download complete JSON/i }));
 
         expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
         expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledOnce();

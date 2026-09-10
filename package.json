@@ -18,13 +18,11 @@
     "@vercel/functions": "^3.9.3",
     "firebase": "^12.6.0",
     "firebase-admin": "^13.7.0",
-    "html2canvas": "^1.4.1",
     "lucide-react": "^0.561.0",
     "papaparse": "^5.5.3",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "recharts": "^3.5.1",
-    "simple-statistics": "^7.8.8"
+    "recharts": "^3.5.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

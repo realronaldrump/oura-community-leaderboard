@@ -1,25 +1,29 @@
 {
-    "crons": [
+  "crons": [
+    {
+      "path": "/api/cron/oura-sync",
+      "schedule": "15 13 * * *"
+    },
+    {
+      "path": "/api/cron/insights",
+      "schedule": "45 13 * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/.well-known/apple-app-site-association",
+      "headers": [
         {
-            "path": "/api/cron/oura-sync",
-            "schedule": "15 13 * * *"
+          "key": "Content-Type",
+          "value": "application/json"
         }
-    ],
-    "headers": [
-        {
-            "source": "/.well-known/apple-app-site-association",
-            "headers": [
-                {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                }
-            ]
-        }
-    ],
-    "rewrites": [
-        {
-            "source": "/((?!api/).*)",
-            "destination": "/index.html"
-        }
-    ]
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ]
 }

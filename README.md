@@ -26,17 +26,18 @@ npm run verify
 
 ## Product structure
 
-- `/` — Today: rank, core scores, freshness, and expandable details
-- `/leaderboard` — member comparison
-- `/leaderboard/compete` — competitions and invitations
-- `/trends` — progress overview
-- `/trends/streaks` — streaks
-- `/trends/insights?insight=…` — seven analytical tools
-- `/more` — secondary actions
-- `/more/export` — export
-- `/settings` — profile, sync, exclusions, webhook, and data controls
+- `/` — Today: selected highlights, core scores, and contextual day detail
+- `/friends` — leaderboard and deliberate head-to-head comparison
+- `/friends/challenges` — existing one-week challenges and invitations
+- `/trends` — personal progress and searchable measurements
+- `/records` — searchable record archive and evidence
+- `/metrics/:metricId` — shared history and measurement detail
+- `/settings` — profile, connection, and exclusions
+- `/settings/export` — complete raw data and analysis CSVs
 
-The public welcome screen does not load the dashboard bundle or issue member-stat queries. Heavy charts, analytics, export, competitions, and detail dialogs are split into on-demand chunks.
+The header avatar opens secondary actions. Old leaderboard, streak, insight-tool, and More URLs redirect to their corresponding destinations. Heavy detail and export views remain lazy. Today loads compact saved snapshots, never full history or raw sample streams.
+
+The metric registry and deterministic records engine cover 83 measurements and 8,680 eligible rules. Server-owned monthly projections and immutable record indexes keep recognition off the phone's launch path. See [the redesign report](docs/redesign-report.md) for semantics, publication, and validation.
 
 ## Synchronization invariants
 
@@ -56,11 +57,9 @@ The public welcome screen does not load the dashboard bundle or issue member-sta
 - A schema-matched Full Sync is required before the export is labeled a full-sync snapshot. The manifest records scopes, collection counts, coverage dates, and endpoint diagnostics.
 - The complete endpoint list and schema source are the current official [Oura V2 documentation](https://cloud.ouraring.com/v2/docs) and [OpenAPI snapshot](https://cloud.ouraring.com/v2/static/json/openapi-1.37.json). The checked-in `openapi-1.28.json` file is retained only as a historical snapshot.
 
-## Important security limitation
+## Sharing and credentials
 
-This repository’s current compatibility contract has no Firebase Authentication or server-side member authorization. The checked-in Firestore rules allow anonymous profile/stat access, and complete profile documents contain Oura credentials. That means the current deployment is **not suitable for sensitive production use**, despite the client-side lifecycle improvements.
-
-The required production remediation is an authenticated backend that owns Oura tokens, performs refresh-and-persist atomically, returns only non-secret profile/data projections, and enforces restrictive Firestore rules. That change requires an authorization architecture and API/data-contract migration; it cannot be made safely as a transparent client-only patch.
+This app retains its existing anonymous shared-circle access model: anyone with its address can read shared profiles and health data. It is not a private member-authenticated service. Oura credentials are held in server-only `ouraCredentials` documents; browsers cannot read credentials or write health-data projections. Background jobs and cron endpoints are server-owned. Changing the sharing model requires a separate authentication and authorization migration.
 
 ## Verification artifacts
 

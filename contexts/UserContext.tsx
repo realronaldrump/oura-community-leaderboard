@@ -95,12 +95,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (cancelled) return;
             console.error(`Firebase ${operation} error:`, error);
             setIsLoadingProfiles(false);
-            setFirebaseError('Reconnecting automatically.');
+            const quotaExceeded = (error as { code?: string })?.code === 'resource-exhausted';
+            setFirebaseError(quotaExceeded ? 'quota_exceeded' : 'Reconnecting automatically.');
             if (automaticRetryRef.current == null) {
                 automaticRetryRef.current = window.setTimeout(() => {
                     automaticRetryRef.current = null;
                     setRetryCount((current) => current + 1);
-                }, 3_000);
+                }, quotaExceeded ? 30 * 60_000 : Math.min(60_000, 3_000 * 2 ** Math.min(retryCount, 5)));
             }
         };
 

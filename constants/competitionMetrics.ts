@@ -1,3 +1,4 @@
+import { mainSleepSession } from '../domain/metrics';
 import { DailyStats, SleepSession } from '../types';
 import {
     CompetitionMetricDefinition,
@@ -46,26 +47,8 @@ const formatBedtimeMinutes = (value: number): string => {
     return `${hour12}:${minutes.toString().padStart(2, '0')} ${suffix}`;
 };
 
-const getSessionsForDay = (sessions: SleepSession[] | undefined, day: string): SleepSession[] => {
-    if (!sessions?.length) return [];
-    return sessions.filter((session) => {
-        if (session.type === 'deleted') return false;
-        if (session.day === day) return true;
-        const bedtimeDay = session.bedtime_start?.slice(0, 10);
-        const wakeDay = session.bedtime_end?.slice(0, 10);
-        return bedtimeDay === day || wakeDay === day;
-    });
-};
-
-const pickBestSession = (sessions: SleepSession[]): SleepSession | undefined => {
-    if (!sessions.length) return undefined;
-    return [...sessions].sort((left, right) => {
-        const rightDuration = right.total_sleep_duration ?? right.time_in_bed ?? 0;
-        const leftDuration = left.total_sleep_duration ?? left.time_in_bed ?? 0;
-        if (rightDuration !== leftDuration) return rightDuration - leftDuration;
-        return new Date(right.bedtime_end || 0).getTime() - new Date(left.bedtime_end || 0).getTime();
-    })[0];
-};
+const getSessionsForDay = (sessions: SleepSession[] | undefined, day: string): SleepSession[] => (sessions || []).filter(s => s.day === day && s.type !== 'deleted');
+const pickBestSession = mainSleepSession;
 
 const getBestSessionForDay = (data: DailyStats | undefined, day: string): SleepSession | undefined => (
     pickBestSession(getSessionsForDay(data?.session, day))

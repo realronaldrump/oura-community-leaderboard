@@ -2,6 +2,10 @@ import crypto from 'node:crypto';
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { getAdminFirestore } from './firebaseAdmin.js';
 import { postOuraTokenRequest } from './ouraTokenRequest.js';
+import { nextCoverageGap, updateSourceCoverage } from '../../domain/coverage.js';
+import { deriveProfileTemporalMetadata, shouldReplaceProfileTemporalMetadata } from '../../utils/profileTemporal.js';
+import type { DailyStats } from '../../types.js';
+import { monthsBetween, requestInsightRefresh, runInsightJob } from './insightsProjection.js';
 
 const OURA_API_BASE_URL = 'https://api.ouraring.com/v2/usercollection';
 const PROFILES_COLLECTION = 'profiles';
@@ -30,6 +34,8 @@ type BackgroundProfile = {
     tokenExpiresAt?: string | null;
     grantedScopes?: string[];
     lastKnownUtcOffsetMinutes?: number | null;
+    lastKnownOffsetObservedAt?: string | null;
+    lastKnownOffsetSource?: import('../../types.js').UserProfile['lastKnownOffsetSource'];
 };
 
 type OuraCredential = Pick<BackgroundProfile, 'token' | 'refreshToken' | 'tokenExpiresAt' | 'grantedScopes'> & {
@@ -58,6 +64,8 @@ type DailyStatsLike = {
     ringBatteryLevel?: any[];
     cardiovascularAge?: any[];
     vo2Max?: any[];
+    sourceResults?: Record<string, { status: 'ready' | 'failed' | 'unavailable'; endpoint: string; code?: string; httpStatus?: number | null }>;
+    scannedRange?: { startDay: string; endDay: string };
 };
 
 export type OuraWebhookRecord = {
@@ -423,7 +431,7 @@ const fetchPage = async (
                 if (response.status === 401 && !optional) {
                     throw new OuraBackgroundSyncError('unauthorized', 'oura_access_token_rejected', 401);
                 }
-                if (optional && [400, 401, 403, 404].includes(response.status)) return { data: [] };
+                if (optional && [400, 401, 403, 404].includes(response.status)) throw new OuraBackgroundSyncError('retryable', `oura_${response.status}`, response.status);
                 throw new OuraBackgroundSyncError('retryable', `oura_${response.status}`, response.status);
             }
             return await response.json();
@@ -548,6 +556,9 @@ const fetchRecentStats = async (
     }
 
     const stats = emptyStats();
+    stats.scannedRange = { startDay, endDay };
+    stats.sourceResults = {};
+    for (const definition of definitions.filter(d => !d.enabled && !d.static)) stats.sourceResults[definition.key] = { status: 'unavailable', endpoint: definition.endpoint, code: 'missing_scope' };
     const criticalResults = await runWithConcurrency(
         critical,
         MAX_CONCURRENT_REQUESTS,
@@ -555,6 +566,7 @@ const fetchRecentStats = async (
     );
     critical.forEach((definition, index) => {
         (stats as any)[definition.key] = criticalResults[index];
+        stats.sourceResults![definition.key] = { status: 'ready', endpoint: definition.endpoint };
     });
 
     const optionalResults = await runWithConcurrency(
@@ -562,8 +574,13 @@ const fetchRecentStats = async (
         MAX_CONCURRENT_REQUESTS,
         async (definition) => {
             try {
-                return await fetchEndpoint(definition, token, startDay, endDay, fetchImpl, sleep);
-            } catch {
+                const rows = await fetchEndpoint(definition, token, startDay, endDay, fetchImpl, sleep);
+                stats.sourceResults![definition.key] = { status: 'ready', endpoint: definition.endpoint };
+                return rows;
+            } catch (error) {
+                const status = error instanceof OuraBackgroundSyncError ? error.status : null;
+                const unavailable = status != null && [400, 401, 403, 404].includes(status);
+                stats.sourceResults![definition.key] = { status: unavailable ? 'unavailable' : 'failed', endpoint: definition.endpoint, code: status === 401 ? 'unauthorized' : status === 403 ? 'forbidden' : status === 404 ? 'not_found' : status === 400 ? 'bad_request' : 'request_failed', httpStatus: status };
                 return [];
             }
         }
@@ -857,7 +874,7 @@ const reconcileWebhookDelete = async (
     const dayField = dayFieldByDataType[record.dataType];
     if (dayField) {
         const days = await db.collection(PROFILE_STATS_COLLECTION).doc(profileId)
-            .collection('days').orderBy('day', 'desc').limit(45).get();
+            .collection('days').where(`${dayField}.id`, '==', record.objectId).get();
         days.docs.forEach((document) => {
             const value = document.data()?.[dayField];
             if (isRecord(value) && String(value.id || '') === record.objectId) {
@@ -886,7 +903,8 @@ const persistStats = async (
     profile: BackgroundProfile,
     delta: DailyStatsLike,
     webhookRecord: OuraWebhookRecord | undefined,
-    now: Date
+    now: Date,
+    additionalDirtyMonths: string[] = []
 ) => {
     const profileStatsRef = db.collection(PROFILE_STATS_COLLECTION).doc(profile.id);
     const snapshotRef = profileStatsRef.collection('snapshots').doc('dashboard');
@@ -961,8 +979,17 @@ const persistStats = async (
     await db.runTransaction(async (transaction) => {
         const metadataSnapshot = await transaction.get(profileStatsRef);
         const current = metadataSnapshot.exists ? metadataSnapshot.data() || {} : {};
+        const insightJobRef = db.collection('insightJobs').doc(profile.id);
+        const insightJob = await transaction.get(insightJobRef);
         const oldestCandidates = [current.oldestDay, incomingRange.oldestDay].filter(Boolean).sort();
         const newestCandidates = [current.newestDay, incomingRange.newestDay].filter(Boolean).sort();
+        const sourceCoverage = { ...(current.sourceCoverage || {}) };
+        const endpointDiagnostics = { ...(current.endpointDiagnostics || {}) };
+        for (const [key, result] of Object.entries(delta.sourceResults || {})) {
+            if (delta.scannedRange) sourceCoverage[key] = updateSourceCoverage(sourceCoverage[key], delta.scannedRange, result.status);
+            endpointDiagnostics[key] = result.status === 'ready' ? null : { endpoint: result.endpoint, code: result.code || 'request_failed', status: result.httpStatus || null, message: result.status === 'unavailable' ? 'This collection is not available from Oura.' : 'This collection could not be refreshed.', recordedAt: updatedAt };
+        }
+        const historyCursor = delta.scannedRange ? [current.historyCursor || current.oldestDay || delta.scannedRange.startDay, delta.scannedRange.startDay].sort()[0] : current.historyCursor || null;
         transaction.set(profileStatsRef, {
             profileId: profile.id,
             schemaVersion: PROFILE_STATS_SCHEMA_VERSION,
@@ -970,9 +997,12 @@ const persistStats = async (
             newestDay: newestCandidates.at(-1) || null,
             lastIncrementalSyncAt: updatedAt,
             lastSyncError: null,
-            endpointDiagnostics: {},
+            endpointDiagnostics,
+            sourceCoverage,
+            historyCursor,
             updatedAt,
         }, { merge: true });
+        transaction.set(insightJobRef, { dirtyMonths: [...new Set([...(insightJob.data()?.dirtyMonths || []), ...additionalDirtyMonths, ...(delta.scannedRange ? monthsBetween(delta.scannedRange.startDay, delta.scannedRange.endDay) : [])])].sort(), requestedAt: updatedAt }, { merge: true });
     });
     await db.collection(PROFILES_COLLECTION).doc(profile.id).set({
         lastSuccessfulSyncAt: updatedAt,
@@ -998,6 +1028,7 @@ export const syncOuraProfile = async (
     const db = options.db ?? getAdminFirestore();
     const fetchImpl = options.fetchImpl ?? fetch;
     const now = options.now?.() ?? new Date();
+    const startedAt = Date.now();
     const sleep = options.sleep ?? ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
     const lease = await claimLease(db, profileId, options.reason, now);
     if ('detail' in lease) {
@@ -1013,8 +1044,35 @@ export const syncOuraProfile = async (
         let access = await getAccessToken(db, profile, fetchImpl, now);
         profile = access.profile;
         const localToday = profileDay(profile, now);
-        const startDay = options.startDay || shiftDay(localToday, -7);
-        const endDay = options.endDay || shiftDay(localToday, 2);
+        let startDay = options.startDay || shiftDay(localToday, -7);
+        let endDay = options.endDay || shiftDay(localToday, 2);
+        const webhook = options.webhookRecord;
+        const previousDays = new Set<string>();
+        if (webhook?.objectId && webhook.dataType) {
+            const rawCollection = rawCollectionByDataType[webhook.dataType];
+            if (rawCollection) {
+                const stored = (await db.collection(PROFILE_STATS_COLLECTION).doc(profileId).collection(rawCollection).doc(toDocumentId({ id: webhook.objectId }, 0)).get()).data();
+                if (stored?.day) previousDays.add(stored.day);
+            }
+            const dailyField = dayFieldByDataType[webhook.dataType];
+            if (dailyField) {
+                const storedDays = await db.collection(PROFILE_STATS_COLLECTION).doc(profileId).collection('days').where(`${dailyField}.id`, '==', webhook.objectId).get();
+                storedDays.docs.forEach(d => previousDays.add(d.id));
+            }
+            const definition = endpointDefinitions(profile, true).find(d => d.endpoint.toLowerCase() === webhook.dataType!.toLowerCase());
+            if (definition && webhook.eventType !== 'delete') {
+                const url = `${OURA_API_BASE_URL}/${definition.endpoint}/${encodeURIComponent(webhook.objectId)}`;
+                let record: any;
+                try { record = await fetchPage(url, access.token, false, fetchImpl, sleep); }
+                catch (error) {
+                    if (!(error instanceof OuraBackgroundSyncError) || error.kind !== 'unauthorized') throw error;
+                    access = await getAccessToken(db, profile, fetchImpl, now, true); profile = access.profile;
+                    record = await fetchPage(url, access.token, false, fetchImpl, sleep);
+                }
+                const objectDay = record?.day || String(record?.start_datetime || record?.start_time || '').slice(0, 10);
+                if (/^\d{4}-\d{2}-\d{2}$/.test(objectDay)) { startDay = objectDay; endDay = objectDay; }
+            } else if (previousDays.size) { startDay = [...previousDays].sort()[0]; endDay = [...previousDays].sort().at(-1)!; }
+        }
         let delta: DailyStatsLike;
         try {
             delta = await fetchRecentStats(
@@ -1040,11 +1098,30 @@ export const syncOuraProfile = async (
                 sleep
             );
         }
-        const range = await persistStats(db, profile, delta, options.webhookRecord, now);
+        // Clear a moved source's old day projection before rebuilding either month.
+        for (const oldDay of previousDays) {
+            const moved = [delta.sleep, delta.readiness, delta.activity, delta.session, delta.spo2, delta.stress, delta.resilience].flat().some(r => r.id === webhook?.objectId && r.day !== oldDay);
+            const field = webhook?.dataType ? dayFieldByDataType[webhook.dataType] : undefined;
+            if (moved && field) await db.collection(PROFILE_STATS_COLLECTION).doc(profileId).collection('days').doc(oldDay).set({ [field]: null }, { merge: true });
+        }
+        const range = await persistStats(db, profile, delta, options.webhookRecord, now, [...previousDays].map(d => d.slice(0, 7)));
+        const temporal = deriveProfileTemporalMetadata(delta as unknown as DailyStats);
+        if (temporal) await db.runTransaction(async tx => {
+            const ref = db.collection(PROFILES_COLLECTION).doc(profileId); const stored = await tx.get(ref);
+            if (shouldReplaceProfileTemporalMetadata(stored.data(), temporal)) { tx.set(ref, temporal, { merge: true }); profile = { ...profile, ...temporal }; }
+        }).catch(() => console.warn('Timezone update pending; saved Oura data remains available.'));
         await releaseLease(db, profileId, lease.token, {
             lastSuccessfulAt: now.toISOString(),
             lastFailureCode: null,
         });
+        try {
+            const metadata = options.webhookRecord?.eventType === 'delete' ? (await db.collection(PROFILE_STATS_COLLECTION).doc(profileId).get()).data() : null;
+            await requestInsightRefresh(db, profileId, [...monthsBetween(metadata?.oldestDay || startDay, endDay), ...[...previousDays].map(d => d.slice(0, 7))]);
+            const remaining = 45_000 - (Date.now() - startedAt);
+            if (remaining > 4000) await runInsightJob(profileId, { db, budgetMs: Math.min(remaining, 12_000), now });
+        } catch {
+            console.warn('Records refresh pending; saved Oura data remains available.');
+        }
         return {
             profileId,
             status: 'synced',
@@ -1105,7 +1182,7 @@ export const reconcileProfileHistory = async (
 ): Promise<BackgroundSyncResult | null> => {
     const db = options.db ?? getAdminFirestore();
     const metadata = await db.collection(PROFILE_STATS_COLLECTION).doc(profileId).get();
-    const range = getHistoryReconciliationRange(metadata.data()?.oldestDay);
+    const range = metadata.data()?.sourceCoverage ? nextCoverageGap(metadata.data()!.sourceCoverage) : getHistoryReconciliationRange(metadata.data()?.historyCursor || metadata.data()?.oldestDay);
     if (!range) return null;
     return syncOuraProfile(profileId, {
         ...options,
@@ -1137,10 +1214,10 @@ export const syncAllOuraProfiles = async (
     // members catch up automatically without asking anyone to run a full sync.
     const coverage = await Promise.all(profiles.docs.map(async (document) => {
         const metadata = await db.collection(PROFILE_STATS_COLLECTION).doc(document.id).get();
-        return { profileId: document.id, oldestDay: metadata.data()?.oldestDay as string | null | undefined };
+        return { profileId: document.id, oldestDay: (metadata.data()?.historyCursor || metadata.data()?.oldestDay) as string | null | undefined, gap: metadata.data()?.sourceCoverage ? nextCoverageGap(metadata.data()!.sourceCoverage) : getHistoryReconciliationRange(metadata.data()?.oldestDay) };
     }));
     const backfillCandidate = coverage
-        .filter((entry) => getHistoryReconciliationRange(entry.oldestDay))
+        .filter((entry) => entry.gap)
         .sort((left, right) => String(right.oldestDay || '').localeCompare(String(left.oldestDay || '')))[0];
     const backfill = backfillCandidate
         ? await reconcileProfileHistory(backfillCandidate.profileId, { ...options, db })
