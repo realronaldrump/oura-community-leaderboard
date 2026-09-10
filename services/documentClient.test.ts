@@ -28,6 +28,19 @@ afterEach(() => {
 const response = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status });
 describe("remote document transport", () => {
+  it("uses a same-origin relay without connecting the browser to a tailnet address", async () => {
+    vi.stubEnv("VITE_OURA_API_URL", "/storage");
+    const fetch = vi.fn().mockResolvedValue(response({ documents: [], at: "signed", nextCursor: null }));
+    vi.stubGlobal("fetch", fetch);
+    const client = await import("./documentClient");
+    const callback = vi.fn();
+    const unsubscribe = client.onSnapshot(client.collection({}, "profiles"), callback);
+    await vi.waitFor(() => expect(callback).toHaveBeenCalledOnce());
+    expect(fetch.mock.calls[0][0]).toBe("/storage/public/rpc");
+    expect(FakeEvents.instances[0].url).toBe("/storage/public/changes");
+    expect(native.getDocs).not.toHaveBeenCalled();
+    unsubscribe();
+  });
   it("collects every byte-bounded page at the same signed snapshot", async () => {
     const fetch = vi
       .fn()

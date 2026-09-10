@@ -11,6 +11,13 @@
   ],
   "headers": [
     {
+      "source": "/storage/public/:path*",
+      "headers": [
+        { "key": "x-vercel-enable-rewrite-caching", "value": "0" },
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    },
+    {
       "source": "/.well-known/apple-app-site-association",
       "headers": [
         {
@@ -21,6 +28,10 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/storage/public/:path*",
+      "destination": "https://davis-mini-pc-1.tail59b3f5.ts.net:8443/public/:path*"
+    },
     {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
