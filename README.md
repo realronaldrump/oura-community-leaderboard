@@ -61,6 +61,17 @@ The metric registry and deterministic records engine cover 83 measurements and 8
 
 This app retains its existing anonymous shared-circle access model: anyone with its address can read shared profiles and health data. It is not a private member-authenticated service. Oura credentials are held in server-only `ouraCredentials` documents; browsers cannot read credentials or write health-data projections. Background jobs and cron endpoints are server-owned. Changing the sharing model requires a separate authentication and authorization migration.
 
+## Bounded records repair
+
+Scheduled sync and the daily insights worker build records automatically. For an operator-run repair, pull server credentials into the ignored Vercel directory and run one bounded batch:
+
+```bash
+vercel env pull .vercel/.env.production.local --environment=production --yes
+node scripts/rebuild-insights.mjs
+```
+
+The command uses the same worker as the protected cron endpoint, reports progress without credential values, and can be rerun to resume older history. `--profile <id>` restricts a batch to one existing profile. It does not change source health data. A service quota failure must be resolved before retrying.
+
 ## Verification artifacts
 
 Local screenshots and Lighthouse reports belong in `artifacts/`, which is ignored because those files can contain real names and health metrics. Do not commit or publish them.

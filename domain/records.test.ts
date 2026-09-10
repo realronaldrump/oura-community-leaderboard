@@ -299,3 +299,29 @@ describe("record semantics and long histories", () => {
     expect(performance.now() - warmStart).toBeLessThan(3000);
   }, 20000);
 });
+
+it("features yesterday’s completed activity record without presenting today’s partial low as a record", async () => {
+  const { evaluateDailyHighlights } = await import("./records");
+  const rows = observations(
+    100,
+    (i) => (i === 98 ? 24000 : i === 99 ? 0 : 7000 + i * 10),
+    "steps",
+  );
+  const result = evaluateDailyHighlights({
+    profileId: "me",
+    observations: rows,
+    asOfDay: rows[99].day,
+    today: rows[99].day,
+  });
+  expect(
+    result.featured.some(
+      (e) =>
+        e.metricId === "steps" &&
+        e.day === rows[98].day &&
+        e.description.startsWith("Yesterday"),
+    ),
+  ).toBe(true);
+  expect(
+    result.events.some((e) => e.metricId === "steps" && e.direction === "low"),
+  ).toBe(false);
+});

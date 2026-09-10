@@ -121,8 +121,9 @@ function metric(
   options: Partial<MetricDefinition> = {},
 ) {
   const accumulating =
-    ["activity", "stress", "workout", "guidedSession"].includes(source) &&
-    unit !== "score";
+    source === "activity" ||
+    (["stress", "workout", "guidedSession"].includes(source) &&
+      unit !== "score");
   definitions.push({
     id,
     label,

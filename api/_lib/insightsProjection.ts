@@ -12,6 +12,7 @@ import {
 } from "../../domain/metrics.js";
 import {
   evaluateHighlights,
+  evaluateDailyHighlights,
   RULES_VERSION,
   type HighlightEvent,
   type InsightSummary,
@@ -431,7 +432,7 @@ export async function runInsightJob(
           delete recordDays[d];
           delete metricMasks[d];
         }
-    const evaluated = evaluateHighlights({
+    const evaluated = evaluateDailyHighlights({
       profileId,
       observations,
       asOfDay: day,
@@ -449,8 +450,27 @@ export async function runInsightJob(
       evaluated.events,
     );
     metricMasks[day] = metricMask(evaluated.events.map((e) => e.metricId));
+    if (evaluated.completedDay) {
+      recordDays[evaluated.completedDay] = await writeDay(
+        db,
+        profileId,
+        generation,
+        evaluated.completedDay,
+        evaluated.completedEvents,
+      );
+      metricMasks[evaluated.completedDay] = metricMask(
+        evaluated.completedEvents.map((e) => e.metricId),
+      );
+      if (archiveBefore === evaluated.completedDay)
+        archiveBefore = observations.some(
+          (o) => o.day < evaluated.completedDay!,
+        )
+          ? shiftDay(evaluated.completedDay, -1)
+          : null;
+    }
     const recent = [
       ...evaluated.events,
+      ...evaluated.completedEvents,
       ...priorEvents.filter(
         (e) =>
           e.day < day &&

@@ -798,3 +798,41 @@ export function evaluateHighlights(options: EvaluateOptions): {
     featured: selectFeatured(events),
   };
 }
+
+/** The morning feed also recognizes the accumulating day that just finished. */
+export function evaluateDailyHighlights(options: EvaluateOptions) {
+  const current = evaluateHighlights(options);
+  const completedDay =
+    options.asOfDay === (options.today || options.asOfDay)
+      ? shiftDay(options.asOfDay, -1)
+      : null;
+  const completed = completedDay
+    ? evaluateHighlights({
+        ...options,
+        asOfDay: completedDay,
+        today: options.today || options.asOfDay,
+      })
+    : null;
+  const recentCompleted = (completed?.events || [])
+    .filter(
+      (event) =>
+        METRIC_BY_ID[event.metricId].accumulating ||
+        event.family === "week" ||
+        event.family === "month",
+    )
+    .map((event) => {
+      const factors = { ...event.factors, recency: 6 / 7 };
+      return {
+        ...event,
+        factors,
+        score: notabilityScore(factors),
+        description: `Yesterday · ${event.description}`,
+      };
+    });
+  return {
+    ...current,
+    completedDay,
+    completedEvents: completed?.events || [],
+    featured: selectFeatured([...current.events, ...recentCompleted]),
+  };
+}

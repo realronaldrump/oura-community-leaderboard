@@ -535,7 +535,7 @@ export default function MetricDetail({
       )}
       {metric.category === "body" && stats?.heartrate?.length ? (
         <section className="detail-section">
-          <h2>Heart rate through the day</h2>
+          <h2>Heart rate · UTC</h2>
           <div className="h-56">
             <Suspense fallback={<Skeleton className="h-full" />}>
               <HeartRateChart data={stats.heartrate} />
