@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { competitionService } from '../services/competitionService';
 import { Competition, CompetitionInvitePreview } from '../types/competitionTypes';
 
@@ -19,6 +19,7 @@ export const useCompetitions = (activeProfileId?: string | null) => {
         let unsubscribe: (() => void) | null = null;
         setIsLoading(true);
         setError(null);
+        setCompetitions([]);
 
         const subscribe = () => {
             if (cancelled) return;
@@ -49,13 +50,9 @@ export const useCompetitions = (activeProfileId?: string | null) => {
         };
     }, [activeProfileId]);
 
-    const visibleCompetitions = useMemo(() => {
-        if (!activeProfileId) return [];
-        return competitions;
-    }, [activeProfileId, competitions]);
 
     return {
-        competitions: visibleCompetitions,
+        competitions: activeProfileId ? competitions : [],
         allCompetitions: competitions,
         isLoading,
         error,
@@ -63,43 +60,34 @@ export const useCompetitions = (activeProfileId?: string | null) => {
 };
 
 export const useCompetitionInvitePreview = (token?: string | null) => {
-    const [preview, setPreview] = useState<CompetitionInvitePreview | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [result, setResult] = useState<{
+        token: string;
+        preview: CompetitionInvitePreview | null;
+        error: string | null;
+    } | null>(null);
 
     useEffect(() => {
         if (!token) {
-            setPreview(null);
-            setError(null);
-            setIsLoading(false);
+            setResult(null);
             return;
         }
-
         let cancelled = false;
-        setIsLoading(true);
-        setError(null);
-
+        setResult(null);
         competitionService.getCompetitionInvitePreview(token)
-            .then((result) => {
-                if (cancelled) return;
-                setPreview(result);
+            .then((preview) => {
+                if (!cancelled) setResult({ token, preview, error: null });
             })
-            .catch((nextError) => {
-                console.error('Failed to load competition invite preview:', nextError);
-                if (cancelled) return;
-                setError('Could not load that competition invite.');
-                setPreview(null);
-            })
-            .finally(() => {
-                if (!cancelled) {
-                    setIsLoading(false);
-                }
+            .catch((error) => {
+                console.error('Failed to load competition invite:', error);
+                if (!cancelled) setResult({ token, preview: null, error: 'Could not load this invite. Reopen the link to try again.' });
             });
-
-        return () => {
-            cancelled = true;
-        };
+        return () => { cancelled = true; };
     }, [token]);
 
-    return { preview, isLoading, error };
+    const current = token && result?.token === token ? result : null;
+    return {
+        preview: current?.preview ?? null,
+        isLoading: Boolean(token && !current),
+        error: current?.error ?? null,
+    };
 };

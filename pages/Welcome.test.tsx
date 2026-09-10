@@ -133,6 +133,14 @@ describe('Welcome', () => {
         expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument();
     });
 
+    it('does not promise a challenge when the invitation is unavailable', () => {
+        window.history.replaceState({}, '', '/join?competitionInvite=missing');
+        render(<Welcome />);
+        expect(screen.getByText('This invite is no longer available.')).toBeInTheDocument();
+        expect(screen.getByText('Ask the host for a new link.')).toBeInTheDocument();
+        expect(screen.queryByText('Choose your profile or connect Oura to join.')).not.toBeInTheDocument();
+    });
+
     it('keeps profile connection recovery automatic and action-free', () => {
         vi.mocked(useUser).mockReturnValue(mockUserState({
             firebaseError: 'Having trouble connecting.',

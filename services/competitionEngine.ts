@@ -136,6 +136,7 @@ export const evaluateCompetition = (
         today < competition.endDate ? today : competition.endDate
     );
     const days = getCompetitionDays(competition, scoringEndDate);
+    const totalDays = getCompetitionDays(competition, competition.endDate).length;
     const weightMap = getCompetitionWeightMap(competition.rules);
 
     const acceptedParticipants = competition.participants.filter((participant) => participant.status === 'accepted');
@@ -155,7 +156,7 @@ export const evaluateCompetition = (
                 };
             });
 
-            const completedGoal = ruleEvaluations.every((ruleEvaluation) => ruleEvaluation.passed);
+            const completedGoal = ruleEvaluations.length > 0 && ruleEvaluations.every((ruleEvaluation) => ruleEvaluation.passed);
             const totalScore = competition.format === 'goal'
                 ? (completedGoal ? 1 : 0)
                 : ruleEvaluations.reduce((sum, ruleEvaluation) => sum + (ruleEvaluation.normalizedScore * (weightMap[ruleEvaluation.ruleId] ?? 0)), 0);
@@ -174,11 +175,21 @@ export const evaluateCompetition = (
             aggregateValues[rule.id] = aggregateRuleValues(rule, values);
         });
 
-        const totalScore = competition.format === 'goal'
+        // Older competitions keep their original weighted scoring. New curated
+        // races compare a single metric in its original units.
+        const metricRule = competition.scoring && competition.rules.length === 1 ? competition.rules[0] : null;
+        const metricValues = metricRule ? dailyScores.flatMap((day) => {
+            const value = day.rules[0]?.value;
+            return typeof value === 'number' && Number.isFinite(value) ? [value] : [];
+        }) : [];
+        const metricTotal = metricValues.reduce((sum, value) => sum + value, 0);
+        const totalScore = metricRule
+            ? (competition.scoring === 'average' ? (metricValues.length ? metricTotal / metricValues.length : 0) : metricTotal)
+            : competition.format === 'goal'
             ? dailyScores.filter((score) => score.completedGoal).length
             : dailyScores.reduce((sum, score) => sum + score.totalScore, 0);
 
-        const progressDays = competition.format === 'goal'
+        const progressDays = metricRule ? metricValues.length : competition.format === 'goal'
             ? dailyScores.filter((score) => score.completedGoal).length
             : dailyScores.filter((score) => score.totalScore > 0).length;
 
@@ -189,7 +200,7 @@ export const evaluateCompetition = (
             rank: 0,
             totalScore,
             progressDays,
-            totalDays: competition.rules.length === 0 ? 0 : days.length,
+            totalDays,
             dailyScores,
             aggregateValues,
             averageDailyScore: days.length > 0 ? totalScore / days.length : 0,
@@ -197,9 +208,9 @@ export const evaluateCompetition = (
     }).sort((left, right) => {
         if (right.totalScore !== left.totalScore) return right.totalScore - left.totalScore;
         return left.displayName.localeCompare(right.displayName);
-    }).map((entry, index) => ({
+    }).map((entry, _index, entries) => ({
         ...entry,
-        rank: index + 1,
+        rank: entries.findIndex((candidate) => candidate.totalScore === entry.totalScore) + 1,
     }));
 
     const finalizedThrough = days.length ? days[days.length - 1] : null;

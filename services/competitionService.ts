@@ -16,6 +16,7 @@ import {
     writeBatch,
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
+import { deriveCompetitionStatus } from './competitionEngine';
 import {
     Competition,
     CompetitionInvite,
@@ -33,6 +34,7 @@ export interface CreateCompetitionInput {
     description?: string;
     mode: Competition['mode'];
     format: Competition['format'];
+    scoring?: Competition['scoring'];
     createdByProfileId: string;
     startDate: string;
     endDate: string;
@@ -76,6 +78,7 @@ const normalizeCompetition = (id: string, raw: DocumentData): Competition => {
         description: typeof raw.description === 'string' ? raw.description : '',
         mode: raw.mode === 'solo' ? 'solo' : 'friends',
         format: raw.format === 'goal' || raw.format === 'combo' ? raw.format : 'race',
+        ...(raw.scoring === 'total' || raw.scoring === 'average' ? { scoring: raw.scoring } : {}),
         status: raw.status === 'draft' || raw.status === 'cancelled' || raw.status === 'completed' || raw.status === 'active'
             ? raw.status
             : 'scheduled',
@@ -157,6 +160,7 @@ export const competitionService = {
             description: input.description || '',
             mode: input.mode,
             format: input.format,
+            ...(input.scoring ? { scoring: input.scoring } : {}),
             status: 'scheduled',
             createdByProfileId: input.createdByProfileId,
             createdAt: now,
@@ -209,6 +213,9 @@ export const competitionService = {
             }
 
             const competition = normalizeCompetition(snapshot.id, snapshot.data());
+            if (status === 'accepted' && !['scheduled', 'active'].includes(deriveCompetitionStatus(competition))) {
+                throw new Error('competition_closed');
+            }
             const now = new Date().toISOString();
             const participants = competition.participants.map((participant) => {
                 if (participant.profileId !== profileId) return participant;
@@ -240,7 +247,7 @@ export const competitionService = {
         const inviteDocument = inviteSnapshot.docs[0];
         const invite = normalizeInvite(inviteDocument.id, inviteDocument.data());
         if (invite.status !== 'active') return null;
-        if (invite.expiresAt && invite.expiresAt < new Date().toISOString()) return null;
+        if (invite.expiresAt && invite.expiresAt <= new Date().toISOString()) return null;
 
         return resolveInvitePreview(invite);
     },
@@ -253,10 +260,16 @@ export const competitionService = {
         }
 
         const competition = normalizeCompetition(competitionSnapshot.id, competitionSnapshot.data());
-        if (competition.inviteTokenIds?.length) {
-            const inviteSnapshot = await getDoc(doc(db, COMPETITION_INVITES_COLLECTION, competition.inviteTokenIds[0]));
+        if (competition.mode !== 'friends' || competition.createdByProfileId !== createdByProfileId ||
+            !['scheduled', 'active'].includes(deriveCompetitionStatus(competition))) {
+            throw new Error('competition_closed');
+        }
+        for (const inviteId of competition.inviteTokenIds || []) {
+            const inviteSnapshot = await getDoc(doc(db, COMPETITION_INVITES_COLLECTION, inviteId));
             if (inviteSnapshot.exists()) {
-                return normalizeInvite(inviteSnapshot.id, inviteSnapshot.data());
+                const existing = normalizeInvite(inviteSnapshot.id, inviteSnapshot.data());
+                if (existing.status === 'active' && (!existing.expiresAt || existing.expiresAt > new Date().toISOString()) &&
+                    (existing.maxUses == null || existing.acceptedProfileIds.length < existing.maxUses)) return existing;
             }
         }
 
@@ -296,11 +309,14 @@ export const competitionService = {
 
             const invite = normalizeInvite(inviteSnapshot.id, inviteSnapshot.data());
             const competition = normalizeCompetition(competitionSnapshot.id, competitionSnapshot.data());
+            if (competition.mode !== 'friends' || !['scheduled', 'active'].includes(deriveCompetitionStatus(competition))) {
+                throw new Error('competition_closed');
+            }
 
             if (invite.status !== 'active') {
                 throw new Error('invite_inactive');
             }
-            if (invite.expiresAt && invite.expiresAt < new Date().toISOString()) {
+            if (invite.expiresAt && invite.expiresAt <= new Date().toISOString()) {
                 throw new Error('invite_expired');
             }
 

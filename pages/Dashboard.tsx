@@ -1970,7 +1970,8 @@ const Dashboard: React.FC = () => {
     const shouldLoadAllTimeStats = viewMode === 'trends' ||
         viewMode === 'insights' ||
         viewMode === 'streaks' ||
-        viewMode === 'export';
+        viewMode === 'export' ||
+        viewMode === 'compete';
 
     const allTimeQueries = useQueries({
         queries: profiles.map(p => ({
@@ -2021,11 +2022,13 @@ const Dashboard: React.FC = () => {
     const competitionProfileData = useMemo(() => (
         profiles.map((profile, index) => ({
             profile,
-            data: analysisUserQueries[index]?.data as DailyStats | undefined,
-            isLoading: Boolean(analysisUserQueries[index]?.isLoading),
-            isError: Boolean(analysisUserQueries[index]?.isError),
+            data: analysisAllTimeQueries[index]?.data && analysisUserQueries[index]?.data
+                ? mergeDailyStats(analysisAllTimeQueries[index].data!, analysisUserQueries[index].data!)
+                : (analysisAllTimeQueries[index]?.data ?? analysisUserQueries[index]?.data) as DailyStats | undefined,
+            isLoading: !hydratedProfileIds.has(profile.id) || Boolean(analysisAllTimeQueries[index]?.isFetching),
+            isError: Boolean(analysisAllTimeQueries[index]?.isError),
         }))
-    ), [analysisUserQueries, profiles]);
+    ), [analysisAllTimeQueries, analysisUserQueries, hydratedProfileIds, profiles]);
 
     const [dateIndex, setDateIndex] = useState(0);
     const [todayOverrideDay, setTodayOverrideDay] = useState<string | null>(null);
@@ -3533,6 +3536,7 @@ const Dashboard: React.FC = () => {
                 {viewMode === 'compete' && (
                     <Suspense fallback={<ViewLoadingFallback />}>
                         <CompeteView
+                            key={activeProfile.id}
                             activeProfile={activeProfile}
                             profiles={profiles}
                             profileData={competitionProfileData}

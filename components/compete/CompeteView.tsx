@@ -1,18 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarPlus, Check, Flag, Trophy, Users } from 'lucide-react';
-import { COMPETITION_TEMPLATES } from '../../constants/competitionMetrics';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Trophy } from 'lucide-react';
 import { useCompetitionInvitePreview, useCompetitions } from '../../hooks/useCompetitions';
 import { competitionService, CreateCompetitionInput } from '../../services/competitionService';
-import { evaluateCompetition } from '../../services/competitionEngine';
+import { buildCompetitionSummary, deriveCompetitionStatus, evaluateCompetition } from '../../services/competitionEngine';
 import { DailyStats, UserProfile } from '../../types';
-import { CompetitionInvite, CompetitionTemplate } from '../../types/competitionTypes';
+import { Competition, CompetitionInvite } from '../../types/competitionTypes';
 import { formatISODateForDisplay } from '../../utils/date';
 import { getProfileDisplayName } from '../../utils/profileName';
+import { shareCompetitionInviteLink } from '../../utils/inviteLink';
 import { Button } from '../ui';
-import {
-    copyCompetitionInviteLink,
-    shareCompetitionInviteLink,
-} from '../../utils/inviteLink';
 import CompetitionBuilder from './CompetitionBuilder';
 import CompetitionCard from './CompetitionCard';
 
@@ -31,470 +27,203 @@ interface CompeteViewProps {
     onClearCompetitionInviteToken?: () => void;
 }
 
-type Notice = {
-    tone: 'success' | 'warning' | 'error';
-    message: string;
-};
+type Notice = { tone: 'success' | 'error'; message: string };
+type ShareStatus = 'idle' | 'copied' | 'shared' | 'error' | 'loading';
 
-type ShareStatus = 'idle' | 'copied' | 'shared' | 'error';
-
-const noticeClassNames: Record<Notice['tone'], string> = {
-    success: 'border-success/30 bg-success-soft text-success',
-    warning: 'border-warning/30 bg-warning-soft text-warning',
-    error: 'border-error/30 bg-error-soft text-error',
-};
+const formatDates = (competition: Competition) => `${formatISODateForDisplay(competition.startDate, 'en-US', { month: 'short', day: 'numeric' })}–${formatISODateForDisplay(competition.endDate, 'en-US', { month: 'short', day: 'numeric' })}`;
+const isOpenCompetition = (competition: Competition) => ['scheduled', 'active'].includes(deriveCompetitionStatus(competition));
 
 const CompeteView: React.FC<CompeteViewProps> = ({
-    activeProfile,
-    profiles,
-    profileData,
-    competitionInviteToken,
-    onClearCompetitionInviteToken,
+    activeProfile, profiles, profileData, competitionInviteToken, onClearCompetitionInviteToken,
 }) => {
     const { competitions, isLoading, error } = useCompetitions(activeProfile.id);
     const { preview: invitePreview, isLoading: invitePreviewLoading, error: invitePreviewError } = useCompetitionInvitePreview(competitionInviteToken);
-
     const [isBuilderOpen, setIsBuilderOpen] = useState(false);
-    const [initialTemplate, setInitialTemplate] = useState<CompetitionTemplate | null>(null);
     const [notice, setNotice] = useState<Notice | null>(null);
     const [isAcceptingTokenInvite, setIsAcceptingTokenInvite] = useState(false);
-    const [isRespondingCompetitionId, setIsRespondingCompetitionId] = useState<string | null>(null);
+    const [respondingIds, setRespondingIds] = useState<string[]>([]);
+    const [createdCompetition, setCreatedCompetition] = useState<Competition | null>(null);
     const [inviteByCompetitionId, setInviteByCompetitionId] = useState<Record<string, CompetitionInvite>>({});
     const [shareStatusByCompetitionId, setShareStatusByCompetitionId] = useState<Record<string, ShareStatus>>({});
+    const sharingIds = useRef(new Set<string>());
+    const responseIds = useRef(new Set<string>());
 
     useEffect(() => {
-        if (!notice) return;
-        const timer = window.setTimeout(() => setNotice(null), 3200);
+        if (!notice || notice.tone === 'error') return;
+        const timer = window.setTimeout(() => setNotice(null), 5000);
         return () => window.clearTimeout(timer);
     }, [notice]);
 
     const statsByProfileId = useMemo<Record<string, DailyStats | undefined>>(
-        () => profileData.reduce<Record<string, DailyStats | undefined>>((acc, entry) => {
-            acc[entry.profile.id] = entry.data;
-            return acc;
-        }, {}),
-        [profileData]
+        () => Object.fromEntries(profileData.map((entry) => [entry.profile.id, entry.data])), [profileData]
     );
-
-    const evaluations = useMemo(
-        () => competitions.map((competition) => evaluateCompetition(competition, statsByProfileId)),
-        [competitions, statsByProfileId]
-    );
-
-    const pendingInvites = useMemo(
-        () => competitions.filter((competition) =>
-            competition.participants.some((participant) => participant.profileId === activeProfile.id && participant.status === 'invited')
-        ),
-        [activeProfile.id, competitions]
-    );
-
-    const scheduledEvaluations = evaluations.filter((evaluation) => evaluation.status === 'scheduled');
-    const activeEvaluations = evaluations.filter((evaluation) => evaluation.status === 'active');
-    const completedEvaluations = evaluations.filter((evaluation) => evaluation.status === 'completed').slice(0, 8);
-
-    const linkInviteAlreadyJoined = Boolean(
-        invitePreview?.competition.participants.some((participant) => participant.profileId === activeProfile.id && participant.status === 'accepted')
-    );
-
-    const handleOpenBuilder = (template?: CompetitionTemplate | null, mode?: 'solo' | 'friends') => {
-        const fallbackTemplate = template || COMPETITION_TEMPLATES.find((item) => item.mode === (mode || 'solo')) || COMPETITION_TEMPLATES[0];
-        setInitialTemplate(fallbackTemplate);
-        setIsBuilderOpen(true);
-    };
+    const evaluations = useMemo(() => {
+        // Keep a new competition visible while its subscription catches up.
+        const visible = createdCompetition && !competitions.some((item) => item.id === createdCompetition.id)
+            ? [createdCompetition, ...competitions] : competitions;
+        return visible
+            .filter((competition) => competition.participants.some((participant) => participant.profileId === activeProfile.id && participant.status === 'accepted'))
+            .map((competition) => evaluateCompetition(competition, statsByProfileId));
+    }, [activeProfile.id, competitions, createdCompetition, statsByProfileId]);
+    const pendingInvites = competitions.filter((competition) => isOpenCompetition(competition) &&
+        competition.id !== invitePreview?.competition.id &&
+        competition.participants.some((participant) => participant.profileId === activeProfile.id && participant.status === 'invited'));
+    const createdEvaluation = evaluations.find((evaluation) => evaluation.competition.id === createdCompetition?.id && ['scheduled', 'active'].includes(evaluation.status));
+    const activeEvaluations = evaluations.filter((evaluation) => evaluation.status === 'active' && evaluation !== createdEvaluation);
+    const scheduledEvaluations = evaluations.filter((evaluation) => evaluation.status === 'scheduled' && evaluation !== createdEvaluation)
+        .sort((left, right) => left.competition.startDate.localeCompare(right.competition.startDate));
+    const completedEvaluations = evaluations.filter((evaluation) => evaluation.status === 'completed')
+        .sort((left, right) => right.competition.endDate.localeCompare(left.competition.endDate));
+    const linkInviteAlreadyJoined = Boolean(invitePreview?.competition.participants.some((participant) => participant.profileId === activeProfile.id && participant.status === 'accepted'));
+    const linkInviteClosed = Boolean(invitePreview && (!isOpenCompetition(invitePreview.competition) || invitePreview.competition.mode !== 'friends' ||
+        (invitePreview.invite.maxUses != null && invitePreview.invite.acceptedProfileIds.length >= invitePreview.invite.maxUses)));
 
     const handleCreateCompetition = async (input: CreateCompetitionInput) => {
         const { competition, invite } = await competitionService.createCompetition(input);
-        if (invite) {
-            setInviteByCompetitionId((current) => ({ ...current, [competition.id]: invite }));
-        }
-
-        setNotice({
-            tone: 'success',
-            message: invite
-                ? `${competition.title} is scheduled. The invite link is ready to send.`
-                : `${competition.title} is scheduled and starts tomorrow.`,
-        });
+        setCreatedCompetition(competition);
+        if (invite) setInviteByCompetitionId((current) => ({ ...current, [competition.id]: invite }));
+        setNotice({ tone: 'success', message: `${competition.title} is ready. Starts ${formatISODateForDisplay(competition.startDate, 'en-US', { month: 'short', day: 'numeric' })}.` });
     };
 
     const handleRespondToInvite = async (competitionId: string, status: 'accepted' | 'declined') => {
-        setIsRespondingCompetitionId(competitionId);
+        if (responseIds.current.has(competitionId)) return;
+        responseIds.current.add(competitionId);
+        setRespondingIds((current) => [...current, competitionId]);
         try {
             await competitionService.respondToCompetition(competitionId, activeProfile.id, status);
-            setNotice({
-                tone: status === 'accepted' ? 'success' : 'warning',
-                message: status === 'accepted' ? 'Competition joined.' : 'Competition invite declined.',
-            });
+            setNotice({ tone: 'success', message: status === 'accepted' ? 'You’re in.' : 'Invite declined.' });
         } catch (responseError) {
             console.error('Failed to respond to competition invite:', responseError);
-            setNotice({ tone: 'error', message: 'Could not update the invite right now.' });
+            setNotice({ tone: 'error', message: 'Could not update the invite. Try again.' });
         } finally {
-            setIsRespondingCompetitionId(null);
+            responseIds.current.delete(competitionId);
+            setRespondingIds((current) => current.filter((id) => id !== competitionId));
         }
     };
 
-    const ensureCompetitionInvite = async (competitionId: string): Promise<CompetitionInvite> => {
-        const cached = inviteByCompetitionId[competitionId];
-        if (cached) return cached;
-        const invite = await competitionService.ensureCompetitionInvite(competitionId, activeProfile.id);
-        setInviteByCompetitionId((current) => ({ ...current, [competitionId]: invite }));
-        return invite;
-    };
-
-    const updateShareStatus = (competitionId: string, status: ShareStatus) => {
-        setShareStatusByCompetitionId((current) => ({ ...current, [competitionId]: status }));
-        if (status !== 'idle') {
-            window.setTimeout(() => {
-                setShareStatusByCompetitionId((current) => ({ ...current, [competitionId]: 'idle' }));
-            }, 2600);
-        }
-    };
-
-    const handleShareInvite = async (competitionId: string, title: string) => {
+    const handleShareInvite = async (competition: Competition) => {
+        if (sharingIds.current.has(competition.id)) return;
+        sharingIds.current.add(competition.id);
+        setShareStatusByCompetitionId((current) => ({ ...current, [competition.id]: 'loading' }));
         try {
-            const invite = await ensureCompetitionInvite(competitionId);
-            const result = await shareCompetitionInviteLink(invite.token, title);
-            if (result !== 'dismissed') {
-                updateShareStatus(competitionId, result);
-            }
+            const invite = inviteByCompetitionId[competition.id] || await competitionService.ensureCompetitionInvite(competition.id, activeProfile.id);
+            setInviteByCompetitionId((current) => ({ ...current, [competition.id]: invite }));
+            const result = await shareCompetitionInviteLink(invite.token, competition.title);
+            setShareStatusByCompetitionId((current) => ({ ...current, [competition.id]: result === 'dismissed' ? 'idle' : result }));
         } catch (shareError) {
             console.error('Failed to share competition invite:', shareError);
-            updateShareStatus(competitionId, 'error');
-        }
-    };
-
-    const handleCopyInvite = async (competitionId: string) => {
-        try {
-            const invite = await ensureCompetitionInvite(competitionId);
-            await copyCompetitionInviteLink(invite.token);
-            updateShareStatus(competitionId, 'copied');
-        } catch (copyError) {
-            console.error('Failed to copy competition invite:', copyError);
-            updateShareStatus(competitionId, 'error');
+            setShareStatusByCompetitionId((current) => ({ ...current, [competition.id]: 'error' }));
+        } finally {
+            sharingIds.current.delete(competition.id);
         }
     };
 
     const handleAcceptLinkInvite = async () => {
-        if (!competitionInviteToken) return;
+        if (!competitionInviteToken || isAcceptingTokenInvite) return;
         setIsAcceptingTokenInvite(true);
         try {
             const result = await competitionService.acceptCompetitionInviteToken(competitionInviteToken, {
-                profileId: activeProfile.id,
-                displayName: getProfileDisplayName(activeProfile),
+                profileId: activeProfile.id, displayName: getProfileDisplayName(activeProfile),
             });
-            setInviteByCompetitionId((current) => {
-                const invite = result.invite;
-                return invite ? { ...current, [result.competition.id]: invite } : current;
-            });
-            setNotice({
-                tone: 'success',
-                message: `You joined ${result.competition.title}.`,
-            });
+            setCreatedCompetition(result.competition);
+            setNotice({ tone: 'success', message: `You joined ${result.competition.title}.` });
             onClearCompetitionInviteToken?.();
         } catch (acceptError) {
             console.error('Failed to accept token invite:', acceptError);
-            setNotice({ tone: 'error', message: 'Could not join that competition.' });
+            setNotice({ tone: 'error', message: 'Could not join. The invite may have closed. Try again.' });
         } finally {
             setIsAcceptingTokenInvite(false);
         }
     };
 
+    const renderCard = (evaluation: ReturnType<typeof evaluateCompetition>) => {
+        const participants = profileData.filter((entry) => evaluation.competition.participants.some((participant) => participant.profileId === entry.profile.id && participant.status === 'accepted'));
+        return <CompetitionCard
+            key={evaluation.competition.id}
+            evaluation={evaluation}
+            activeProfileId={activeProfile.id}
+            scoresLoading={participants.some((entry) => entry.isLoading)}
+            scoresError={participants.some((entry) => entry.isError)}
+            shareStatus={shareStatusByCompetitionId[evaluation.competition.id] || 'idle'}
+            onShareInvite={() => handleShareInvite(evaluation.competition)}
+        />;
+    };
+
     return (
-        <div className="pt-6 space-y-6">
-            <section className="relative overflow-hidden rounded-[var(--radius-xl)] border border-line bg-surface p-5 shadow-card sm:p-7">
-                <div className="relative">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent-soft px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-accent">
-                        <Trophy className="h-3.5 w-3.5" />
-                        Compete
-                    </div>
-                    <div className="mt-5 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-                        <div className="max-w-3xl">
-                            <h1 className="text-3xl font-semibold tracking-tight text-ink sm:text-[2.4rem]">
-                                Set a goal—or make it a competition.
-                            </h1>
-                            <p className="mt-3 text-sm leading-relaxed text-ink-secondary sm:text-base">
-                                Choose the metric, dates, and who is in. Track a target alone or keep score with friends.
-                            </p>
-                        </div>
-
-                        <div className="flex flex-col gap-3 sm:flex-row">
-                            <Button
-                                onClick={() => handleOpenBuilder(COMPETITION_TEMPLATES.find((template) => template.mode === 'solo') || null, 'solo')}
-                                size="lg"
-                            >
-                                <Flag className="h-4 w-4" />
-                                Create Solo Goal
-                            </Button>
-                            <Button
-                                onClick={() => handleOpenBuilder(COMPETITION_TEMPLATES.find((template) => template.mode === 'friends') || null, 'friends')}
-                                variant="secondary"
-                                size="lg"
-                            >
-                                <Users className="h-4 w-4" />
-                                Challenge Friends
-                            </Button>
-                        </div>
-                    </div>
-
-                    <dl className="mt-6 grid grid-cols-3 overflow-hidden rounded-[var(--radius-lg)] border border-line bg-surface-raised shadow-pressed">
-                        <div className="min-w-0 p-3 sm:p-4">
-                            <dt className="text-[10px] uppercase tracking-[0.12em] text-ink-muted sm:text-[11px] sm:tracking-[0.16em]">Active</dt>
-                            <dd className="mt-1 font-mono text-2xl font-semibold text-ink sm:text-3xl">{activeEvaluations.length}</dd>
-                        </div>
-                        <div className="min-w-0 border-l border-line p-3 sm:p-4">
-                            <dt className="text-[10px] uppercase tracking-[0.12em] text-ink-muted sm:text-[11px] sm:tracking-[0.16em]">Starting tomorrow</dt>
-                            <dd className="mt-1 font-mono text-2xl font-semibold text-ink sm:text-3xl">{scheduledEvaluations.length}</dd>
-                        </div>
-                        <div className="min-w-0 border-l border-line p-3 sm:p-4">
-                            <dt className="text-[10px] uppercase tracking-[0.12em] text-ink-muted sm:text-[11px] sm:tracking-[0.16em]">Pending invites</dt>
-                            <dd className="mt-1 font-mono text-2xl font-semibold text-ink sm:text-3xl">{pendingInvites.length}</dd>
-                        </div>
-                    </dl>
+        <div className="space-y-6 pt-6">
+            <header className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">Competitions</h1>
+                    <p className="mt-1 text-sm text-ink-secondary">A little friendly motivation.</p>
                 </div>
-            </section>
+                <Button onClick={() => setIsBuilderOpen(true)}>
+                    <Plus className="h-4 w-4" aria-hidden="true" />New competition
+                </Button>
+            </header>
 
-            {notice ? (
-                <div className={`rounded-[1.25rem] border px-4 py-3 text-sm ${noticeClassNames[notice.tone]}`}>
-                    {notice.message}
-                </div>
-            ) : null}
+            {notice ? <p role={notice.tone === 'error' ? 'alert' : 'status'} className={`rounded-2xl border px-4 py-3 text-sm ${notice.tone === 'error' ? 'border-error/30 bg-error-soft text-error' : 'border-success/30 bg-success-soft text-success'}`}>{notice.message}</p> : null}
 
             {competitionInviteToken ? (
-                <section className="rounded-[1.5rem] border border-line bg-surface p-5 shadow-sm">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <div className="max-w-3xl">
-                            <p className="text-[11px] uppercase tracking-[0.16em] text-accent">Invite Link</p>
-                            <h2 className="mt-2 text-xl font-semibold text-ink">
-                                {invitePreviewLoading ? 'Loading competition...' : invitePreview?.competition.title || 'Competition invite'}
-                            </h2>
-                            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-                                {invitePreview?.competition.description || 'Open this invite to join the next scheduled competition.'}
-                            </p>
-                            {invitePreview ? (
-                                <p className="mt-3 text-xs text-ink-muted">
-                                    Starts {formatISODateForDisplay(invitePreview.competition.startDate, 'en-US', { month: 'short', day: 'numeric' })} and runs through {formatISODateForDisplay(invitePreview.competition.endDate, 'en-US', { month: 'short', day: 'numeric' })}.
-                                </p>
-                            ) : null}
-                            {invitePreviewError ? (
-                                <p className="mt-3 text-xs text-error">{invitePreviewError}</p>
-                            ) : null}
-                        </div>
-
-                        <div className="flex flex-col gap-3 sm:flex-row">
-                            {invitePreview && !linkInviteAlreadyJoined ? (
-                                <button
-                                    type="button"
-                                    onClick={handleAcceptLinkInvite}
-                                    disabled={isAcceptingTokenInvite}
-                                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
-                                >
-                                    <Check className="h-4 w-4" />
-                                    {isAcceptingTokenInvite ? 'Joining...' : 'Join Competition'}
-                                </button>
-                            ) : (
-                                <div className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-accent/30 bg-accent-soft px-5 py-3 text-sm font-semibold text-accent">
-                                    Already joined
-                                </div>
-                            )}
-                            <button
-                                type="button"
-                                onClick={onClearCompetitionInviteToken}
-                                className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-line px-5 py-3 text-sm font-medium text-ink transition-colors hover:bg-surface-raised"
-                            >
-                                Dismiss
-                            </button>
-                        </div>
+                <section className="rounded-2xl border border-accent/30 bg-surface p-5" aria-label="Competition invite">
+                    {invitePreviewLoading ? <p role="status" className="text-sm text-ink-secondary">Loading invite…</p> : invitePreview ? (
+                        <>
+                            <p className="text-xs text-accent">You’re invited</p>
+                            <h2 className="mt-2 text-xl font-semibold text-ink">{invitePreview.competition.title}</h2>
+                            <p className="mt-2 text-sm text-ink-secondary">{buildCompetitionSummary(invitePreview.competition)}</p>
+                            <p className="mt-2 text-xs text-ink-muted">{formatDates(invitePreview.competition)}</p>
+                            {linkInviteAlreadyJoined ? <p role="status" className="mt-3 text-sm text-accent">You’re already in.</p> : linkInviteClosed ? <p className="mt-3 text-sm text-ink-muted">This competition is no longer accepting players.</p> : null}
+                        </>
+                    ) : <p role="status" className="text-sm text-ink-secondary">{invitePreviewError || 'This invite is no longer available.'}</p>}
+                    <div className="mt-4 flex gap-2">
+                        {invitePreview && !invitePreviewLoading && !linkInviteAlreadyJoined && !linkInviteClosed ? <Button onClick={handleAcceptLinkInvite} disabled={isAcceptingTokenInvite}>{isAcceptingTokenInvite ? 'Joining…' : 'Join competition'}</Button> : null}
+                        <Button variant="quiet" onClick={onClearCompetitionInviteToken} disabled={isAcceptingTokenInvite}>Dismiss</Button>
                     </div>
                 </section>
             ) : null}
-
-            <section>
-                <div className="flex items-center justify-between gap-3">
-                    <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Templates</p>
-                        <h2 className="mt-2 text-xl font-semibold text-ink">Start from a template</h2>
-                    </div>
-                </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {COMPETITION_TEMPLATES.map((template) => (
-                        <button
-                            key={template.id}
-                            type="button"
-                            onClick={() => handleOpenBuilder(template)}
-                            className="rounded-[1.35rem] border border-line bg-surface-raised p-4 text-left transition-colors hover:border-accent/30"
-                        >
-                            <div className="flex items-center justify-between gap-3">
-                                <span
-                                    className="inline-flex h-9 w-9 items-center justify-center rounded-full"
-                                    style={{ backgroundColor: `${template.accentColor}22`, color: template.accentColor }}
-                                >
-                                    <Trophy className="h-4 w-4" />
-                                </span>
-                                <span className="text-[11px] uppercase tracking-[0.14em] text-ink-muted">{template.format}</span>
-                            </div>
-                            <h3 className="mt-4 text-lg font-semibold text-ink">{template.title}</h3>
-                            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">{template.description}</p>
-                            <div className="mt-4 inline-flex items-center gap-2 text-xs font-medium text-accent">
-                                <CalendarPlus className="h-3.5 w-3.5" />
-                                Starts tomorrow
-                            </div>
-                        </button>
-                    ))}
-                </div>
-            </section>
 
             {pendingInvites.length > 0 ? (
-                <section className="space-y-3">
-                    <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Pending For You</p>
-                        <h2 className="mt-2 text-xl font-semibold text-ink">Accept or pass on incoming invites</h2>
-                    </div>
+                <section className="space-y-3" aria-labelledby="competition-invites-heading">
+                    <h2 id="competition-invites-heading" className="text-lg font-semibold text-ink">Invites</h2>
                     {pendingInvites.map((competition) => (
-                        <div key={competition.id} className="rounded-[1.35rem] border border-line bg-surface p-4 shadow-sm sm:p-5">
-                            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                                <div className="max-w-3xl">
-                                    <p className="text-[11px] uppercase tracking-[0.16em] text-accent">Invited</p>
-                                    <h3 className="mt-2 text-lg font-semibold text-ink">{competition.title}</h3>
-                                    <p className="mt-2 text-sm leading-relaxed text-ink-secondary">{competition.description}</p>
-                                    <p className="mt-3 text-xs text-ink-muted">
-                                        Starts {formatISODateForDisplay(competition.startDate, 'en-US', { month: 'short', day: 'numeric' })} and runs for{' '}
-                                        {formatISODateForDisplay(competition.endDate, 'en-US', { month: 'short', day: 'numeric' })}.
-                                    </p>
-                                </div>
-                                <div className="flex flex-col gap-3 sm:flex-row">
-                                    <button
-                                        type="button"
-                                        onClick={() => handleRespondToInvite(competition.id, 'accepted')}
-                                        disabled={isRespondingCompetitionId === competition.id}
-                                        className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
-                                    >
-                                        <Check className="h-4 w-4" />
-                                        Join
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleRespondToInvite(competition.id, 'declined')}
-                                        disabled={isRespondingCompetitionId === competition.id}
-                                        className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-line px-5 py-3 text-sm font-medium text-ink transition-colors hover:bg-surface-raised disabled:opacity-60"
-                                    >
-                                        Decline
-                                    </button>
-                                </div>
+                        <div key={competition.id} className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-surface p-5">
+                            <div className="min-w-0">
+                                <h3 className="break-words font-semibold text-ink">{competition.title}</h3>
+                                <p className="mt-1 text-sm text-ink-secondary">{buildCompetitionSummary(competition)}</p>
+                                <p className="mt-2 text-xs text-ink-muted">{formatDates(competition)}</p>
+                            </div>
+                            <div className="flex gap-2">
+                                <Button onClick={() => handleRespondToInvite(competition.id, 'accepted')} disabled={respondingIds.includes(competition.id)}>Join</Button>
+                                <Button variant="quiet" onClick={() => handleRespondToInvite(competition.id, 'declined')} disabled={respondingIds.includes(competition.id)}>Decline</Button>
                             </div>
                         </div>
                     ))}
                 </section>
             ) : null}
 
-            {isLoading ? (
-                <div className="rounded-[1.25rem] border border-line bg-surface px-4 py-5 text-sm text-ink-secondary shadow-sm">
-                    Loading competitions...
+            {isLoading ? <p role="status" className="py-6 text-sm text-ink-muted">Loading competitions…</p> : null}
+            {error ? <p role="status" className="rounded-2xl border border-line p-5 text-sm text-ink-secondary">{error}</p> : null}
+
+            {createdEvaluation ? <section className="space-y-3" aria-label="Your new competition"><h2 className="text-lg font-semibold text-ink">Ready to go</h2>{renderCard(createdEvaluation)}</section> : null}
+
+            {activeEvaluations.length > 0 ? <section className="space-y-3" aria-label="In progress"><h2 className="text-lg font-semibold text-ink">In progress</h2>{activeEvaluations.map(renderCard)}</section> : null}
+            {scheduledEvaluations.length > 0 ? <section className="space-y-3" aria-label="Upcoming"><h2 className="text-lg font-semibold text-ink">Upcoming</h2>{scheduledEvaluations.map(renderCard)}</section> : null}
+
+            {!isLoading && !error && !createdEvaluation && activeEvaluations.length === 0 && scheduledEvaluations.length === 0 && pendingInvites.length === 0 && !competitionInviteToken ? (
+                <div className="rounded-3xl border border-dashed border-line-strong px-5 py-10 text-center">
+                    <Trophy className="mx-auto h-8 w-8 text-accent" aria-hidden="true" />
+                    <h2 className="mt-4 text-xl font-semibold text-ink">Make this week a challenge</h2>
+                    <p className="mx-auto mt-2 max-w-sm text-sm text-ink-secondary">Steps, sleep, or readiness. Pick one and you’re ready for a week with friends—or yourself.</p>
                 </div>
-            ) : null}
-
-            {error ? (
-                <div className="rounded-[1.35rem] border border-line bg-surface p-5 text-sm text-ink-secondary sm:p-6" role="status">
-                    {error}
-                </div>
-            ) : null}
-
-            {activeEvaluations.length > 0 ? (
-                <section className="space-y-4">
-                    <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Active</p>
-                        <h2 className="mt-2 text-xl font-semibold text-ink">Happening right now</h2>
-                    </div>
-                    {activeEvaluations.map((evaluation) => (
-                        <CompetitionCard
-                            key={evaluation.competition.id}
-                            evaluation={evaluation}
-                            activeProfileId={activeProfile.id}
-                            invite={inviteByCompetitionId[evaluation.competition.id] || null}
-                            canShareInvite={evaluation.competition.mode === 'friends'}
-                            shareStatus={shareStatusByCompetitionId[evaluation.competition.id] || 'idle'}
-                            onShareInvite={() => handleShareInvite(evaluation.competition.id, evaluation.competition.title)}
-                            onCopyInvite={() => handleCopyInvite(evaluation.competition.id)}
-                        />
-                    ))}
-                </section>
-            ) : null}
-
-            {scheduledEvaluations.length > 0 ? (
-                <section className="space-y-4">
-                    <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Scheduled</p>
-                        <h2 className="mt-2 text-xl font-semibold text-ink">Starts next</h2>
-                    </div>
-                    {scheduledEvaluations.map((evaluation) => (
-                        <CompetitionCard
-                            key={evaluation.competition.id}
-                            evaluation={evaluation}
-                            activeProfileId={activeProfile.id}
-                            invite={inviteByCompetitionId[evaluation.competition.id] || null}
-                            canShareInvite={evaluation.competition.mode === 'friends'}
-                            shareStatus={shareStatusByCompetitionId[evaluation.competition.id] || 'idle'}
-                            onShareInvite={() => handleShareInvite(evaluation.competition.id, evaluation.competition.title)}
-                            onCopyInvite={() => handleCopyInvite(evaluation.competition.id)}
-                        />
-                    ))}
-                </section>
             ) : null}
 
             {completedEvaluations.length > 0 ? (
-                <section className="space-y-4">
-                    <div>
-                        <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">History</p>
-                        <h2 className="mt-2 text-xl font-semibold text-ink">Recently completed</h2>
-                    </div>
-                    {completedEvaluations.map((evaluation) => (
-                        <CompetitionCard
-                            key={evaluation.competition.id}
-                            evaluation={evaluation}
-                            activeProfileId={activeProfile.id}
-                            invite={inviteByCompetitionId[evaluation.competition.id] || null}
-                            canShareInvite={evaluation.competition.mode === 'friends'}
-                            shareStatus={shareStatusByCompetitionId[evaluation.competition.id] || 'idle'}
-                            onShareInvite={() => handleShareInvite(evaluation.competition.id, evaluation.competition.title)}
-                            onCopyInvite={() => handleCopyInvite(evaluation.competition.id)}
-                        />
-                    ))}
-                </section>
+                <details className="group">
+                    <summary className="w-fit cursor-pointer py-3 text-sm font-medium text-ink-secondary">Past competitions ({completedEvaluations.length})</summary>
+                    <div className="mt-2 space-y-3">{completedEvaluations.map(renderCard)}</div>
+                </details>
             ) : null}
 
-            {!isLoading && !error && activeEvaluations.length === 0 && scheduledEvaluations.length === 0 && completedEvaluations.length === 0 ? (
-                <div className="rounded-[1.5rem] border border-dashed border-line-strong bg-surface px-5 py-8 text-center">
-                    <h2 className="text-xl font-semibold text-ink">No rivalries on the books yet</h2>
-                    <p className="mt-3 text-sm leading-relaxed text-ink-secondary">
-                        Start with a solo goal or create a friend competition that starts tomorrow.
-                    </p>
-                    <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                        <button
-                            type="button"
-                            onClick={() => handleOpenBuilder(COMPETITION_TEMPLATES.find((template) => template.mode === 'solo') || null, 'solo')}
-                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3 text-sm font-semibold text-white"
-                        >
-                            <Flag className="h-4 w-4" />
-                            Create Solo Goal
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => handleOpenBuilder(COMPETITION_TEMPLATES.find((template) => template.mode === 'friends') || null, 'friends')}
-                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-line px-5 py-3 text-sm font-medium text-ink"
-                        >
-                            <Users className="h-4 w-4" />
-                            Challenge Friends
-                        </button>
-                    </div>
-                </div>
-            ) : null}
-
-            <CompetitionBuilder
-                isOpen={isBuilderOpen}
-                activeProfile={activeProfile}
-                profiles={profiles}
-                initialTemplate={initialTemplate}
-                onClose={() => setIsBuilderOpen(false)}
-                onCreate={handleCreateCompetition}
-            />
+            <CompetitionBuilder isOpen={isBuilderOpen} activeProfile={activeProfile} profiles={profiles} onClose={() => setIsBuilderOpen(false)} onCreate={handleCreateCompetition} />
         </div>
     );
 };

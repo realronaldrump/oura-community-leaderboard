@@ -3,7 +3,7 @@ export const COMPETITION_INVITE_PARAM = 'competitionInvite';
 
 const INVITE_SHARE_TITLE = 'Join Davis Watches You Sleep';
 const INVITE_SHARE_TEXT = 'Bring your Oura ring and join Davis Watches You Sleep. Bragging rights are not guaranteed.';
-const COMPETITION_INVITE_SHARE_TEXT = 'Join my competition on Davis Watches You Sleep and start tomorrow.';
+const COMPETITION_INVITE_SHARE_TEXT = 'Join my Oura competition.';
 
 export type InviteShareResult = 'shared' | 'copied' | 'dismissed';
 
@@ -66,8 +66,13 @@ const copyInviteLinkWithExecCommand = (inviteLink: string): boolean => {
 
 const copyLink = async (inviteLink: string): Promise<string> => {
     if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(inviteLink);
-        return inviteLink;
+        try {
+            await navigator.clipboard.writeText(inviteLink);
+            return inviteLink;
+        } catch {
+            // Some browsers expose Clipboard but deny permission. Try the
+            // user-initiated document copy before reporting failure.
+        }
     }
 
     if (copyInviteLinkWithExecCommand(inviteLink)) {

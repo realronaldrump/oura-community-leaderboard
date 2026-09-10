@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { useCompetitionInvitePreview } from '../hooks/useCompetitions';
+import { deriveCompetitionStatus } from '../services/competitionEngine';
 import { AuthStatus } from '../types';
 import { formatISODateForDisplay } from '../utils/date';
 import { getCompetitionInviteToken, isInviteLocation } from '../utils/inviteLink';
@@ -68,6 +69,10 @@ const Welcome: React.FC<WelcomeProps> = ({ isCompletingOAuth = false }) => {
         isLoading: isCompetitionInviteLoading,
         error: competitionInviteError,
     } = useCompetitionInvitePreview(competitionInviteToken);
+    const competitionInviteClosed = Boolean(competitionInvitePreview && (
+        !['scheduled', 'active'].includes(deriveCompetitionStatus(competitionInvitePreview.competition)) ||
+        (competitionInvitePreview.invite.maxUses != null && competitionInvitePreview.invite.acceptedProfileIds.length >= competitionInvitePreview.invite.maxUses)
+    ));
 
     const heroCopy = useMemo(() => {
         if (competitionInviteToken) {
@@ -75,8 +80,11 @@ const Welcome: React.FC<WelcomeProps> = ({ isCompletingOAuth = false }) => {
                 eyebrow: 'Competition invitation',
                 title: competitionInvitePreview?.competition.title
                     ? `You’re invited to ${competitionInvitePreview.competition.title}.`
-                    : 'A friendly challenge is waiting for you.',
-                description: 'Choose an existing profile or connect your Oura account. The invitation stays with you through the connection.',
+                    : 'Competition invite',
+                description: isCompetitionInviteLoading ? 'Loading the challenge…'
+                    : !competitionInvitePreview ? 'Ask the host for a new link.'
+                    : competitionInviteClosed ? 'This competition is no longer accepting players.'
+                    : 'Choose your profile or connect Oura to join.',
             };
         }
 
@@ -101,7 +109,7 @@ const Welcome: React.FC<WelcomeProps> = ({ isCompletingOAuth = false }) => {
             title: 'A lovingly overbuilt leaderboard for two.',
             description: 'Compare sleep, readiness, activity, records, and competitions from your Oura data.',
         };
-    }, [competitionInvitePreview?.competition.title, competitionInviteToken, inviteLanding, profiles.length]);
+    }, [competitionInviteClosed, competitionInvitePreview, competitionInviteToken, isCompetitionInviteLoading, inviteLanding, profiles.length]);
 
     const isConnecting = isCompletingOAuth || authStatus === AuthStatus.LOADING;
     return (
@@ -123,13 +131,13 @@ const Welcome: React.FC<WelcomeProps> = ({ isCompletingOAuth = false }) => {
             </header>
 
             <main className="mx-auto grid w-full max-w-[var(--content-width)] gap-5 py-5 lg:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.72fr)] lg:items-start lg:gap-10 lg:py-12">
-                <section className="order-2 px-1 py-3 lg:order-1 lg:py-8" aria-labelledby="welcome-title">
+                <section className={`${competitionInviteToken ? 'order-1' : 'order-2'} px-1 py-3 lg:order-1 lg:py-8`} aria-labelledby="welcome-title">
                     <Badge tone={competitionInviteToken || inviteLanding ? 'accent' : 'neutral'}>
                         {competitionInviteToken ? <Trophy aria-hidden="true" className="h-3.5 w-3.5" /> : <Users aria-hidden="true" className="h-3.5 w-3.5" />}
                         {heroCopy.eyebrow}
                     </Badge>
 
-                    <h1 id="welcome-title" className="mt-5 max-w-[17ch] text-[clamp(2.25rem,8vw,4.25rem)] leading-[0.98] tracking-[-0.045em] text-[var(--color-ink)]">
+                    <h1 id="welcome-title" className={`mt-5 ${competitionInviteToken ? 'text-3xl leading-tight' : 'max-w-[17ch] text-[clamp(2.25rem,8vw,4.25rem)] leading-[0.98]'} tracking-[-0.045em] text-[var(--color-ink)]`}>
                         {heroCopy.title}
                     </h1>
                     <p className="mt-5 max-w-[58ch] text-[1rem] leading-7 text-[var(--color-ink-secondary)] sm:text-lg sm:leading-8">
@@ -150,7 +158,6 @@ const Welcome: React.FC<WelcomeProps> = ({ isCompletingOAuth = false }) => {
                                         <CalendarDays aria-hidden="true" className="h-5 w-5" />
                                     </span>
                                     <div className="min-w-0">
-                                        <p className="text-sm font-semibold text-[var(--color-ink)]">{competitionInvitePreview.competition.title}</p>
                                         <p className="mt-1 text-sm leading-6 text-[var(--color-ink-secondary)]">
                                             {formatISODateForDisplay(competitionInvitePreview.competition.startDate, 'en-US', { month: 'short', day: 'numeric' })}
                                             {' – '}
@@ -164,19 +171,19 @@ const Welcome: React.FC<WelcomeProps> = ({ isCompletingOAuth = false }) => {
                             ) : (
                                 <div className="flex items-start gap-3 text-sm leading-6 text-[var(--color-ink-secondary)]">
                                     <CloudOff aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-[var(--color-warning)]" />
-                                    <p>{competitionInviteError || 'Competition details are unavailable. You can still join the shared leaderboard.'}</p>
+                                    <p>{competitionInviteError || 'This invite is no longer available.'}</p>
                                 </div>
                             )}
                         </Card>
                     ) : null}
                 </section>
 
-                <Card variant="elevated" className="order-1 p-5 sm:p-6 lg:order-2" aria-labelledby="profile-picker-title">
+                <Card variant="elevated" className={`${competitionInviteToken ? 'order-2' : 'order-1'} p-5 sm:p-6 lg:order-2`} aria-labelledby="profile-picker-title">
                     <div className="flex items-start justify-between gap-4">
                         <div>
-                            <p className="ui-eyebrow">Choose your view</p>
+                            {!competitionInviteToken ? <p className="ui-eyebrow">Choose your view</p> : null}
                             <h2 id="profile-picker-title" className="mt-2 text-xl font-semibold text-[var(--color-ink)] sm:text-2xl">
-                                {profiles.length > 0 ? 'Choose a sleeper' : 'Connect the first profile'}
+                                {competitionInviteToken ? 'Choose your profile' : profiles.length > 0 ? 'Choose a sleeper' : 'Connect the first profile'}
                             </h2>
                         </div>
                         <CircleUserRound aria-hidden="true" className="h-7 w-7 shrink-0 text-[var(--color-accent)]" />
@@ -234,7 +241,7 @@ const Welcome: React.FC<WelcomeProps> = ({ isCompletingOAuth = false }) => {
 
                                             <div className="mt-4">
                                                 <Button variant="secondary" className="w-full justify-between" onClick={() => setActiveProfileId(profile.id)}>
-                                                    Open dashboard
+                                                    {competitionInviteToken ? 'Continue' : 'Open dashboard'}
                                                     <ArrowRight aria-hidden="true" className="h-4 w-4" />
                                                 </Button>
                                             </div>

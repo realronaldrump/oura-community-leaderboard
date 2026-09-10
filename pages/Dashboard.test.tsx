@@ -1,7 +1,7 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DailyStats, UserProfile } from '../types';
 import Dashboard from './Dashboard';
 
@@ -13,7 +13,26 @@ const mocks = vi.hoisted(() => ({
         lastKnownUtcOffsetMinutes: 0,
     } as UserProfile,
     metricDetailProps: null as Record<string, unknown> | null,
+    competitionProps: null as { profileData: Array<{ data?: DailyStats; isLoading: boolean; isError: boolean }> } | null,
+    loadHistory: vi.fn(),
 }));
+
+vi.mock('../services/firestoreStatsService', async (importOriginal) => ({
+    ...await importOriginal<typeof import('../services/firestoreStatsService')>(),
+    getStoredDailyStats: mocks.loadHistory,
+}));
+vi.mock('../components/compete/CompeteView', () => ({
+    default: (props: NonNullable<typeof mocks.competitionProps>) => {
+        mocks.competitionProps = props;
+        return <div>Competition test view</div>;
+    },
+}));
+
+beforeEach(() => {
+    window.history.replaceState({}, '', '/');
+    mocks.loadHistory.mockReset().mockResolvedValue(null);
+    mocks.competitionProps = null;
+});
 
 vi.mock('../contexts/UserContext', () => ({
     useUser: () => ({
@@ -112,6 +131,7 @@ describe('Dashboard sleep details', () => {
         expect(screen.queryByRole('button', { name: /refresh oura data/i })).not.toBeInTheDocument();
         expect(screen.queryByText(/sync attention needed|try sync again|sync is stale/i)).not.toBeInTheDocument();
         expect(screen.queryByText('Just now')).not.toBeInTheDocument();
+        expect(mocks.loadHistory).not.toHaveBeenCalled();
     });
 
     it('opens Total Sleep with the selected main session timing', async () => {
@@ -139,5 +159,19 @@ describe('Dashboard sleep details', () => {
             bedtime_start: '2026-08-10T22:47:00-06:00',
             bedtime_end: '2026-08-11T06:32:00-06:00',
         });
+    });
+});
+
+describe('competition history hydration', () => {
+    it('loads full history on the competition route and merges current saved scores', async () => {
+        window.history.replaceState({}, '', '/leaderboard/compete');
+        const today = new Date().toISOString().slice(0, 10);
+        mocks.loadHistory.mockResolvedValue(makeStats('2000-01-01'));
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        client.setQueryData(['dailyStats', mocks.profile.id], makeStats(today));
+        render(<QueryClientProvider client={client}><Dashboard /></QueryClientProvider>);
+        await waitFor(() => expect(mocks.competitionProps?.profileData[0].data?.activity.map((item) => item.day)).toEqual(expect.arrayContaining(['2000-01-01', today])));
+        expect(mocks.loadHistory).toHaveBeenCalledWith(mocks.profile.id);
+        expect(mocks.competitionProps?.profileData[0]).toMatchObject({ isLoading: false, isError: false });
     });
 });

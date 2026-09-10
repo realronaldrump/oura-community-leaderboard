@@ -359,85 +359,49 @@ export const COMPETITION_METRICS_BY_ID = COMPETITION_METRICS.reduce<Record<Compe
     {} as Record<CompetitionMetricId, CompetitionMetricDefinition>
 );
 
+// Curated defaults for new challenges. Saved competitions retain their own rules.
 export const COMPETITION_TEMPLATES: CompetitionTemplate[] = [
     {
-        id: 'step-sprint',
-        title: 'Step Sprint',
-        description: 'Seven days. Highest total step progress wins.',
+        id: 'steps-week',
+        title: 'Step Week',
+        description: 'Most steps wins.',
         mode: 'friends',
         format: 'race',
+        scoring: 'total',
         durationDays: 7,
         accentColor: '#D4B87B',
-        rules: [
-            createRule('steps', 10000, { aggregation: 'daily' }),
-        ],
+        rules: [createRule('steps', 10000, { aggregation: 'total', capAtTarget: false })],
     },
     {
-        id: 'sleep-week',
+        id: 'sleep-score-week',
         title: 'Sleep Week',
-        description: 'Hit a strong sleep score every night for a week.',
-        mode: 'solo',
-        format: 'goal',
+        description: 'Highest average sleep score wins.',
+        mode: 'friends',
+        format: 'race',
+        scoring: 'average',
         durationDays: 7,
         accentColor: '#7BA8D4',
-        rules: [
-            createRule('sleep_score', 85),
-        ],
+        rules: [createRule('sleep_score', 85, { aggregation: 'average', capAtTarget: false })],
     },
     {
-        id: 'recovery-reset',
-        title: 'Recovery Reset',
-        description: 'Sleep and readiness both need to land in the green.',
-        mode: 'solo',
-        format: 'goal',
-        durationDays: 5,
+        id: 'readiness-week',
+        title: 'Readiness Week',
+        description: 'Highest average readiness score wins.',
+        mode: 'friends',
+        format: 'race',
+        scoring: 'average',
+        durationDays: 7,
         accentColor: '#7BC4A0',
-        rules: [
-            createRule('sleep_score', 82),
-            createRule('readiness_score', 80),
-        ],
-    },
-    {
-        id: 'balanced-week',
-        title: 'Balanced Week',
-        description: 'A weighted blend of steps, sleep, and readiness.',
-        mode: 'friends',
-        format: 'combo',
-        durationDays: 7,
-        accentColor: '#6B9E8A',
-        rules: [
-            createRule('steps', 10000, { weight: 0.4 }),
-            createRule('sleep_score', 85, { weight: 0.3 }),
-            createRule('readiness_score', 80, { weight: 0.3 }),
-        ],
-    },
-    {
-        id: 'early-bedtime-club',
-        title: 'Early Bedtime Club',
-        description: 'Build a streak of earlier nights and enough sleep.',
-        mode: 'solo',
-        format: 'goal',
-        durationDays: 7,
-        accentColor: '#A78BFA',
-        rules: [
-            createRule('bedtime_start', 22 * 60, { operator: 'lte' }),
-            createRule('total_sleep_duration', 7.5),
-        ],
-    },
-    {
-        id: 'hrv-build',
-        title: 'HRV Build',
-        description: 'A recovery race powered by HRV and low resting heart rate.',
-        mode: 'friends',
-        format: 'combo',
-        durationDays: 14,
-        accentColor: '#D4897B',
-        rules: [
-            createRule('average_hrv', 45, { weight: 0.55 }),
-            createRule('lowest_heart_rate', 55, { weight: 0.45, operator: 'lte' }),
-        ],
+        rules: [createRule('readiness_score', 80, { aggregation: 'average', capAtTarget: false })],
     },
 ];
+
+export const getSoloChallengeDescription = (template: CompetitionTemplate): string => {
+    const rule = template.rules[0];
+    if (rule.metricId === 'steps') return 'Reach 10,000 steps a day.';
+    if (rule.metricId === 'sleep_score') return 'Reach a sleep score of 85 each day.';
+    return 'Reach a readiness score of 80 each day.';
+};
 
 export const getCompetitionMetricDefinition = (metricId: CompetitionMetricId): CompetitionMetricDefinition =>
     COMPETITION_METRICS_BY_ID[metricId];

@@ -50,6 +50,8 @@ export interface Competition {
     description?: string;
     mode: CompetitionMode;
     format: CompetitionFormat;
+    /** New single-metric challenges use real units; absent on legacy competitions. */
+    scoring?: 'total' | 'average';
     status: CompetitionStatus;
     createdByProfileId: string;
     createdAt: string;
@@ -108,6 +110,7 @@ export interface CompetitionTemplate {
     description: string;
     mode: CompetitionMode;
     format: CompetitionFormat;
+    scoring?: 'total' | 'average';
     durationDays: number;
     accentColor: string;
     rules: CompetitionRule[];
