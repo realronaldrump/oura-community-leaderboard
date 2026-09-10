@@ -75,11 +75,18 @@ describe("server-owned Oura snapshot model", () => {
       startDay: "2025-07-05",
       endDay: "2025-12-31",
     });
-    expect(getHistoryReconciliationRange("2016-01-01")).toBeNull();
+    expect(getHistoryReconciliationRange("2000-01-01")).toBeNull();
+    expect(getHistoryReconciliationRange("2016-01-01")?.endDay).toBe("2015-12-31");
   });
 });
 
 describe("collection-specific coverage repair", () => {
+  it("does not declare history complete when an endpoint has never succeeded", async () => {
+    const { nextCoverageGap, updateSourceCoverage } = await import("../domain/coverage");
+    const failed = updateSourceCoverage(undefined, { startDay: "2026-09-01", endDay: "2026-09-10" }, "failed");
+    expect(nextCoverageGap({ heartrate: failed })?.endDay).toBe("2026-09-10");
+    expect(nextCoverageGap({ heartrate: { ...failed, status: "unavailable" } })).toBeNull();
+  });
   it("finds an unscanned gap inside already stored history and retries an optional failure", async () => {
     const { nextCoverageGap, updateSourceCoverage, historicalCoverageKey } =
       await import("../domain/coverage");

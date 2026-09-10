@@ -3,7 +3,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { FieldValue } from './storageFields.js';
 import { getAdminFirestore } from './firebaseAdmin.js';
 import { postOuraTokenRequest } from './ouraTokenRequest.js';
-import { nextCoverageGap, updateSourceCoverage } from '../../domain/coverage.js';
+import { nextCoverageGap, updateSourceCoverage, OURA_HISTORY_START_DAY } from '../../domain/coverage.js';
 import { deriveProfileTemporalMetadata, shouldReplaceProfileTemporalMetadata } from '../../utils/profileTemporal.js';
 import type { DailyStats } from '../../types.js';
 import { monthsBetween, requestInsightRefresh, runInsightJob } from './insightsProjection.js';
@@ -22,7 +22,7 @@ const MAX_CONCURRENT_REQUESTS = 4;
 const MAX_CONCURRENT_PROFILES = 2;
 const LEASE_MS = 55_000;
 const WEBHOOK_COOLDOWN_MS = 15_000;
-const HISTORY_START_DAY = '2016-01-01';
+const HISTORY_START_DAY = OURA_HISTORY_START_DAY;
 const HISTORY_CHUNK_DAYS = 180;
 
 export type BackgroundSyncReason = 'webhook' | 'cron' | 'bootstrap' | 'backfill' | 'replay';

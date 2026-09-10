@@ -20,6 +20,7 @@ export default async function handler(req: any, res: any) {
         backend: "mini-pc",
         cutover: Boolean(data.active),
         build: data.build,
+        mode: data.mode,
       });
   } catch {
     return res

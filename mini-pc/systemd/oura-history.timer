@@ -1,0 +1,8 @@
+[Unit]
+Description=Refetch complete available Oura history into local storage
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=1min
+Unit=oura-worker@history.service
+[Install]
+WantedBy=timers.target

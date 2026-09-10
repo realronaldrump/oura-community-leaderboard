@@ -1,4 +1,6 @@
 import { shiftDay, type CollectionCoverage } from "./metrics.js";
+// Predates Oura history; do not silently omit early accounts with a 2016 cutoff.
+export const OURA_HISTORY_START_DAY = "2000-01-01";
 export type CoverageInterval = { startDay: string; endDay: string };
 export interface SourceCoverage extends CollectionCoverage {
   intervals: CoverageInterval[];
@@ -24,7 +26,7 @@ export function updateSourceCoverage(
   previous: SourceCoverage | undefined,
   incoming: CoverageInterval,
   status: CollectionCoverage["status"],
-  historyStart = "2016-01-01",
+  historyStart = OURA_HISTORY_START_DAY,
 ): SourceCoverage {
   const intervals =
     status === "ready"
@@ -46,13 +48,20 @@ export function updateSourceCoverage(
 /** Newest uncovered historical interval, independently of whether it contains observations. */
 export function nextCoverageGap(
   sources: Record<string, SourceCoverage>,
-  historyStart = "2016-01-01",
+  historyStart = OURA_HISTORY_START_DAY,
   chunkDays = 180,
 ): CoverageInterval | null {
   const gaps: CoverageInterval[] = [];
   for (const coverage of Object.values(sources)) {
-    if (coverage.status === "unavailable" || !coverage.intervals?.length)
+    if (coverage.status === "unavailable") continue;
+    if (!coverage.intervals?.length) {
+      // An endpoint that has never succeeded is pending, not fully scanned.
+      if (coverage.endDay) gaps.push({
+        startDay: [historyStart, shiftDay(coverage.endDay, -chunkDays + 1)].sort().at(-1)!,
+        endDay: coverage.endDay,
+      });
       continue;
+    }
     const intervals = [...coverage.intervals].sort((a, b) =>
       a.startDay.localeCompare(b.startDay),
     );

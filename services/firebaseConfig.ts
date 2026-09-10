@@ -13,13 +13,14 @@ const firebaseConfig = {
     measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-YTXWV81KBG"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+// Local storage mode must not initialize a Firestore client or transport.
+const remote = Boolean(import.meta.env.VITE_OURA_API_URL);
+const app = remote ? null : initializeApp(firebaseConfig);
+export const db = app ? getFirestore(app) : {} as ReturnType<typeof getFirestore>;
 
 // Firestore's full browser SDK uses a realtime WebChannel transport. That is
 // appropriate for listeners, but a cold WebChannel negotiation can delay the
 // first one-shot read for many seconds on mobile networks. The Lite instance
 // uses the REST transport, so critical bootstrap reads can complete without
 // waiting for the realtime connection to initialize.
-export const bootstrapDb = getBootstrapFirestore(app);
+export const bootstrapDb = app ? getBootstrapFirestore(app) : {} as ReturnType<typeof getBootstrapFirestore>;

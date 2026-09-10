@@ -1,7 +1,8 @@
 import type { DailyStats, UserProfile } from '../types';
+import { storageKey } from './storageScope';
 
-const PROFILE_CACHE_KEY = 'oura-launch-profile-v1';
-const DASHBOARD_CACHE_PREFIX = 'oura-launch-dashboard-v1:';
+const profileCacheKey = () => storageKey('oura-launch-profile-v1');
+const dashboardCachePrefix = () => storageKey('oura-launch-dashboard-v1:');
 
 type CachedProfile = {
     schemaVersion: 1;
@@ -41,7 +42,7 @@ const isCompactDailyStats = (value: unknown): value is DailyStats => {
 
 export const readLaunchProfile = (activeProfileId: string | null): UserProfile | null => {
     if (!activeProfileId) return null;
-    const cached = parseRecord(storage()?.getItem(PROFILE_CACHE_KEY) || null) as CachedProfile | null;
+    const cached = parseRecord(storage()?.getItem(profileCacheKey()) || null) as CachedProfile | null;
     return cached?.schemaVersion === 1 && cached.profile?.id === activeProfileId
         ? cached.profile
         : null;
@@ -55,7 +56,7 @@ export const writeLaunchProfile = (profile: UserProfile): void => {
         ...publicProfile
     } = profile;
     try {
-        storage()?.setItem(PROFILE_CACHE_KEY, JSON.stringify({
+        storage()?.setItem(profileCacheKey(), JSON.stringify({
             schemaVersion: 1,
             profile: publicProfile,
         } satisfies CachedProfile));
@@ -66,13 +67,13 @@ export const writeLaunchProfile = (profile: UserProfile): void => {
 
 export const clearLaunchProfile = (): void => {
     try {
-        storage()?.removeItem(PROFILE_CACHE_KEY);
+        storage()?.removeItem(profileCacheKey());
     } catch {
         // Nothing else should fail because a device declined local storage.
     }
 };
 
-const dashboardKey = (profileId: string) => `${DASHBOARD_CACHE_PREFIX}${profileId}`;
+const dashboardKey = (profileId: string) => `${dashboardCachePrefix()}${profileId}`;
 
 export const readLaunchDashboardStats = (profileId: string): DailyStats | null => {
     const cached = parseRecord(storage()?.getItem(dashboardKey(profileId)) || null) as CachedDashboard | null;

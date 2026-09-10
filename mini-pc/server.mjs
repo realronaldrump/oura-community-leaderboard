@@ -190,6 +190,7 @@ const server = http.createServer(
           const migration = store.latestMigration();
           return json(res, 200, {
             active: store.getControl("activeMigration"),
+            mode: store.getControl("storageActivation")?.mode || "firestore-copy",
             build: buildHash,
             migration: migration
               ? {

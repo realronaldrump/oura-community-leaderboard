@@ -1,20 +1,22 @@
-# Mini PC storage migration
+# Mini PC storage and Oura refetch
 
 ## Current rollout state (September 10, 2026)
 
-The isolated SQLite service and background timers are installed on the mini PC. The first source copy is paused by Firestore's exhausted read quota (zero documents copied at the initial check). **Production still uses Firestore. No data migration or cutover has completed.** The timers resume copying after a quota failure; they never activate a copy automatically.
+The owner chose a fresh Oura refetch instead of migrating Firestore. The mini PC is activated in `oura-refetch` mode, and production uses its SQLite storage through the existing Vercel app. **The Firestore copy timer is disabled.** Firestore documents, prior copy state, and local archives remain untouched. No historical health data was copied from Firestore.
 
-Tailscale is connected, and the owner-authorized Funnel endpoint is running at `https://davis-mini-pc-1.tail59b3f5.ts.net:8443`. Its health check succeeds and private routes reject unauthenticated access with HTTP 401. The existing tailnet-only HTTPS service on port 443 is unchanged. Endpoint setup is complete; the source copy and verified cutover gates below remain pending. Do not replace the existing 443 service or expose the database file.
+Tailscale is connected, and the owner-authorized Funnel endpoint is running at `https://davis-mini-pc-1.tail59b3f5.ts.net:8443`. Its health check succeeds and private routes reject unauthenticated access with HTTP 401. The existing tailnet-only HTTPS service on port 443 is unchanged. Do not replace the existing 443 service or expose the database file.
+
+Reconnect each Oura account in the deployed app. The first sync fetches recent data; a one-minute history worker then resumes older calendar windows, sharing work across connected profiles. It scans back to 2000 (before Oura history), records successful empty windows, and retries failed collections. Only data that Oura still makes available and the account authorizes can be refetched. App-only exclusions, profile customizations, competitions, and invitations cannot be recreated from Oura; their originals remain in Firestore. New app activity is stored only on the mini PC. Existing browser caches are retained under their old keys and are not shown in the new storage mode.
 
 ## Architecture and retention
 
-- Vercel retains the existing UI, OAuth redirect, invitation URLs, and authenticated server gateway. `OURA_MINI_PC_URL` and server-only `OURA_MINI_PC_TOKEN` enable that gateway explicitly. Neither is enabled during initial copying.
-- `VITE_OURA_API_URL` enables direct browser access to the mini PC's public document API and change stream. Set it only after activation. Never expose the transport token in a `VITE_` variable.
+- Vercel retains the existing UI, OAuth redirect, route structure, and authenticated server gateway. Production `OURA_MINI_PC_URL` and server-only `OURA_MINI_PC_TOKEN` enable the gateway.
+- Production `VITE_OURA_API_URL` enables direct browser access to the mini PC's public document API and change stream. The browser does not initialize Firebase in this mode. Never expose the transport token in a `VITE_` variable.
 - The mini PC owns sync, records computation, webhook replay, and SQLite. It uses the existing anonymous shared-circle access model. Public access excludes credentials, migration archives, background jobs, and historical revisions.
 - Every document mutation appends the prior/current history through immutable revision rows. Logical removals retain earlier payloads. Profile removal is disabled. No retention job deletes revisions, raw copy pages, source documents, or backups.
 - The copier discovers every root and nested collection, including unknown collections and descendants of missing parent documents. It uses one fixed Firestore read timestamp per generation, paginates, preserves exact REST response pages and native field representations, and verifies document hashes independently against the archived pages. Quota errors are failures, never empty successful results.
-- Completed copies require a verified SQLite backup and raw-page copy on a separate disk. Source rules and source Firestore documents remain available as an archive after cutover. The app's downloadable data export is not a complete database backup.
-- The mini PC keeps a durable signed-webhook inbox, including raw bytes, retry status, and processed events. Busy or failed sync does not discard an event. Existing source credentials are copied privately; no reconnect should be required solely for migration.
+- The unused copy workflow requires a verified SQLite backup and raw-page copy on a separate disk. Fresh refetch activation instead backs up the empty local store and refuses to overwrite any existing current documents or active storage. Source Firestore documents remain available separately. The app's downloadable data export is not a complete database backup.
+- The mini PC keeps a durable signed-webhook inbox, including raw bytes, retry status, and processed events. Busy or failed sync does not discard an event. Refetch mode requires a fresh Oura connection; credentials are stored only by the local server after that connection.
 
 ## Installed paths and operations
 
@@ -28,7 +30,7 @@ All following paths are on `100.96.182.111`, owned by `davis`:
 | `/home/davis/oura-community-leaderboard/source-archive` | Exact successful source response pages, by copy generation |
 | `/mnt/seagate20tb/oura-backups` | Independent SQLite backups, hashes, source pages, manifests and configuration backup |
 
-`oura-storage.service` is a user systemd service bound to `127.0.0.1:8740`. `oura-worker@.service` runs bounded one-shot workers. Timers run copy and records each minute, inbox replay every 30 seconds, sync every 15 minutes, backup daily at 04:30, and webhook maintenance daily at 06:30 (mini PC system timezone). All sync/record/inbox workers wait for activation. Copy retries back off 30 minutes on source quota exhaustion. User lingering is enabled, so services survive SSH logout.
+`oura-storage.service` is a user systemd service bound to `127.0.0.1:8740`. `oura-worker@.service` runs bounded one-shot workers. Timers run history refetch and records each minute, inbox replay every 30 seconds, sync every 15 minutes, backup daily at 04:30, and webhook maintenance daily at 06:30 (mini PC system timezone). Copy is disabled. All workers wait for activation and history refetch waits for an Oura connection. User lingering is enabled, so services survive SSH logout.
 
 ```bash
 ssh 100.96.182.111 'systemctl --user status oura-storage.service --no-pager'
@@ -41,7 +43,9 @@ Health `ready: false` means staging, not data loss. `operator status` displays o
 
 Build service bundles on the development Mac with `node scripts/build-mini-pc.mjs`, then copy `.vercel/mini-pc-release/` additively into the remote staging directory. Use the existing lockfile with `npm ci --omit=dev --ignore-scripts` there. Copy the checked-in `mini-pc/systemd/` units to the user's systemd directory and reload systemd. Deployment must not touch the data, private configuration, raw archives, backups, or other applications.
 
-## Cutover sequence — required gates
+## Unused copy-based cutover — historical procedure
+
+**Do not run this procedure for the current refetch setup.** The owner explicitly chose `node operator.mjs activate-refetch` after a verified local backup. Re-activation refuses an already active store; it never resets connected profiles. The old workflow below is retained for reference only.
 
 1. Wait for the initial recursive copy to report `verified`, with a nonempty manifest and an independent verified backup. Inspect root/subcollection counts and representative source records, including credentials, exclusions, competitions, raw samples, and record metadata. Review unknown collections; do not filter them out.
 2. Verify the public Funnel endpoint is healthy and private routes reject anonymous access. Set the **server-only** production Vercel URL/token and redeploy. Leave `VITE_OURA_API_URL` unset. Verify `/api/storage-status` reports `backend: mini-pc` with the actual mini PC build hash. At this point new server writes are paused on staging and signed webhooks queue durably.
@@ -57,7 +61,7 @@ Do not restore the old Firestore writer after local activation: it would omit ne
 `npm run verify` checks the app and server imports. On Node 22 with native SQLite:
 
 ```bash
-node --test mini-pc/document-store.test.mjs
+node --test mini-pc/*.test.mjs
 ```
 
-Tests cover transaction conflicts and atomicity, retained revisions, full native wire values, unknown/missing-parent collection discovery, unusual document IDs, byte-exact webhook replay, quota pauses, source rules, independent backups, and rollback on failed activation. Browser transport tests cover snapshot pagination, subscriptions, conflicts and no fallback. Production data-dependent checks remain pending until Firestore permits the copy.
+Tests cover transaction conflicts and atomicity, retained revisions, full native wire values, unknown/missing-parent collection discovery, unusual document IDs, byte-exact webhook replay, quota pauses, source rules, independent backups, fresh activation, failed activation, and resumable refetch. Browser tests cover snapshot pagination, subscriptions, conflicts, no fallback, no Firebase initialization, and isolation of old caches. Live Oura data and record evidence can be checked after the owner reconnects an account.

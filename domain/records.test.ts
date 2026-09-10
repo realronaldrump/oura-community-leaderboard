@@ -240,7 +240,7 @@ describe("scanned history coverage", () => {
     expect(failed.complete).toBe(false);
     const complete = updateSourceCoverage(
       older,
-      { startDay: "2016-01-01", endDay: "2025-11-30" },
+      { startDay: "2000-01-01", endDay: "2025-11-30" },
       "ready",
     );
     expect(complete.complete).toBe(true);

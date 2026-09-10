@@ -1,4 +1,5 @@
 import { replayInbox } from "./webhook-inbox.mjs";
+import { refetchHistory } from "./refetch.mjs";
 import { maintainWebhooks } from "./webhooks.mjs";
 import fs from "node:fs";
 import path from "node:path";
@@ -8,6 +9,8 @@ import { reconcileInsights } from "../api/_lib/insightsProjection.ts";
 import {
   syncAllOuraProfiles,
   syncOuraUser,
+  syncOuraProfile,
+  reconcileProfileHistory,
 } from "../api/_lib/ouraBackgroundSync.ts";
 const config = JSON.parse(
   fs.readFileSync(process.env.OURA_CONFIG_FILE, "utf8"),
@@ -26,6 +29,9 @@ try {
     result = { status: "waiting_for_verified_migration" };
   else if (mode === "webhooks") result = await maintainWebhooks(config);
   else if (mode === "inbox") result = await replayInbox(store, syncOuraUser);
+  else if (mode === "history") result = await refetchHistory(store, {
+    syncProfile: syncOuraProfile, reconcileHistory: reconcileProfileHistory,
+  });
   else if (mode === "sync") {
     result = await syncAllOuraProfiles({ db: store });
   } else if (mode === "backup")

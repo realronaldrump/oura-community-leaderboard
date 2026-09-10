@@ -10,6 +10,7 @@ import {
     writeLaunchProfile,
 } from '../services/launchCache';
 import { sanitizeGrantedOuraScopes } from '../utils/ouraScopes';
+import { storageKey } from '../services/storageScope';
 
 interface AddProfileOptions {
     accessToken: string;
@@ -60,13 +61,13 @@ const withBootstrapTimeout = <T,>(task: Promise<T>): Promise<T> => new Promise((
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [activeProfileId, setActiveProfileIdState] = useState<string | null>(() => {
         if (typeof window !== 'undefined') {
-            return localStorage.getItem('active_profile_id') || null;
+            return localStorage.getItem(storageKey('active_profile_id')) || null;
         }
         return null;
     });
     const [profiles, setProfiles] = useState<UserProfile[]>(() => {
         if (typeof window === 'undefined') return [];
-        const rememberedId = localStorage.getItem('active_profile_id') || null;
+        const rememberedId = localStorage.getItem(storageKey('active_profile_id')) || null;
         const rememberedProfile = readLaunchProfile(rememberedId);
         return rememberedProfile ? [rememberedProfile] : [];
     });
@@ -198,9 +199,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     useEffect(() => {
         if (activeProfileId) {
-            localStorage.setItem('active_profile_id', activeProfileId);
+            localStorage.setItem(storageKey('active_profile_id'), activeProfileId);
         } else {
-            localStorage.removeItem('active_profile_id');
+            localStorage.removeItem(storageKey('active_profile_id'));
         }
     }, [activeProfileId]);
 

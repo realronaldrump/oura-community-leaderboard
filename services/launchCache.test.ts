@@ -13,7 +13,22 @@ const stats: DailyStats = {
 };
 
 describe('bounded launch cache', () => {
-    beforeEach(() => localStorage.clear());
+    beforeEach(() => { localStorage.clear(); vi.stubEnv('VITE_OURA_API_URL', ''); });
+    afterEach(() => vi.unstubAllEnvs());
+
+    it('retains cloud caches but never shows them in mini PC mode', () => {
+        writeLaunchProfile({ id: 'same-id', firstName: 'Cloud' } as UserProfile);
+        writeLaunchDashboardStats('same-id', stats);
+        vi.stubEnv('VITE_OURA_API_URL', 'https://storage.example');
+        expect(readLaunchProfile('same-id')).toBeNull();
+        expect(readLaunchDashboardStats('same-id')).toBeNull();
+        writeLaunchProfile({ id: 'same-id', firstName: 'Local' } as UserProfile);
+        expect(readLaunchProfile('same-id')?.firstName).toBe('Local');
+        clearLaunchProfile();
+        vi.stubEnv('VITE_OURA_API_URL', '');
+        expect(readLaunchProfile('same-id')?.firstName).toBe('Cloud');
+        expect(readLaunchDashboardStats('same-id')).toEqual(stats);
+    });
 
     it('remembers only public profile fields', () => {
         writeLaunchProfile({
