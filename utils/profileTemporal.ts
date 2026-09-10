@@ -7,8 +7,8 @@ import {
     getOffsetIsoDay,
     getRelativeOffsetISODate,
     parseUtcOffsetMinutesFromIso,
-} from './temporal';
-import type { ProfileOffsetSource } from './temporal';
+} from './temporal.js';
+import type { ProfileOffsetSource } from './temporal.js';
 
 export type ProfileTemporalMetadata = {
     lastKnownUtcOffsetMinutes: number;
