@@ -1,6 +1,7 @@
+import { proxyToMiniPc } from '../_lib/miniPcProxy.js';
 import crypto from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue } from '../_lib/storageFields.js';
 import { getAdminFirestore } from '../_lib/firebaseAdmin.js';
 import { syncOuraProfile } from '../_lib/ouraBackgroundSync.js';
 
@@ -80,6 +81,7 @@ export const buildPublicProfile = (
 export const maxDuration = 60;
 
 export default async function handler(req: any, res: any) {
+    if (await proxyToMiniPc(req, res, '/api/profiles/connect')) return;
     if (req.method !== 'POST') {
         sendJson(res, 405, { error: 'method_not_allowed' });
         return;

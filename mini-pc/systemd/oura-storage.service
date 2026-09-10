@@ -1,0 +1,19 @@
+[Unit]
+Description=Oura local storage and API
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/davis/oura-community-leaderboard/staging
+Environment=OURA_CONFIG_FILE=/home/davis/oura-community-leaderboard/private/config.json
+ExecStart=/usr/bin/node --max-old-space-size=512 server.mjs
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+MemoryMax=768M
+CPUQuota=75%
+Nice=10
+
+[Install]
+WantedBy=default.target

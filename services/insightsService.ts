@@ -6,7 +6,7 @@ import {
   onSnapshot,
   query,
   where,
-} from "firebase/firestore";
+} from "./documentClient";
 import { db } from "./firebaseConfig";
 import type { DailyStats } from "../types";
 import { hasMetricInMask, type MetricObservation } from "../domain/metrics";

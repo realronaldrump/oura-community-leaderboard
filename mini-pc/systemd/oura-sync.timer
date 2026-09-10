@@ -1,0 +1,8 @@
+[Unit]
+Description=Reconcile Oura into local storage
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=15min
+Unit=oura-worker@sync.service
+[Install]
+WantedBy=timers.target

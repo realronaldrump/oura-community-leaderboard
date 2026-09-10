@@ -1,0 +1,8 @@
+[Unit]
+Description=Prepare Oura records from local data
+[Timer]
+OnBootSec=3min
+OnUnitInactiveSec=1min
+Unit=oura-worker@records.service
+[Install]
+WantedBy=timers.target

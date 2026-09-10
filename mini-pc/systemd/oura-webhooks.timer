@@ -1,0 +1,8 @@
+[Unit]
+Description=Maintain Oura webhook subscriptions
+[Timer]
+OnCalendar=*-*-* 06:30:00
+Persistent=true
+Unit=oura-worker@webhooks.service
+[Install]
+WantedBy=timers.target

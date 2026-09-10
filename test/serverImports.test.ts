@@ -43,7 +43,7 @@ describe("deployed Node entrypoints", () => {
           !specifier.text.startsWith(".")
         )
           continue;
-        expect(specifier.text, `Node import in ${source}`).toMatch(/\.js$/);
+        expect(specifier.text, `Node import in ${source}`).toMatch(/\.m?js$/);
         compile(
           path.normalize(
             path.join(

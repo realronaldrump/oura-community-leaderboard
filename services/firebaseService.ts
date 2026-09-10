@@ -8,13 +8,13 @@ import {
     QuerySnapshot,
     DocumentData,
     runTransaction,
-} from "firebase/firestore";
+} from "./documentClient";
 import {
     collection as bootstrapCollection,
     doc as bootstrapDoc,
     getDoc as getBootstrapDoc,
     getDocs as getBootstrapDocs,
-} from "firebase/firestore/lite";
+} from "./documentClientLite";
 import { bootstrapDb, db } from "./firebaseConfig";
 import { UserProfile, WebhookSignal } from "../types";
 import {

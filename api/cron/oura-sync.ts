@@ -1,3 +1,4 @@
+import { proxyToMiniPc } from '../_lib/miniPcProxy.js';
 import crypto from 'node:crypto';
 import { syncAllOuraProfiles } from '../_lib/ouraBackgroundSync.js';
 
@@ -49,6 +50,7 @@ const maintainWebhookSubscriptions = async (req: any): Promise<boolean> => {
 };
 
 export default async function handler(req: any, res: any) {
+    if (await proxyToMiniPc(req, res, '/api/cron/oura-sync')) return;
     if (req.method !== 'GET') {
         sendJson(res, 405, { error: 'method_not_allowed' });
         return;

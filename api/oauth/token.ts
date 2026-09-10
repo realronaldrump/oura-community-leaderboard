@@ -1,3 +1,4 @@
+import { proxyToMiniPc } from '../_lib/miniPcProxy.js';
 import { postOuraTokenRequest, sanitizeOuraTokenError } from '../_lib/ouraTokenRequest.js';
 
 const DEFAULT_OURA_CLIENT_ID = '92e4c379-b278-4c42-a7c0-db088b67680f';
@@ -25,6 +26,7 @@ const sendJson = (res: any, status: number, payload: Record<string, unknown>) =>
 };
 
 export default async function handler(req: any, res: any) {
+    if (await proxyToMiniPc(req, res, '/api/oauth/token')) return;
     if (req.method !== 'POST') {
         sendJson(res, 405, { error: 'method_not_allowed' });
         return;

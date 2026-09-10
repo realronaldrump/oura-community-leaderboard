@@ -1,3 +1,4 @@
+import { proxyToMiniPc } from '../_lib/miniPcProxy.js';
 import { getAdminFirestore } from '../_lib/firebaseAdmin.js';
 
 const PROFILES_COLLECTION = 'profiles';
@@ -19,6 +20,7 @@ export const isValidProfileId = (value: unknown): value is string =>
 export const maxDuration = 60;
 
 export default async function handler(req: any, res: any) {
+    if (await proxyToMiniPc(req, res, '/api/profiles/remove')) return;
     if (req.method !== 'POST') {
         sendJson(res, 405, { error: 'method_not_allowed' });
         return;

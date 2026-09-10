@@ -14,7 +14,7 @@ import {
     updateDoc,
     where,
     writeBatch,
-} from 'firebase/firestore';
+} from './documentClient';
 import { db } from './firebaseConfig';
 import { deriveCompetitionStatus } from './competitionEngine';
 import {

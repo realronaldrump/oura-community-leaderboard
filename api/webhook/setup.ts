@@ -1,3 +1,4 @@
+import { proxyToMiniPc } from '../_lib/miniPcProxy.js';
 import crypto from 'node:crypto';
 
 const OURA_WEBHOOK_BASE_URL = 'https://api.ouraring.com/v2/webhook/subscription';
@@ -229,6 +230,7 @@ const summarizeSubscriptions = (subscriptions: WebhookSubscription[], callbackUr
 };
 
 export default async function handler(req: any, res: any) {
+    if (await proxyToMiniPc(req, res, '/api/webhook/setup')) return;
     if (req.method !== 'GET' && req.method !== 'POST') {
         sendJson(res, 405, { error: 'method_not_allowed' });
         return;

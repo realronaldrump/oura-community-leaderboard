@@ -1,0 +1,8 @@
+[Unit]
+Description=Replay retained Oura webhook deliveries
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=30sec
+Unit=oura-worker@inbox.service
+[Install]
+WantedBy=timers.target

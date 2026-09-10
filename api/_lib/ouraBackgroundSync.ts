@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
-import { FieldValue, type Firestore } from 'firebase-admin/firestore';
+import type { Firestore } from 'firebase-admin/firestore';
+import { FieldValue } from './storageFields.js';
 import { getAdminFirestore } from './firebaseAdmin.js';
 import { postOuraTokenRequest } from './ouraTokenRequest.js';
 import { nextCoverageGap, updateSourceCoverage } from '../../domain/coverage.js';
@@ -24,7 +25,7 @@ const WEBHOOK_COOLDOWN_MS = 15_000;
 const HISTORY_START_DAY = '2016-01-01';
 const HISTORY_CHUNK_DAYS = 180;
 
-export type BackgroundSyncReason = 'webhook' | 'cron' | 'bootstrap' | 'backfill';
+export type BackgroundSyncReason = 'webhook' | 'cron' | 'bootstrap' | 'backfill' | 'replay';
 
 type BackgroundProfile = {
     id: string;
@@ -769,7 +770,7 @@ const claimLease = async (
         transaction.set(stateRef, {
             profileId,
             leaseToken: token,
-            leaseUntil: new Date(nowMs + LEASE_MS).toISOString(),
+            leaseUntil: new Date(nowMs + (process.env.OURA_DB_PATH ? 240_000 : LEASE_MS)).toISOString(),
             lastAttemptAt: now.toISOString(),
             lastReason: reason,
         }, { merge: true });

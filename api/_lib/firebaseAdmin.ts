@@ -1,3 +1,4 @@
+import { getLocalDocumentStore } from '../../mini-pc/document-store.mjs';
 import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
@@ -84,6 +85,7 @@ export const isFirebaseAdminConfigured = (): boolean => {
 };
 
 export const getAdminFirestore = () => {
+    if (process.env.OURA_DB_PATH) return getLocalDocumentStore() as unknown as ReturnType<typeof getFirestore>;
     const app = ensureAdminApp();
     return getFirestore(app);
 };

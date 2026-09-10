@@ -1,6 +1,7 @@
+import { proxyToMiniPc } from '../_lib/miniPcProxy.js';
 import crypto from 'crypto';
 import { waitUntil } from '@vercel/functions';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue } from '../_lib/storageFields.js';
 import { getAdminFirestore } from '../_lib/firebaseAdmin.js';
 import { syncOuraUser } from '../_lib/ouraBackgroundSync.js';
 
@@ -190,6 +191,7 @@ export const config = {
 };
 
 export default async function handler(req: any, res: any) {
+    if (await proxyToMiniPc(req, res, '/api/webhook/oura')) return;
     if (req.method === 'GET') {
         handleVerification(req, res);
         return;

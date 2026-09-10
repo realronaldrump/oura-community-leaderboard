@@ -63,6 +63,8 @@ This app retains its existing anonymous shared-circle access model: anyone with 
 
 ## Bounded records repair
 
+The mini PC migration is staged but not activated. See [migration status, retention, and cutover instructions](docs/mini-pc-migration.md). Keep the Firestore repair path below only while Firestore remains the active backend; local workers take over after the verified cutover.
+
 Scheduled sync and the daily insights worker build records automatically. For an operator-run repair, pull server credentials into the ignored Vercel directory and run one bounded batch:
 
 ```bash

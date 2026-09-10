@@ -12,7 +12,7 @@ if (env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     escaped = false,
     repaired = "";
   for (const character of env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    if (character === '\"' && !escaped) quoted = !quoted;
+    if (character === '"' && !escaped) quoted = !quoted;
     repaired +=
       quoted && character === "\n"
         ? "\\n"

@@ -1,7 +1,9 @@
+import { proxyToMiniPc } from '../_lib/miniPcProxy.js';
 import { isAuthorizedCronRequest } from "./oura-sync.js";
 import { reconcileInsights } from "../_lib/insightsProjection.js";
 export const maxDuration = 60;
 export default async function handler(req: any, res: any) {
+    if (await proxyToMiniPc(req, res, '/api/cron/insights')) return;
   if (req.method !== "GET" && req.method !== "POST")
     return res.status(405).json({ error: "method_not_allowed" });
   if (

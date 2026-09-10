@@ -1,0 +1,8 @@
+[Unit]
+Description=Resume the non-destructive Oura source copy
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=1min
+Unit=oura-worker@copy.service
+[Install]
+WantedBy=timers.target

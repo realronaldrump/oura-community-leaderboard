@@ -9,7 +9,7 @@ import {
     query,
     runTransaction,
     writeBatch,
-} from 'firebase/firestore';
+} from './documentClient';
 import {
     collection as bootstrapCollection,
     doc as bootstrapDoc,
@@ -18,7 +18,7 @@ import {
     limit as bootstrapLimit,
     orderBy as bootstrapOrderBy,
     query as bootstrapQuery,
-} from 'firebase/firestore/lite';
+} from './documentClientLite';
 import { bootstrapDb, db } from './firebaseConfig';
 import {
     DailyStats,
