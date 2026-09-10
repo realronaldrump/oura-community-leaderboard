@@ -4,13 +4,7 @@
 
 The isolated SQLite service and background timers are installed on the mini PC. The first source copy is paused by Firestore's exhausted read quota (zero documents copied at the initial check). **Production still uses Firestore. No data migration or cutover has completed.** The timers resume copying after a quota failure; they never activate a copy automatically.
 
-Tailscale is connected. The existing tailnet-only HTTPS service on port 443 is unchanged. Publishing the separate Oura endpoint on 8443 needs the owner's local sudo authorization:
-
-```bash
-ssh -t 100.96.182.111 'sudo tailscale funnel --bg --https=8443 --yes http://127.0.0.1:8740'
-```
-
-The prospective HTTPS origin is `https://davis-mini-pc-1.tail59b3f5.ts.net:8443`. Verify it externally before configuring Vercel. Do not replace the existing 443 service or expose the database file.
+Tailscale is connected, and the owner-authorized Funnel endpoint is running at `https://davis-mini-pc-1.tail59b3f5.ts.net:8443`. Its health check succeeds and private routes reject unauthenticated access with HTTP 401. The existing tailnet-only HTTPS service on port 443 is unchanged. Endpoint setup is complete; the source copy and verified cutover gates below remain pending. Do not replace the existing 443 service or expose the database file.
 
 ## Architecture and retention
 
