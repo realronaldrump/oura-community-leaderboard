@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { miniPcFetch } from "./miniPcTransport.js";
 /** Explicit cutover only. A failed mini-PC request never writes to Firestore. */
 export async function proxyToMiniPc(
   req: any,
@@ -65,7 +66,7 @@ export async function proxyToMiniPc(
     };
     for (const name of ["x-client-id", "x-oura-signature", "x-oura-timestamp"])
       if (req.headers?.[name]) headers[name] = String(req.headers[name]);
-    const response = await fetch(destination, {
+    const response = await miniPcFetch(destination, {
       method: req.method,
       headers,
       body: body as any,

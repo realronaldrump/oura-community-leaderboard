@@ -10,7 +10,8 @@ import {
 import { db } from "./firebaseConfig";
 import type { DailyStats } from "../types";
 import { hasMetricInMask, type MetricObservation } from "../domain/metrics";
-import type { HighlightEvent, InsightSummary } from "../domain/records";
+import { compareRecordPriority, type HighlightEvent, type InsightSummary } from "../domain/records";
+import type { RecordRankingPage } from "../api/_lib/recordRankings";
 export interface PublishedInsights extends InsightSummary {
   months: Record<string, string>;
   archiveBefore: string | null;
@@ -115,9 +116,20 @@ export async function readRecordPage(
     events: result
       .flatMap((r) => r.data()?.events || [])
       .filter((e) => !metricIds.length || metricIds.includes(e.metricId))
-      .sort((a, b) => b.day.localeCompare(a.day) || b.score - a.score),
+      .sort((a, b) => b.day.localeCompare(a.day) || compareRecordPriority(a, b)),
     cursor: days.length > selected.length ? selected.at(-1) : undefined,
   };
+}
+export async function readRecordRankings(profileId: string, eventId: string,
+  page: { offset: number; revision?: string }, signal?: AbortSignal): Promise<RecordRankingPage> {
+  const base = String(import.meta.env.VITE_OURA_API_URL || "/storage").replace(/\/$/, "");
+  const response = await fetch(`${base}/public/record-rankings`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ profileId, eventId, ...page }), signal: signal || AbortSignal.timeout(20000),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw Object.assign(new Error(payload.error || "rankings_unavailable"), { code: payload.error });
+  return payload;
 }
 export async function readRecordEvent(
   profileId: string,

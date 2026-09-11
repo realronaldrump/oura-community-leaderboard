@@ -1048,6 +1048,63 @@
 .record-evidence .ui-button {
   margin-top: 22px;
 }
+.highlight-card .highlight-context {
+  margin-top: 7px;
+  font-size: 11px;
+  color: var(--color-ink-secondary);
+}
+.record-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 16px 18px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-subtle);
+  box-shadow: var(--shadow-pressed);
+}
+.record-result > strong { font-size: 30px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.record-result > span { text-align: right; font-size: 19px; font-weight: 700; }
+.record-result small { display: block; max-width: 170px; margin-top: 3px; font-size: 11px; font-weight: 500; color: var(--color-ink-secondary); }
+.record-evidence > .record-comparison { margin: 9px 0 24px; }
+.record-rankings h3 { margin: 0 0 5px; font-size: 18px; font-weight: 750; }
+.record-rankings > .fine-print { margin: 5px 0 13px; line-height: 1.6; }
+.ranking-list { list-style: none; margin: 0; padding: 0; }
+.ranking-list > li { margin: 0; padding: 0; }
+.ranking-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto 14px;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 66px;
+  padding: 12px 9px;
+  border: 1px solid transparent;
+  border-bottom-color: var(--color-line);
+  border-radius: 0;
+  color: var(--color-ink);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.ranking-row--selected {
+  margin: 4px 0;
+  border-radius: 18px;
+  border-color: var(--color-line-strong);
+  background: var(--color-accent-soft);
+  box-shadow: var(--shadow-sm);
+}
+.ranking-row:hover { background: var(--color-surface-subtle); border-radius: 18px; }
+.ranking-number { font-size: 14px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.ranking-number small { display: block; font-size: 9px; font-weight: 500; color: var(--color-ink-secondary); }
+.ranking-period { font-size: 12px; line-height: 1.5; }
+.ranking-period small { display: block; margin-top: 3px; font-size: 10px; color: var(--color-ink-secondary); }
+.ranking-period .ranking-selected-label { color: var(--color-accent-hover); font-weight: 750; }
+.ranking-value { max-width: 90px; text-align: right; font-size: 14px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ranking-list > .ranking-gap { padding: 12px 5px; font-size: 10px; color: var(--color-ink-secondary); text-align: center; }
+.record-rankings .ui-button { margin-top: 12px; }
+.ranking-reset { display: block; min-height: var(--touch-target); margin: 5px auto; }
 .day-context h3 {
   margin: 20px 0 15px;
   font-size: 15px;

@@ -7,6 +7,7 @@ import {
 } from "../services/insightsService";
 import type { UserProfile } from "../types";
 import { exclusionKey } from "../domain/metrics";
+import { compareRecordPriority, isSecondaryRecord } from "../domain/records";
 export function useInsights(profile: UserProfile, peers: UserProfile[] = []) {
   const client = useQueryClient();
   const result = useQuery({
@@ -39,8 +40,8 @@ export function useInsights(profile: UserProfile, peers: UserProfile[] = []) {
   const data = unfiltered
     ? {
         ...unfiltered,
-        featured: unfiltered.featured.filter(eligible),
-        recent: unfiltered.recent.filter(eligible),
+        featured: unfiltered.featured.filter(e => eligible(e) && !isSecondaryRecord(e)).sort(compareRecordPriority),
+        recent: unfiltered.recent.filter(eligible).sort((a, b) => b.day.localeCompare(a.day) || compareRecordPriority(a, b)),
       }
     : null;
   return {

@@ -1,6 +1,6 @@
 import React from "react";
 import { ArrowUpRight, Sparkles, TrendingDown, Trophy } from "lucide-react";
-import type { HighlightEvent } from "../../domain/records";
+import { comparisonLabel, recordTitle, type HighlightEvent } from "../../domain/records";
 export default function HighlightCard({
   event,
   hero = false,
@@ -33,8 +33,9 @@ export default function HighlightCard({
         </span>
         <ArrowUpRight size={18} />
       </div>
-      <h2>{event.title}</h2>
+      <h2>{recordTitle(event).replace(` ${comparisonLabel(event.evidence)}`, "")}</h2>
       <p>{event.description}</p>
+      <p className="highlight-context">{comparisonLabel(event.evidence)}</p>
       {hero && (
         <div className="highlight-card__foot">
           <span>

@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronRight, Moon, Sparkles } from "lucide-react";
-import { Button, Dialog, Skeleton } from "../ui";
+import { Button, Skeleton } from "../ui";
 import {
   CATEGORIES,
   METRICS,
@@ -13,7 +13,8 @@ import {
   shiftDay,
   type MetricObservation,
 } from "../../domain/metrics";
-import { comparisonLabel, type HighlightEvent } from "../../domain/records";
+import { compareRecordPriority, type HighlightEvent } from "../../domain/records";
+import RecordEvidenceSheet from "./RecordEvidenceSheet";
 import type { DailyStats, UserProfile } from "../../types";
 import {
   readDayDetail,
@@ -33,107 +34,7 @@ const dateLabel = (day: string) =>
     year: "numeric",
     timeZone: "UTC",
   });
-export function RecordEvidenceSheet({
-  event,
-  onClose,
-}: {
-  event: HighlightEvent | null;
-  onClose: () => void;
-}) {
-  return (
-    <Dialog
-      isOpen={Boolean(event)}
-      title="The story behind the record"
-      onClose={onClose}
-    >
-      {event && (
-        <div className="record-evidence">
-          <p className="eyebrow">{dateLabel(event.day)}</p>
-          <h2>{event.title}</h2>
-          <p>{event.description}</p>
-          <dl className="evidence-grid">
-            <div>
-              <dt>Rank on this date</dt>
-              <dd>
-                #{event.evidence.rank}
-                {event.evidence.tied > 1
-                  ? ` · tied with ${event.evidence.tied - 1}`
-                  : ""}
-              </dd>
-            </div>
-            <div>
-              <dt>Compared with</dt>
-              <dd>
-                {event.evidence.sampleCount.toLocaleString()}{" "}
-                {event.family === "daily" ? "days" : "periods"}
-              </dd>
-            </div>
-            <div>
-              <dt>Comparison</dt>
-              <dd>{comparisonLabel(event.evidence)}</dd>
-            </div>
-            <div>
-              <dt>Period</dt>
-              <dd>
-                {event.startDay === event.day
-                  ? dateLabel(event.day)
-                  : `${dateLabel(event.startDay)} – ${dateLabel(event.day)}`}
-              </dd>
-            </div>
-          </dl>
-          {event.provisional && (
-            <p className="empty-note">
-              This day is still updating. Its result may change.
-            </p>
-          )}
-          {event.relatedEvidence.length > 0 && (
-            <details>
-              <summary>Also stands out in…</summary>
-              {event.relatedEvidence.map((e) => (
-                <p key={e.windowDays || "all"}>
-                  #{e.rank} {comparisonLabel(e)} · {e.sampleCount} observations
-                </p>
-              ))}
-            </details>
-          )}
-          {event.evidence.threshold != null && (
-            <p>
-              This run stayed{" "}
-              {event.direction === "high" ? "at or above" : "below"}{" "}
-              {formatMetricValue(event.metricId, event.evidence.threshold)}. Its
-              baseline was fixed using {event.evidence.baselineStart} through{" "}
-              {event.evidence.baselineEnd}.
-            </p>
-          )}
-          <details>
-            <summary>Why this surfaced</summary>
-            <p>
-              Notability {event.score}/100. This ranks interesting observations;
-              it is not a health or confidence score.
-            </p>
-            <dl className="evidence-grid">
-              {Object.entries(event.factors).map(([key, value]) => (
-                <div key={key}>
-                  <dt>{key}</dt>
-                  <dd>{Math.round(value * 100)}%</dd>
-                </div>
-              ))}
-            </dl>
-          </details>
-          <Button
-            className="w-full"
-            onClick={() => {
-              onClose();
-              navigate(event.detailPath);
-            }}
-          >
-            Explore this metric <ChevronRight size={16} />
-          </Button>
-        </div>
-      )}
-    </Dialog>
-  );
-}
+export { RecordEvidenceSheet };
 function Relationships({
   observations,
   metricId,
@@ -370,6 +271,7 @@ export default function MetricDetail({
     : null;
   const records = (summary?.recent || [])
     .filter((e) => e.metricId === id)
+    .sort(compareRecordPriority)
     .slice(0, 3);
   const main = mainSleepSession(
     (stats?.session || []).filter((s) => s.day === day),

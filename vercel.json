@@ -29,8 +29,8 @@
   ],
   "rewrites": [
     {
-      "source": "/storage/public/:path*",
-      "destination": "https://davis-mini-pc-1.tail59b3f5.ts.net:8443/public/:path*"
+      "source": "/storage/public/:operation",
+      "destination": "/api/storage?operation=:operation"
     },
     {
       "source": "/((?!api/).*)",

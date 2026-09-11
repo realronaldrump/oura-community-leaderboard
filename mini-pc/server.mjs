@@ -1,4 +1,5 @@
 import { readRequestBytes, enqueueWebhook } from "./webhook-inbox.mjs";
+import { readPublishedRecordRankings } from "../api/_lib/recordRankings.ts";
 import { maintainWebhooks } from "./webhooks.mjs";
 import { syncAllOuraProfiles } from "../api/_lib/ouraBackgroundSync.ts";
 import http from "node:http";
@@ -291,6 +292,15 @@ const server = http.createServer(
           clearInterval(heartbeat);
         });
         return;
+      }
+      if (url.pathname === "/public/record-rankings" && req.method === "POST") {
+        if (!store.getControl("activeMigration")) return json(res, 503, { error: "storage_not_ready" });
+        try {
+          return json(res, 200, await readPublishedRecordRankings(store, JSON.parse(await readBody(req))));
+        } catch (error) {
+          if (error.status) return json(res, error.status, { error: error.message });
+          throw error;
+        }
       }
       if (url.pathname !== "/public/rpc" || req.method !== "POST")
         return json(res, 404, { error: "not_found" });

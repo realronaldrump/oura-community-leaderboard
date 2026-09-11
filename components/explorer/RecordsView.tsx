@@ -3,7 +3,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Search, SlidersHorizontal, Sparkles } from "lucide-react";
 import { Button, Dialog } from "../ui";
 import { METRICS, METRIC_BY_ID, CATEGORIES } from "../../domain/metrics";
-import type { HighlightEvent } from "../../domain/records";
+import { compareRecordPriority, recordTitle, type HighlightEvent } from "../../domain/records";
 import {
   readRecordPage,
   readRecordEvent,
@@ -92,11 +92,11 @@ export default function RecordsView({
                 e.relatedEvidence.some(
                   (v) => v.windowDays === Number(windowDays),
                 )) &&
-            `${e.title} ${METRIC_BY_ID[e.metricId]?.label || ""}`
+            `${recordTitle(e)} ${METRIC_BY_ID[e.metricId]?.label || ""}`
               .toLowerCase()
               .includes(search.toLowerCase()),
         )
-        .sort((a, b) => b.day.localeCompare(a.day) || b.score - a.score),
+        .sort((a, b) => b.day.localeCompare(a.day) || compareRecordPriority(a, b)),
     [summary, records.data, category, tone, family, windowDays, search],
   );
   const visibleEvents = events.slice(0, visibleCount);
@@ -239,7 +239,7 @@ export default function RecordsView({
               <option value="change">Changes</option>
               <option value="mean">Rolling averages</option>
               <option value="sum">Rolling totals</option>
-              <option value="spread">Variation</option>
+              <option value="spread">Consistency & variation</option>
               <option value="week">Calendar weeks</option>
               <option value="month">Calendar months</option>
               <option value="friend_lead">Friend leads</option>
@@ -277,6 +277,7 @@ export default function RecordsView({
       </Dialog>
       <RecordEvidenceSheet
         event={event}
+        onExplore={destination => { setEvent(null); navigate(destination); }}
         onClose={() => {
           setEvent(null);
           if (eventId) goBack("/records");

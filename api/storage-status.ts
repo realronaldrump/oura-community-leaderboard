@@ -1,3 +1,4 @@
+import { miniPcFetch } from "./_lib/miniPcTransport.js";
 export default async function handler(req: any, res: any) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "GET")
@@ -6,7 +7,7 @@ export default async function handler(req: any, res: any) {
   if (!origin)
     return res.status(200).json({ backend: "firestore", cutover: false });
   try {
-    const response = await fetch(new URL("/private/status", origin), {
+    const response = await miniPcFetch(new URL("/private/status", origin), {
       headers: {
         Authorization: `Bearer ${process.env.OURA_MINI_PC_TOKEN || ""}`,
       },

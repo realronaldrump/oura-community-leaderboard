@@ -146,7 +146,13 @@ export const comparisonLabel = (evidence: RecordEvidence) =>
     ? `in ${evidence.windowDays} days`
     : evidence.completeHistory
       ? "of all time"
-      : `since ${evidence.coverageStart}`;
+      : `since ${new Date(`${evidence.coverageStart}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}`;
+
+/** Statistical spread stays searchable, but clear outcomes lead the experience. */
+export const isSecondaryRecord = (event: Pick<HighlightEvent, "family" | "metricId">) =>
+  event.family === "spread" && !["bedtime", "wake_time"].includes(event.metricId);
+export const compareRecordPriority = (a: HighlightEvent, b: HighlightEvent) =>
+  Number(isSecondaryRecord(a)) - Number(isSecondaryRecord(b)) || b.score - a.score || a.id.localeCompare(b.id);
 export function buildRecordRules(): RuleDefinition[] {
   const result: RuleDefinition[] = [];
   for (const metric of METRICS.filter((m) => m.recordable)) {
@@ -354,6 +360,8 @@ function eventTitle(
     .toLowerCase()
     .replace("hrv", "HRV")
     .replace("rem", "REM");
+  if (family === "spread" && ["bedtime", "wake_time"].includes(m.id))
+    return `${tied > 1 ? "Tied " : ""}${rankText}${direction === "low" ? "most consistent" : "most changeable"} ${m.id === "bedtime" ? "bedtimes" : "wake times"} over ${period} days ${comparisonLabel(evidence)}`.replace(/^./, c => c.toUpperCase());
   if (family === "streak") return `${rankText}longest ${label} streak`;
   if (family === "change")
     return `${label[0].toUpperCase()}${label.slice(1)}: ${rankText}${direction === "high" ? "largest rise" : "largest fall"}`;
@@ -362,7 +370,7 @@ function eventTitle(
       ? label
       : family === "spread"
         ? `${period}-day variation in ${label}`
-        : `${family === "week" ? "week" : family === "month" ? "month" : `${period}-day ${family === "sum" ? "total" : "average"}`} of ${label}`;
+        : `${family === "week" ? "weekly average" : family === "month" ? "monthly average" : `${period}-day ${family === "sum" ? "total" : "average"}`} ${label}`;
   const wording = `${tied > 1 ? "Tied " : ""}${rankText}${extremum} ${subject} ${comparisonLabel(evidence)}`;
   return wording[0].toUpperCase() + wording.slice(1);
 }
@@ -371,9 +379,20 @@ export const formatRecordValue = (
   value: number,
   family: RuleFamily,
 ) =>
-  m.clock && (family === "change" || family === "spread")
+  family === "streak" ? `${value} days` :
+  m.clock && ["change", "spread", "friend_close", "friend_lead"].includes(family)
     ? formatMetricValue({ ...m, clock: false, unit: "seconds" }, value * 60)
-    : formatMetricValue(m, value);
+    : formatMetricValue(["mean", "week", "month", "spread", "change"].includes(family) && !m.clock ? { ...m, precision: Math.max(1, m.precision) } : m, value);
+
+export function recordTitle(event: HighlightEvent): string {
+  if (["friend_lead", "friend_close", "shared"].includes(event.family)) return event.title;
+  const m = METRIC_BY_ID[event.metricId];
+  if (!m) return event.title;
+  return eventTitle(m, event.family, event.direction, event.evidence.rank, event.evidence.tied,
+    dayDistance(event.startDay, event.day) + 1, event.evidence) +
+    (event.family === "streak" && event.evidence.threshold != null
+      ? ` ${event.direction === "high" ? "at or above" : "below"} ${formatMetricValue(m, event.evidence.threshold)}` : "");
+}
 function buildCandidate(
   m: MetricDefinition,
   family: RuleFamily,
@@ -510,6 +529,7 @@ export function selectFeatured(events: HighlightEvent[]): HighlightEvent[] {
     e.score >= 65 &&
     e.factors.novelty > 0;
   for (const event of events) {
+    if (isSecondaryRecord(event)) continue;
     const previous = representatives.get(event.metricId);
     if (
       !previous ||
@@ -520,7 +540,7 @@ export function selectFeatured(events: HighlightEvent[]): HighlightEvent[] {
       representatives.set(event.metricId, event);
   }
   for (const event of [...representatives.values()].sort(
-    (a, b) => b.score - a.score || a.id.localeCompare(b.id),
+    compareRecordPriority,
   )) {
     if (
       event.score < 65 ||
@@ -595,6 +615,76 @@ function prepareSeries(
   });
   cache.set(m.id, series);
   return series;
+}
+
+export interface RecordRankingRow {
+  position: number;
+  rank: number;
+  tied: number;
+  day: string;
+  startDay: string;
+  value: number;
+  selected: boolean;
+  threshold?: number;
+  ownValue?: number;
+  peerValue?: number;
+}
+
+/** Uses the same calendar periods, frozen streaks and historical cutoffs as evaluation. */
+export function rankRecordHistory(
+  event: HighlightEvent,
+  observations: MetricObservation[],
+  peerObservations: MetricObservation[] = [],
+): RecordRankingRow[] {
+  const metric = METRIC_BY_ID[event.metricId];
+  if (!metric) return [];
+  const family = event.family === "shared" ? "daily" : event.family;
+  const period = dayDistance(event.startDay, event.day) + 1;
+  let points: Array<Point & { ownValue?: number; peerValue?: number }>;
+  if (family === "friend_lead" || family === "friend_close") {
+    const peer = new Map(metricSeries(peerObservations, metric.id, undefined, event.day).map(p => [p.day, p.value]));
+    points = metricSeries(observations, metric.id, undefined, event.day).flatMap(p => {
+      const other = peer.get(p.day);
+      if (other == null) return [];
+      const gap = p.value - other;
+      return [{ ...p, value: family === "friend_close" ? Math.abs(gap) : gap, ownValue: p.value, peerValue: other }];
+    });
+  } else {
+    const series = prepareSeries(observations, metric).find(s =>
+      s.family === family && (!s.direction || s.direction === event.direction) &&
+      (!["mean", "sum", "spread"].includes(family) || s.points.some(p => p.duration === period)));
+    points = (series?.points || []).filter(p => p.day <= event.day);
+    if (family === "streak") points = [...new Map(points.map(p => [p.startDay, p])).values()];
+  }
+  const cutoff = event.evidence.windowDays ? shiftDay(event.day, -event.evidence.windowDays + 1) : null;
+  points = points.filter(p => p.day <= event.day && (!cutoff || (p.startDay || p.day) >= cutoff));
+  const direction = family === "streak" ? "high" : event.direction;
+  const tolerance = (family === "streak" ? 1 : metric.resolution) / 100;
+  const values = points.map(p => p.value).sort((a, b) => a - b);
+  const bound = (value: number, inclusive: boolean) => {
+    let low = 0, high = values.length;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if (values[mid] < value || (inclusive && values[mid] === value)) low = mid + 1;
+      else high = mid;
+    }
+    return low;
+  };
+  return points.map(p => ({
+    ...p,
+    startDay: p.startDay || p.day,
+    rank: 1 + (direction === "high" ? values.length - bound(p.value + tolerance, true) : bound(p.value - tolerance, false)),
+    tied: bound(p.value + tolerance, false) - bound(p.value - tolerance, true),
+    selected: p.day === event.day && (p.startDay || p.day) === event.startDay,
+  })).sort((a, b) => a.rank - b.rank || (direction === "high" ? b.value - a.value : a.value - b.value) || b.day.localeCompare(a.day))
+    .map((row, position) => ({ ...row, position }));
+}
+
+export function surroundingRankings(rows: RecordRankingRow[]): RecordRankingRow[] {
+  const selected = rows.findIndex(row => row.selected);
+  if (selected < 0) return rows.slice(0, 6);
+  return rows.filter((_row, index) => index < 3 ||
+    (index >= Math.max(0, selected - 3) && index < Math.max(6, selected + 4)));
 }
 export function evaluateHighlights(options: EvaluateOptions): {
   events: HighlightEvent[];
@@ -792,9 +882,7 @@ export function evaluateHighlights(options: EvaluateOptions): {
     }
   }
   return {
-    events: events.sort(
-      (a, b) => b.score - a.score || a.id.localeCompare(b.id),
-    ),
+    events: events.sort(compareRecordPriority),
     featured: selectFeatured(events),
   };
 }
