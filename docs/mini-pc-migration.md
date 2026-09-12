@@ -1,6 +1,6 @@
 # Mini PC storage and Oura refetch
 
-## Current rollout state (September 10, 2026)
+## Current rollout state (September 11, 2026)
 
 The owner chose a fresh Oura refetch instead of migrating Firestore. The mini PC is activated in `oura-refetch` mode, and production uses its SQLite storage through the existing Vercel app. **The Firestore copy timer is disabled.** Firestore documents, prior copy state, and local archives remain untouched. No historical health data was copied from Firestore.
 
@@ -21,6 +21,8 @@ Reconnect each Oura account in the deployed app. The first sync fetches recent d
 - The unused copy workflow requires a verified SQLite backup and raw-page copy on a separate disk. Fresh refetch activation instead backs up the empty local store and refuses to overwrite any existing current documents or active storage. Source Firestore documents remain available separately. The app's downloadable data export is not a complete database backup.
 - The mini PC keeps a durable signed-webhook inbox, including raw bytes, retry status, and processed events. Busy or failed sync does not discard an event. Refetch mode requires a fresh Oura connection; credentials are stored only by the local server after that connection.
 
+The September 11 CPU repair removed repeated full subscription reads on relay reconnects. During deployment, the system volume was found full and Oura workers were failing. The database was moved within the mini PC to its larger ext4 volume, with writers stopped and every file hash verified before removing the original duplicate. The database path remains stable through a symlink; independent backups still belong on the separate Seagate drive. No health history or retained revisions were pruned.
+
 ## Installed paths and operations
 
 All following paths are on `100.96.182.111`, owned by `davis`:
@@ -29,7 +31,7 @@ All following paths are on `100.96.182.111`, owned by `davis`:
 | --- | --- |
 | `/home/davis/oura-community-leaderboard/staging` | Bundled Node 22 service and workers |
 | `/home/davis/oura-community-leaderboard/private/config.json` | Mode 600 credentials and configuration; never print or commit |
-| `/home/davis/oura-community-leaderboard/data/oura.sqlite` | WAL database, current documents, permanent revisions and migration state |
+| `/home/davis/oura-community-leaderboard/data/oura.sqlite` | Stable database path; `data` links to `/everystreet/oura-community-storage/data` on the larger Linux volume. WAL database, current documents, permanent revisions and migration state |
 | `/home/davis/oura-community-leaderboard/source-archive` | Exact successful source response pages, by copy generation |
 | `/mnt/seagate20tb/oura-backups` | Independent SQLite backups, hashes, source pages, manifests and configuration backup |
 
