@@ -16,6 +16,12 @@ export default async function handler(req: any, res: any) {
   res.once?.("close", abort);
   try {
     const url = new URL(`/public/${operation}`, origin);
+    if (operation === "changes") {
+      // EventSource sends Last-Event-ID on automatic reconnect; a newly opened
+      // stream uses since after returning from a hidden tab.
+      const since = req.headers?.["last-event-id"] || req.query?.since;
+      if (typeof since === "string" && /^\d+$/.test(since)) url.searchParams.set("since", since);
+    }
     if (url.protocol !== "https:") throw new Error("https_required");
     const body = operation === "changes" ? undefined : typeof req.body === "string" ? req.body : JSON.stringify(req.body || {});
     if (body && Buffer.byteLength(body) > 3_000_000) return res.status(413).json({ error: "request_too_large" });

@@ -34,3 +34,12 @@ it("streams changes and reports transport failures as JSON without falling back 
   expect(res.status).toHaveBeenLastCalledWith(503);
   expect(res.json).toHaveBeenCalledWith({ error: "storage_unavailable" });
 });
+it("forwards only the revision cursor on stream reconnect, preferring Last-Event-ID", async () => {
+  vi.stubEnv("OURA_MINI_PC_URL", "https://storage.example");
+  const fetch = vi.fn().mockImplementation(async () => new Response('id: 12\ndata: {"revision":12,"collections":[]}\n\n'));
+  vi.stubGlobal("fetch", fetch);
+  await handler({ method: "GET", query: { operation: "changes", since: "7", token: "not-forwarded" }, headers: { "last-event-id": "12", authorization: "not-forwarded" } }, response());
+  expect(String(fetch.mock.calls[0][0])).toBe("https://storage.example/public/changes?since=12");
+  await handler({ method: "GET", query: { operation: "changes", since: "7" } }, response());
+  expect(String(fetch.mock.calls[1][0])).toBe("https://storage.example/public/changes?since=7");
+});

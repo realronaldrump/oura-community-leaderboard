@@ -65,7 +65,7 @@ export const query = (...args: any[]): any =>
         constraints: [...(args[0].constraints || []), ...args.slice(1)],
       }
     : cloud("query", args);
-async function rpc(body: Record<string, unknown>) {
+async function requestRpc(body: Record<string, unknown>) {
   const response = await fetch(`${REMOTE}/public/rpc`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -79,6 +79,17 @@ async function rpc(body: Record<string, unknown>) {
       { code: payload.error || "unavailable" },
     );
   return payload;
+}
+// Share only simultaneous reads. Writes and transaction attempts must stay distinct.
+const pendingReads = new Map<string, Promise<any>>();
+function rpc(body: Record<string, unknown>): Promise<any> {
+  if (body.action !== "get" && body.action !== "query") return requestRpc(body);
+  const key = JSON.stringify(body);
+  const existing = pendingReads.get(key);
+  if (existing) return existing;
+  const result = requestRpc(body).finally(() => pendingReads.delete(key));
+  pendingReads.set(key, result);
+  return result;
 }
 const snapshot = (document: any) => ({
   id: document.path.split("/").at(-1),
@@ -201,11 +212,32 @@ export async function runTransaction(
 }
 const listeners = new Set<{ path: string; refresh: () => void }>();
 let stream: EventSource | null = null;
+let streamRevision: number | null = null;
+const isVisible = () => typeof document === "undefined" || document.visibilityState !== "hidden";
+function onVisibilityChange() {
+  if (!isVisible()) {
+    stream?.close();
+    stream = null;
+    return;
+  }
+  connectChanges();
+  // Catch up after suspension even when the stream has not opened yet.
+  for (const listener of listeners) listener.refresh();
+}
 function connectChanges() {
-  if (stream || !listeners.size) return;
-  stream = new EventSource(`${REMOTE}/public/changes`);
+  if (stream || !listeners.size || !isVisible()) return;
+  const resume = streamRevision == null ? "" : `?since=${streamRevision}`;
+  stream = new EventSource(`${REMOTE}/public/changes${resume}`);
+  const connection = stream;
   stream.onmessage = (event) => {
+    if (stream !== connection || !isVisible()) return;
     const update = JSON.parse(event.data);
+    // The server sends its durable revision on every connection. An unchanged
+    // handshake is not a data change (the relay reconnects every 45 seconds).
+    const unchangedHandshake = !update.collections &&
+      typeof update.revision === "number" && update.revision === streamRevision;
+    if (typeof update.revision === "number") streamRevision = update.revision;
+    if (unchangedHandshake) return;
     for (const listener of listeners)
       if (
         !update.collections ||
@@ -215,9 +247,6 @@ function connectChanges() {
         )
       )
         listener.refresh();
-  };
-  stream.onopen = () => {
-    for (const listener of listeners) listener.refresh();
   };
 }
 export function onSnapshot(
@@ -233,7 +262,7 @@ export function onSnapshot(
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let failures = 0;
   const refresh = async () => {
-    if (stopped) return;
+    if (stopped || !isVisible()) return;
     if (pending) {
       queued = true;
       return;
@@ -280,6 +309,8 @@ export function onSnapshot(
       void refresh();
     },
   };
+  if (!listeners.size && typeof document !== "undefined")
+    document.addEventListener("visibilitychange", onVisibilityChange);
   listeners.add(listener);
   connectChanges();
   void refresh();
@@ -287,9 +318,12 @@ export function onSnapshot(
     stopped = true;
     if (retryTimer) clearTimeout(retryTimer);
     listeners.delete(listener);
-    if (!listeners.size && stream) {
-      stream.close();
+    if (!listeners.size) {
+      stream?.close();
       stream = null;
+      streamRevision = null;
+      if (typeof document !== "undefined")
+        document.removeEventListener("visibilitychange", onVisibilityChange);
     }
   };
 }

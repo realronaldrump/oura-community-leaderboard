@@ -1,3 +1,4 @@
+import { changesSince, eventFrame } from "./change-stream.mjs";
 import { readRequestBytes, enqueueWebhook } from "./webhook-inbox.mjs";
 import { readPublishedRecordRankings } from "../api/_lib/recordRankings.ts";
 import { maintainWebhooks } from "./webhooks.mjs";
@@ -65,18 +66,6 @@ const snapshotWire = (snapshot) => ({
     ? publicValue(snapshot.ref.path, snapshot.data())
     : null,
 });
-store.onChange = (paths, revision) => {
-  const collections = [
-    ...new Set(
-      paths
-        .filter((p) => canRead(p))
-        .map((p) => p.split("/").slice(0, -1).join("/")),
-    ),
-  ];
-  if (!collections.length) return;
-  for (const stream of streams)
-    stream.write(`data: ${JSON.stringify({ collections, revision })}\n\n`);
-};
 const signCursor = (revision) => {
   const payload = Buffer.from(
     JSON.stringify({ revision, expires: Date.now() + 300000 }),
@@ -110,19 +99,11 @@ let observedRevision = store.sequence;
 setInterval(() => {
   const next = store.sequence;
   if (next === observedRevision) return;
-  const collections = store.database
-    .prepare(
-      "SELECT DISTINCT collection_path FROM revisions WHERE seq>? AND seq<=?",
-    )
-    .all(observedRevision, next)
-    .map((r) => r.collection_path)
-    .filter((p) => canRead(p, true));
-  observedRevision = next;
-  if (collections.length)
-    for (const stream of streams)
-      stream.write(
-        `data: ${JSON.stringify({ collections, revision: next })}\n\n`,
-      );
+  const update = changesSince(store, String(observedRevision));
+  observedRevision = update.revision;
+  // One durable stream for both HTTP writes and background workers avoids
+  // duplicate notifications and advancing a cursor past unseen worker writes.
+  for (const stream of streams) stream.write(eventFrame(update));
 }, 2000).unref();
 const legacy = {
   "/api/oauth/token": oauth,
@@ -282,7 +263,7 @@ const server = http.createServer(
           Connection: "keep-alive",
         });
         streams.add(res);
-        res.write(`data: ${JSON.stringify({ revision: store.sequence })}\n\n`);
+        res.write(eventFrame(changesSince(store, req.headers["last-event-id"] || url.searchParams.get("since"))));
         const heartbeat = setInterval(
           () => res.write(": keepalive\n\n"),
           20000,

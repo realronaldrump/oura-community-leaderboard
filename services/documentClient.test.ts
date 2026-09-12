@@ -22,6 +22,8 @@ beforeEach(() => {
   FakeEvents.instances = [];
 });
 afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -153,5 +155,68 @@ describe("remote document transport", () => {
       client.getDoc(client.doc({}, "profiles", "me")),
     ).rejects.toMatchObject({ code: "mini_pc_unavailable" });
     expect(native.getDoc).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("subscription request budget", () => {
+  const settle = async () => { await vi.advanceTimersByTimeAsync(0); };
+  it("shares reads and does not reread unchanged snapshots across an hour of relay reconnects", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    const fetch = vi.fn().mockImplementation(async () => response({ documents: [], at: "signed", nextCursor: null }));
+    vi.stubGlobal("fetch", fetch);
+    const client = await import("./documentClient");
+    const callbacks = Array.from({ length: 10 }, () => vi.fn());
+    const stops = callbacks.map(cb => client.onSnapshot(client.collection({}, "profiles"), cb));
+    try {
+      await settle();
+      expect(fetch).toHaveBeenCalledTimes(1);
+      const events = FakeEvents.instances[0];
+      events.onopen?.();
+      events.onmessage({ data: JSON.stringify({ revision: 100 }) });
+      await settle();
+      const initialReads = fetch.mock.calls.length;
+      for (let i = 0; i < 80; i++) {
+        events.onopen?.();
+        events.onmessage({ data: JSON.stringify({ revision: 100 }) });
+        await settle();
+      }
+      expect(fetch).toHaveBeenCalledTimes(initialReads);
+      expect(callbacks.every(cb => cb.mock.calls.length === 1)).toBe(true);
+      events.onmessage({ data: JSON.stringify({ revision: 101 }) });
+      await settle();
+      expect(fetch).toHaveBeenCalledTimes(initialReads + 1);
+      events.onmessage({ data: JSON.stringify({ revision: 102, collections: ["competitions"] }) });
+      await settle();
+      expect(fetch).toHaveBeenCalledTimes(initialReads + 1);
+      events.onmessage({ data: JSON.stringify({ revision: 103, collections: ["profiles"] }) });
+      await settle();
+      expect(fetch).toHaveBeenCalledTimes(initialReads + 2);
+    } finally { stops.forEach(stop => stop()); }
+  });
+  it("closes hidden streams and catches up when visible without background retries", async () => {
+    vi.useFakeTimers();
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    const fetch = vi.fn().mockImplementation(async () => response({ error: "unavailable" }, 503));
+    vi.stubGlobal("fetch", fetch);
+    const client = await import("./documentClient");
+    const callback = vi.fn();
+    const stop = client.onSnapshot(client.collection({}, "profiles"), callback, vi.fn());
+    try {
+      await settle();
+      visibility.mockReturnValue("hidden");
+      document.dispatchEvent(new Event("visibilitychange"));
+      expect(FakeEvents.instances[0].close).toHaveBeenCalledOnce();
+      const before = fetch.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(fetch).toHaveBeenCalledTimes(before);
+      fetch.mockImplementation(async () => response({ documents: [], at: "signed", nextCursor: null }));
+      visibility.mockReturnValue("visible");
+      document.dispatchEvent(new Event("visibilitychange"));
+      await settle();
+      expect(callback).toHaveBeenCalledOnce();
+      expect(FakeEvents.instances).toHaveLength(2);
+    } finally { stop(); }
   });
 });
