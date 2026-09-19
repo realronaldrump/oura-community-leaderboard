@@ -15,6 +15,23 @@ import {
 } from "./public-policy.mjs";
 import { decodeFields } from "./migrate-firestore.mjs";
 const source = () => new DocumentStore(":memory:");
+test("identical Oura readings with a new sync timestamp do not create health-data revisions", async () => {
+  const store = source();
+  try {
+    const reading = store.doc("profileStats/me/sleepSessions/night");
+    await reading.set({ score: 80, updatedAt: "first" });
+    const before = store.sequence;
+    await reading.set({ score: 80, updatedAt: "second" });
+    assert.equal(store.sequence, before);
+    await reading.set({ score: 81, updatedAt: "third" });
+    assert.equal(store.getRevisions(reading.path).length, 2);
+    assert.equal((await reading.get()).data().score, 81);
+    const metadata = store.doc("profileStats/me");
+    await metadata.set({ updatedAt: "first" });
+    await metadata.set({ updatedAt: "second" });
+    assert.equal(store.getRevisions(metadata.path).length, 2);
+  } finally { store.close(); }
+});
 test("transactions retry against a changed version; batches are atomic", async () => {
   const store = source();
   const ref = store.doc("profiles/example");

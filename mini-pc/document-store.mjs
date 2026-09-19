@@ -8,6 +8,16 @@ export const localFieldValues = {
   increment: (value) => ({ __ouraTransform: "increment", value }),
 };
 const clone = (value) => (value == null ? value : structuredClone(value));
+const sourceCollections = new Set([
+  "days", "heartRateDays", "sleepSessions", "workouts", "tags", "enhancedTags",
+  "guidedSessions", "sleepTime", "restModePeriods", "ringConfigurations",
+  "ringBatteryLevels", "vo2Max", "personalInfo",
+]);
+const rollback = database => {
+  // SQLITE_FULL can already have rolled back the transaction. Preserve the
+  // original error instead of replacing it with "no transaction is active".
+  try { database.exec("ROLLBACK"); } catch { /* Already rolled back. */ }
+};
 const isMap = (value) =>
   value && typeof value === "object" && !Array.isArray(value);
 const field = (value, name) =>
@@ -154,11 +164,17 @@ export class DocumentStore {
   close() {
     this.database.close();
   }
+  assertDerivedWriteCapacity() {
+    if (this.filename === ":memory:") return;
+    const disk = fs.statfsSync(path.dirname(fs.realpathSync(this.filename)));
+    if (disk.bavail * disk.bsize < 5 * 1024 ** 3)
+      throw new Error("insufficient_space_for_records");
+  }
   get sequence() {
     return Number(
       this.database
-        .prepare("SELECT COALESCE(MAX(seq),0) AS seq FROM revisions")
-        .get().seq,
+        .prepare("SELECT seq FROM sqlite_sequence WHERE name='revisions'")
+        .get()?.seq || 0,
     );
   }
   getControl(key) {
@@ -187,7 +203,7 @@ export class DocumentStore {
       this.database.exec("COMMIT");
       return token;
     } catch (error) {
-      this.database.exec("ROLLBACK");
+      rollback(this.database);
       throw error;
     }
   }
@@ -198,7 +214,7 @@ export class DocumentStore {
         this.setControl(key, { token: null, until: 0 });
       this.database.exec("COMMIT");
     } catch (error) {
-      this.database.exec("ROLLBACK");
+      rollback(this.database);
       throw error;
     }
   }
@@ -435,6 +451,10 @@ export class DocumentStore {
               : mergeFields(previous, operation.data, operation.merge === true);
         const payload = deleted ? null : canonicalJson(value);
         if (old && old.payload === payload && old.deleted === deleted) continue;
+        const parts = operation.path.split("/");
+        if (old && !old.deleted && !deleted && !operation.imported &&
+          parts.length === 4 && parts[0] === "profileStats" && sourceCollections.has(parts[2]) &&
+          canonicalJson({ ...previous, updatedAt: null }) === canonicalJson({ ...value, updatedAt: null })) continue;
         const collectionPath = operation.path.split("/").slice(0, -1).join("/");
         const id = operation.path.split("/").at(-1);
         const inserted = this.database
@@ -460,7 +480,7 @@ export class DocumentStore {
       }
       if (!nested) this.database.exec("COMMIT");
     } catch (error) {
-      if (!nested) this.database.exec("ROLLBACK");
+      if (!nested) rollback(this.database);
       throw error;
     }
     if (!nested && changed.length) this.onChange(changed, this.sequence);
@@ -621,7 +641,7 @@ export class DocumentStore {
       this.setControl("sourceWritesFrozen", true);
       this.database.exec("COMMIT");
     } catch (error) {
-      this.database.exec("ROLLBACK");
+      rollback(this.database);
       throw error;
     }
     this.onChange(importedPaths, this.sequence);

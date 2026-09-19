@@ -19,8 +19,10 @@ import {
 } from "../../domain/records.js";
 import { historicalCoverageKey } from "../../domain/coverage.js";
 import { getAdminFirestore } from "./firebaseAdmin.js";
+import { canonicalJson } from "../../mini-pc/document-store.mjs";
 
 export interface PublishedInsights extends InsightSummary {
+  inputKey?: string;
   months: Record<string, string>;
   archiveBefore: string | null;
   archiveIndex: string;
@@ -39,7 +41,7 @@ interface InsightJob {
 const hash = (value: unknown) =>
   crypto
     .createHash("sha256")
-    .update(JSON.stringify(value))
+    .update(canonicalJson(value))
     .digest("hex")
     .slice(0, 20);
 export const monthsBetween = (start: string, end: string) => {
@@ -197,6 +199,34 @@ async function writeDay(
   await ref.set({ day, generation, pages });
   return id;
 }
+
+// Use source inputs, not peers' publication timestamps/revisions: otherwise two
+// profiles can keep invalidating each other without a single new observation.
+async function currentInputKey(db: Firestore, profileId: string, now: Date) {
+  const [profile, metadata, job, summary, profiles] = await Promise.all([
+    db.doc(`profiles/${profileId}`).get(),
+    db.doc(`profileStats/${profileId}`).get(),
+    db.doc(`insightJobs/${profileId}`).get(),
+    db.doc(`profileStats/${profileId}/snapshots/insights`).get(),
+    db.collection("profiles").get(),
+  ]);
+  const peers = await Promise.all(profiles.docs.filter(p => p.id !== profileId).map(async p => {
+    const snapshot = await db.doc(`profileStats/${p.id}/snapshots/insights`).get();
+    return [p.id, exclusionKey(p.data() as UserProfile), snapshot.data()?.months || null];
+  }));
+  const key = hash({
+    rules: RULES_VERSION,
+    today: localDay(profile.data() as UserProfile || {}, now),
+    offset: profile.data()?.lastKnownUtcOffsetMinutes ?? 0,
+    exclusions: exclusionKey(profile.data() as UserProfile || {}),
+    source: metadata.data()?.updatedAt || null,
+    requested: job.data()?.requestedAt || null,
+    peers: peers.sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+  });
+  const previous = summary.data() as PublishedInsights | undefined;
+  return { key, unchanged: previous?.inputKey === key && previous.archiveBefore === null &&
+    !(job.data()?.dirtyMonths?.length) && !job.data()?.lastError };
+}
 export async function runInsightJob(
   profileId: string,
   options: {
@@ -209,6 +239,9 @@ export async function runInsightJob(
   const db = options.db || getAdminFirestore();
   const now = options.now || new Date();
   const deadline = Date.now() + (options.budgetMs ?? 12_000);
+  const input = await currentInputKey(db, profileId, now);
+  if (input.unchanged) return { status: "unchanged" };
+  (db as Firestore & { assertDerivedWriteCapacity?: () => void }).assertDerivedWriteCapacity?.();
   const jobRef = db.collection("insightJobs").doc(profileId);
   const root = db.collection("profileStats").doc(profileId);
   const summaryRef = root.collection("snapshots").doc("insights");
@@ -551,6 +584,7 @@ export async function runInsightJob(
       .doc(archiveIndex)
       .set({ days: recordDays, metricMasks, cooldowns });
     const summary: PublishedInsights = {
+      inputKey: input.key,
       profileId,
       day,
       generatedAt: now.toISOString(),

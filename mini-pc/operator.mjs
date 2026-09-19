@@ -3,6 +3,7 @@ import { getLocalDocumentStore } from "./document-store.mjs";
 import { copyFirestore } from "./migrate-firestore.mjs";
 import { freezeSource, activateVerifiedCopy } from "./cutover.mjs";
 import { activateRefetchStorage } from "./refetch.mjs";
+import { pruneDerivedRecords } from "./derived-records.mjs";
 const config = JSON.parse(
   fs.readFileSync(process.env.OURA_CONFIG_FILE, "utf8"),
 );
@@ -12,7 +13,9 @@ const store = getLocalDocumentStore();
 try {
   const action = process.argv[2];
   const result =
-    action === "activate-refetch"
+    action === "prune-derived"
+      ? pruneDerivedRecords(store)
+      : action === "activate-refetch"
       ? await activateRefetchStorage(store, config)
       : action === "freeze"
       ? await freezeSource(store, config)

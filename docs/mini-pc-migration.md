@@ -16,12 +16,14 @@ Reconnect each Oura account in the deployed app. The first sync fetches recent d
 - Resolution tries Cloudflare and Google independently. If both lack a usable answer, `OURA_MINI_PC_PUBLIC_IPS` supplies operator-verified public ingress addresses for only the configured hostname; normal resolution resumes after 15 seconds. Revalidate this optional setting against public DNS when changing the Funnel endpoint. It never disables certificate validation or selects a different hostname.
 - Change streams carry durable revision IDs. The relay forwards the EventSource resume cursor; reconnects replay only changed public collections, including writes from background workers. Identical simultaneous browser reads share one request, and hidden tabs close their stream and catch up on return. The 45-second relay timeout no longer forces full subscription rereads.
 - The mini PC owns sync, records computation, webhook replay, and SQLite. It uses the existing anonymous shared-circle access model. Public access excludes credentials, migration archives, background jobs, and historical revisions.
-- Every document mutation appends the prior/current history through immutable revision rows. Logical removals retain earlier payloads. Profile removal is disabled. No retention job deletes revisions, raw copy pages, source documents, or backups.
+- Original readings and user-owned data retain their complete revision history. Timestamp-only refetches of identical Oura readings do not create another revision. Profile removal remains disabled; source documents, raw copy pages and backups are never removed by maintenance.
+- Rebuildable Records projections have bounded retention. The records worker scans up to 2,000 generated documents per invocation, retaining the current published graph, drafts, peer metric inputs, and every graph visible through the last 15 minutes of published snapshots (public read cursors expire after five minutes). Unreferenced old projections are first retired with a versioned tombstone; only after another 15-minute grace can their documents and revisions be physically reclaimed. Historical derived summary revisions retain the grace-window baseline. Cleanup never includes original Oura readings. Old change-stream cursors receive a full resnapshot if their derived history was reclaimed.
+- Records hashes use canonical JSON. Completed archives skip unchanged inputs before acquiring a write lease, including changes in peer publications that do not change their actual metric inputs. Records generation refuses to start below a 5 GiB filesystem reserve. Reclaimed SQLite pages are reused; maintenance does not run a blocking full-database VACUUM or immediately shrink the database file.
 - The copier discovers every root and nested collection, including unknown collections and descendants of missing parent documents. It uses one fixed Firestore read timestamp per generation, paginates, preserves exact REST response pages and native field representations, and verifies document hashes independently against the archived pages. Quota errors are failures, never empty successful results.
 - The unused copy workflow requires a verified SQLite backup and raw-page copy on a separate disk. Fresh refetch activation instead backs up the empty local store and refuses to overwrite any existing current documents or active storage. Source Firestore documents remain available separately. The app's downloadable data export is not a complete database backup.
 - The mini PC keeps a durable signed-webhook inbox, including raw bytes, retry status, and processed events. Busy or failed sync does not discard an event. Refetch mode requires a fresh Oura connection; credentials are stored only by the local server after that connection.
 
-The September 11 CPU repair removed repeated full subscription reads on relay reconnects. During deployment, the system volume was found full and Oura workers were failing. The database was moved within the mini PC to its larger ext4 volume, with writers stopped and every file hash verified before removing the original duplicate. The database path remains stable through a symlink; independent backups still belong on the separate Seagate drive. No health history or retained revisions were pruned.
+The September 18 incident found approximately 116 GiB of SQLite data, dominated by obsolete generated Records pages and duplicate revision payloads, filling the partition shared with Every Street's MongoDB. With writers stopped, the database and WAL were copied and verified byte-for-byte before relocation to `/home/davis/oura-community-storage-data` on the root partition. The configured path remains stable through symlinks. Independent backups still belong on the separate Seagate drive. The storage fix bounds derived data while preserving original readings and their histories.
 
 ## Installed paths and operations
 
@@ -31,7 +33,7 @@ All following paths are on `100.96.182.111`, owned by `davis`:
 | --- | --- |
 | `/home/davis/oura-community-leaderboard/staging` | Bundled Node 22 service and workers |
 | `/home/davis/oura-community-leaderboard/private/config.json` | Mode 600 credentials and configuration; never print or commit |
-| `/home/davis/oura-community-leaderboard/data/oura.sqlite` | Stable database path; `data` links to `/everystreet/oura-community-storage/data` on the larger Linux volume. WAL database, current documents, permanent revisions and migration state |
+| `/home/davis/oura-community-leaderboard/data/oura.sqlite` | Stable database path; `data` links through `/everystreet/oura-community-storage/data` to `/home/davis/oura-community-storage-data` on the root partition. WAL database, current documents, source revision history and migration state |
 | `/home/davis/oura-community-leaderboard/source-archive` | Exact successful source response pages, by copy generation |
 | `/mnt/seagate20tb/oura-backups` | Independent SQLite backups, hashes, source pages, manifests and configuration backup |
 
@@ -47,6 +49,8 @@ ssh 100.96.182.111 'cd /home/davis/oura-community-leaderboard/staging && OURA_CO
 Health `ready: false` means staging, not data loss. `operator status` displays only migration state and collection counts. Private HTTP status requires the transport key. Never put that key in shell history or a public report.
 
 Build service bundles on the development Mac with `node scripts/build-mini-pc.mjs`, then copy `.vercel/mini-pc-release/` additively into the remote staging directory. Use the existing lockfile with `npm ci --omit=dev --ignore-scripts` there. Copy the checked-in `mini-pc/systemd/` units to the user's systemd directory and reload systemd. Deployment must not touch the data, private configuration, raw archives, backups, or other applications.
+
+When dependencies and units are unchanged, deploy only the rebuilt service bundles after committing and pushing their source; do not reinstall dependencies or overwrite host configuration. Stop the storage service and writer timers for bundle replacement, compare all installed bundle hashes, start the API, verify `/health` and a bounded records-worker run, then resume the timers. Keep the Firestore copy timer disabled. `node operator.mjs prune-derived` performs one bounded maintenance batch using the same retention rules as the records worker. Do not substitute bulk SQL deletes or a live VACUUM. The initial backlog is reclaimed across repeated worker batches.
 
 ## Unused copy-based cutover — historical procedure
 
@@ -67,6 +71,7 @@ Do not restore the old Firestore writer after local activation: it would omit ne
 
 ```bash
 node --test mini-pc/*.test.mjs
+node node_modules/vitest/vitest.mjs run test/insightsStorageGrowth.test.ts
 ```
 
 Tests cover transaction conflicts and atomicity, retained revisions, full native wire values, unknown/missing-parent collection discovery, unusual document IDs, byte-exact webhook replay, quota pauses, source rules, independent backups, fresh activation, failed activation, and resumable refetch. Browser tests cover snapshot pagination, subscriptions, conflicts, no fallback, no Firebase initialization, and isolation of old caches. Live Oura data and record evidence can be checked after the owner reconnects an account.

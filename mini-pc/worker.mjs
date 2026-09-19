@@ -4,6 +4,7 @@ import { maintainWebhooks } from "./webhooks.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { getLocalDocumentStore } from "./document-store.mjs";
+import { pruneDerivedRecords } from "./derived-records.mjs";
 import { copyFirestore } from "./migrate-firestore.mjs";
 import { reconcileInsights } from "../api/_lib/insightsProjection.ts";
 import {
@@ -41,12 +42,14 @@ try {
         `oura-${new Date().toISOString().replace(/[:.]/g, "-")}.sqlite`,
       ),
     );
-  else
-    result = await reconcileInsights({
+  else {
+    const cleanup = pruneDerivedRecords(store);
+    result = { cleanup, profiles: await reconcileInsights({
       db: store,
       budgetMs: 45000,
       archiveDays: 30,
-    });
+    }) };
+  }
   console.log(JSON.stringify({ ok: true, mode, result }));
 } catch (error) {
   console.error(
