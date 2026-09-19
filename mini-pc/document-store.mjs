@@ -502,6 +502,25 @@ export class DocumentStore {
       .prepare("SELECT * FROM revisions WHERE path=? ORDER BY seq")
       .all(documentPath);
   }
+  status(build) {
+    const migration = this.latestMigration();
+    // This is also called by the public Vercel readiness relay. Inventory is
+    // an explicit operator task, never a synchronous scan on an HTTP request.
+    return {
+      active: this.getControl("activeMigration"),
+      mode: this.getControl("storageActivation")?.mode || "firestore-copy",
+      build,
+      migration: migration ? {
+        id: migration.id,
+        state: migration.state,
+        documents: migration.progress.documents,
+        pages: migration.progress.pages,
+        lastError: migration.progress.lastError,
+        manifest: migration.progress.manifest,
+      } : null,
+      revision: this.sequence,
+    };
+  }
   inventory() {
     return this.database
       .prepare(

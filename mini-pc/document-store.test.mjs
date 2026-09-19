@@ -15,6 +15,20 @@ import {
 } from "./public-policy.mjs";
 import { decodeFields } from "./migrate-firestore.mjs";
 const source = () => new DocumentStore(":memory:");
+test("status reads readiness without scanning the document inventory", async () => {
+  const store = source();
+  try {
+    store.setControl("activeMigration", "refetch-example");
+    store.setControl("storageActivation", { mode: "oura-refetch" });
+    await store.doc("profiles/example").set({ name: "Example" });
+    store.inventory = () => { throw new Error("full_inventory_scan"); };
+    const revision = store.sequence;
+    assert.deepEqual(store.status("test-build"), {
+      active: "refetch-example", mode: "oura-refetch", build: "test-build", migration: null, revision,
+    });
+    assert.equal(store.sequence, revision);
+  } finally { store.close(); }
+});
 test("identical Oura readings with a new sync timestamp do not create health-data revisions", async () => {
   const store = source();
   try {

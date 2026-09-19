@@ -46,7 +46,7 @@ ssh 100.96.182.111 'curl -fsS http://127.0.0.1:8740/health'
 ssh 100.96.182.111 'cd /home/davis/oura-community-leaderboard/staging && OURA_CONFIG_FILE=/home/davis/oura-community-leaderboard/private/config.json node operator.mjs status'
 ```
 
-Health `ready: false` means staging, not data loss. `operator status` displays only migration state and collection counts. Private HTTP status requires the transport key. Never put that key in shell history or a public report.
+Health `ready: false` means staging, not data loss. `operator status` displays only migration state and collection counts. Private HTTP status requires the transport key and reads only readiness metadata; it never scans the full document inventory on the server's event loop. Never put that key in shell history or a public report.
 
 Build service bundles on the development Mac with `node scripts/build-mini-pc.mjs`, then copy `.vercel/mini-pc-release/` additively into the remote staging directory. Use the existing lockfile with `npm ci --omit=dev --ignore-scripts` there. Copy the checked-in `mini-pc/systemd/` units to the user's systemd directory and reload systemd. Deployment must not touch the data, private configuration, raw archives, backups, or other applications.
 

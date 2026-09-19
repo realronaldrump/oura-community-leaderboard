@@ -169,24 +169,7 @@ const server = http.createServer(
         if (!privateRequest(req))
           return json(res, 401, { error: "unauthorized" });
         if (url.pathname === "/private/status") {
-          const migration = store.latestMigration();
-          return json(res, 200, {
-            active: store.getControl("activeMigration"),
-            mode: store.getControl("storageActivation")?.mode || "firestore-copy",
-            build: buildHash,
-            migration: migration
-              ? {
-                  id: migration.id,
-                  state: migration.state,
-                  documents: migration.progress.documents,
-                  pages: migration.progress.pages,
-                  lastError: migration.progress.lastError,
-                  manifest: migration.progress.manifest,
-                }
-              : null,
-            inventory: store.inventory(),
-            revision: store.sequence,
-          });
+          return json(res, 200, store.status(buildHash));
         }
         if (url.pathname === "/private/copy" && req.method === "POST") {
           if (busy) return json(res, 409, { error: "worker_busy" });
