@@ -4,6 +4,7 @@ import { copyFirestore } from "./migrate-firestore.mjs";
 import { freezeSource, activateVerifiedCopy } from "./cutover.mjs";
 import { activateRefetchStorage } from "./refetch.mjs";
 import { pruneDerivedRecords } from "./derived-records.mjs";
+import { compactRecords } from "./compact-records.mjs";
 const config = JSON.parse(
   fs.readFileSync(process.env.OURA_CONFIG_FILE, "utf8"),
 );
@@ -13,7 +14,10 @@ const store = getLocalDocumentStore();
 try {
   const action = process.argv[2];
   const result =
-    action === "prune-derived"
+    action === "compact-records"
+      ? compactRecords(store, { destination: process.argv[3], quiescedAt: process.argv[4],
+          onProgress: progress => console.log(JSON.stringify({ progress })) })
+      : action === "prune-derived"
       ? pruneDerivedRecords(store)
       : action === "activate-refetch"
       ? await activateRefetchStorage(store, config)
