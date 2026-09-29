@@ -378,7 +378,7 @@ function DashboardContent({
                     ))}
                   </div>
                   <span>
-                    <strong>#{rank} in sleep today</strong>
+                    <strong>#{rank} in sleep {day === today ? "today" : `on ${dateLabel(day)}`}</strong>
                     <small>
                       {friendScores.length} friends, a little perspective
                     </small>
@@ -402,7 +402,7 @@ function DashboardContent({
                     ["sleep_duration", "Bedtime & wake time"],
                     ["hrv", "Your nightly variation"],
                     ["lowest_hr", "During your main sleep"],
-                    ["steps", "Movement so far"],
+                    ["steps", day === today ? "Movement so far" : "Movement that day"],
                   ].map(([id, hint]) => (
                     <button
                       type="button"
