@@ -59,7 +59,7 @@ describe("record specs", () => {
   });
   it("finds the archive day after the profile prefix, even when a profile id looks like a date", () => {
     expect(recordEventDay("2024-01-01-me", "2024-01-01-me:sleep_score:week:2025-03-09")).toBe("2025-03-09");
-    expect(recordEventDay("me", "me:sleep_score:friend_lead:2025-03-09:2024-01-01-peer")).toBe("2025-03-09");
+    expect(recordEventDay("me", "me:sleep_score:friend_margin:2025-03-09:2024-01-01-peer")).toBe("2025-03-09");
   });
 });
 

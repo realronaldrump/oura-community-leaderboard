@@ -79,7 +79,7 @@ describe("selected-day highlights", () => {
   });
 
   it("applies the same peer and legacy-record exclusions to historical cards", async () => {
-    const friend = { ...best, id: "friend", metricId: "steps", family: "friend_lead", kind: "friend_lead", peerId: "removed-peer" } as HighlightEvent;
+    const friend = { ...best, id: "friend", metricId: "steps", family: "friend_margin", kind: "friend_margin", peerId: "removed-peer" } as HighlightEvent;
     const legacy = { ...best, id: "legacy", metricId: "readiness_sleep_regularity", kind: undefined, family: "mean" } as HighlightEvent;
     vi.mocked(readRecordDay).mockResolvedValue([friend, legacy, best]);
     const { result } = show();

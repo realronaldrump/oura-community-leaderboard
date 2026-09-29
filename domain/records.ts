@@ -3,12 +3,12 @@ import {
   dayDistance,
   shiftDay,
   metricSeries,
-  formatMetricValue,
   type MetricCategory,
   type MetricCoverage,
   type MetricObservation,
 } from "./metrics.js";
 import {
+  MIN_STREAK_RECORD,
   RECORD_SPECS,
   RECORD_SPEC_BY_ID,
   type RecordDirection,
@@ -17,13 +17,12 @@ import {
 } from "./recordSpecs.js";
 import { recordHeadline, recordValueLine } from "./recordCopy.js";
 
-export { RECORD_SPECS, RECORD_SPEC_BY_ID };
+export { MIN_STREAK_RECORD, RECORD_SPECS, RECORD_SPEC_BY_ID };
 export type { RecordDirection, RecordPeriod, RecordSpec };
 
-export const RULES_VERSION = "records-2";
+export const RULES_VERSION = "records-3";
 export const WEEK_MIN_DAYS = 6;
 export const MONTH_MIN_FRACTION = 0.8;
-export const MIN_STREAK_RECORD = 5;
 export const STREAK_RANK_MIN = 3;
 export const STREAK_MIN_HISTORY_DAYS = 30;
 /** Periods of history needed before anything in that period can be called a record. */
@@ -47,15 +46,16 @@ export type RecordKind =
   | "worst"
   | "streak_record"
   | "streak_milestone"
-  | "friend_lead"
-  | "friend_close"
-  | "shared";
-/** "mean", "sum", "spread" and "change" only appear on archived records-1 events. */
+  | "friend_margin"
+  | "friend_streak";
+/** Retired families only appear on archived events from earlier rules. */
 export type RuleFamily =
   | "daily"
   | "week"
   | "month"
   | "streak"
+  | "friend_margin"
+  | "friend_streak"
   | "friend_lead"
   | "friend_close"
   | "shared"
@@ -79,7 +79,7 @@ export interface NotabilityFactors {
   recency: number;
 }
 export interface RecordEvidence {
-  /** Always null for records-2: every comparison is against the whole history. */
+  /** Always null since records-2: every comparison is against the whole history. */
   windowDays: number | null;
   coverageStart: string;
   completeHistory: boolean;
@@ -99,6 +99,9 @@ export interface RecordEvidence {
   coveredDays?: number;
   expectedDays?: number;
   total?: number;
+  /** Friend records: each person's value on the record day. */
+  ownValue?: number;
+  peerValue?: number;
 }
 export interface HighlightEvent {
   id: string;
@@ -124,6 +127,8 @@ export interface HighlightEvent {
   revision: string;
   provisional: boolean;
   peerId?: string;
+  /** The friend's first name when the record was published; the app prefers the current name. */
+  peerName?: string;
   detailPath: string;
 }
 export interface FeaturedCooldown {
@@ -186,7 +191,7 @@ export interface EvaluateOptions {
   asOfDay: string;
   today?: string;
   coverage?: MetricCoverage;
-  peers?: Array<{ profileId: string; observations: MetricObservation[] }>;
+  peers?: Array<{ profileId: string; name?: string; observations: MetricObservation[] }>;
   /** What was featured recently. Only affects `featured`, never which records exist. */
   cooldowns?: FeaturedCooldown[];
   revision?: string;
@@ -199,35 +204,34 @@ export const recordEventDay = (profileId: string, eventId: string) =>
     /\d{4}-\d{2}-\d{2}/,
   )?.[0];
 export const isFriendRecord = (e: Pick<HighlightEvent, "family">) =>
-  e.family === "friend_lead" || e.family === "friend_close" || e.family === "shared";
-const LEGACY_PRESENTABLE = new Set<RuleFamily>([
-  "daily",
-  "week",
-  "month",
-  "friend_lead",
-  "friend_close",
-  "shared",
-]);
-/** Records-1 rolling windows, variation, baseline streaks and non-record metrics stay hidden. */
+  e.family === "friend_margin" || e.family === "friend_streak";
+const TIER: Record<RecordKind, number> = {
+  personal_best: 7,
+  streak_record: 6,
+  top3: 5,
+  streak_milestone: 4,
+  friend_margin: 3,
+  friend_streak: 3,
+  best_since: 3,
+  worst: 2,
+};
+const LEGACY_PRESENTABLE = new Set<RuleFamily>(["daily", "week", "month"]);
+/**
+ * Hides archived events from earlier rules that no longer hold up: records-1 rolling windows,
+ * variation and baseline streaks, and the unnamed day-to-day friend "leads" of records-2.
+ */
 export const isPresentableRecord = (
   e: Pick<HighlightEvent, "metricId" | "kind" | "family" | "evidence">,
 ) =>
   Boolean(RECORD_SPEC_BY_ID[e.metricId]) &&
   (e.kind
-    ? true
+    ? e.kind in TIER
     : LEGACY_PRESENTABLE.has(e.family) && e.evidence?.windowDays == null);
-
-const TIER: Record<RecordKind, number> = {
-  personal_best: 7,
-  streak_record: 6,
-  top3: 5,
-  shared: 4,
-  streak_milestone: 4,
-  best_since: 3,
-  friend_lead: 3,
-  worst: 2,
-  friend_close: 1,
-};
+/** Today's headline is always about you; a friend record can only be a supporting card. */
+export function splitFeatured(featured: HighlightEvent[]) {
+  const hero = featured.find((e) => !isFriendRecord(e)) ?? null;
+  return { hero, supporting: featured.filter((e) => e !== hero) };
+}
 const PERIOD_WEIGHT: Record<EventPeriod, number> = { month: 3, week: 2, streak: 2, day: 1 };
 export const recordScore = (
   kind: RecordKind,
@@ -587,119 +591,142 @@ function streakRecord(ctx: Context, spec: RecordSpec, series: RecordSeries): Hig
   });
 }
 
-function friendRecords(ctx: Context, own: HighlightEvent[]): HighlightEvent[] {
+export const FRIEND_MIN_SHARED_DAYS = 30;
+export const FRIEND_MIN_PRIOR_WINS = 10;
+interface RivalPoint {
+  day: string;
+  own: number;
+  peer: number;
+  /** Positive when you were ahead. */
+  gap: number;
+}
+/** Days both people recorded through `day`, in time order. */
+function rivalry(
+  own: MetricObservation[],
+  peer: MetricObservation[],
+  metricId: string,
+  day: string,
+): RivalPoint[] {
+  const theirs = new Map(metricSeries(peer, metricId, undefined, day).map((p) => [p.day, p.value]));
+  return metricSeries(own, metricId, undefined, day)
+    .flatMap((p) => {
+      const other = theirs.get(p.day);
+      return other == null ? [] : [{ day: p.day, own: p.value, peer: other, gap: p.value - other }];
+    })
+    .sort((a, b) => a.day.localeCompare(b.day));
+}
+/** Consecutive shared days you came out ahead. A tie or a missing day ends a run. */
+function winningRuns(pairs: RivalPoint[]): RecordPoint[] {
+  const runs: RecordPoint[] = [];
+  let run: RecordPoint | null = null;
+  for (const p of pairs) {
+    if (run && (shiftDay(run.day, 1) !== p.day || p.gap <= EPS)) {
+      runs.push(run);
+      run = null;
+    }
+    if (p.gap > EPS)
+      run = run ? { ...run, day: p.day, value: run.value + 1 } : { startDay: p.day, day: p.day, value: 1 };
+  }
+  if (run) runs.push(run);
+  return runs.filter((r) => r.value >= STREAK_RANK_MIN);
+}
+function friendEvent(
+  ctx: Context,
+  spec: RecordSpec,
+  peer: NonNullable<EvaluateOptions["peers"]>[number],
+  kind: "friend_margin" | "friend_streak",
+  point: RecordPoint,
+  values: number[],
+  extras: Partial<RecordEvidence>,
+): HighlightEvent {
+  const { options, day } = ctx;
+  const m = METRIC_BY_ID[spec.metricId];
+  const period: EventPeriod = kind === "friend_streak" ? "streak" : "day";
+  const { rank, tied } = competitionRank(values, point.value, "high");
+  const baseline = values.reduce((sum, v) => sum + v, 0) / values.length;
+  const event: HighlightEvent = {
+    id: `${options.profileId}:${m.id}:${kind}:${day}:${peer.profileId}`,
+    profileId: options.profileId,
+    metricId: m.id,
+    category: m.category,
+    family: kind,
+    kind,
+    period,
+    direction: "high",
+    tone: "neutral",
+    day,
+    startDay: point.startDay,
+    value: point.value,
+    unit: period === "streak" ? "days" : m.unit,
+    title: "",
+    description: "",
+    score: recordScore(kind, period, 0),
+    evidence: {
+      windowDays: null,
+      coverageStart: day,
+      completeHistory: false,
+      rank,
+      tied,
+      sampleCount: values.length,
+      baseline,
+      difference: point.value - baseline,
+      ...extras,
+    },
+    relatedEvidence: [],
+    sourceIds: [],
+    revision: options.revision || RULES_VERSION,
+    provisional: false,
+    peerId: peer.profileId,
+    ...(peer.name ? { peerName: peer.name } : {}),
+    detailPath: `/metrics/${m.id}?profile=${encodeURIComponent(options.profileId)}&day=${day}&range=${detailRange(period, period === "streak" ? point.value : 1)}`,
+  };
+  event.title = recordHeadline(event);
+  event.description = recordValueLine(event);
+  return event;
+}
+/**
+ * Friend records only mark real milestones: your biggest-ever margin over that friend, and the
+ * day a run of wins becomes your longest or reaches a milestone. Day-to-day swaps are not records.
+ */
+function friendRecords(ctx: Context): HighlightEvent[] {
   const { options, day, today } = ctx;
   const events: HighlightEvent[] = [];
-  if (!options.peers?.length) return events;
-  const observations = options.observations
-    .filter((o) => o.day <= day)
-    .sort((a, b) => a.day.localeCompare(b.day));
-  for (const peer of options.peers) {
+  for (const peer of options.peers || []) {
     for (const spec of RECORD_SPECS) {
       const m = METRIC_BY_ID[spec.metricId];
       if (
-        m.comparison !== "direct" ||
-        !spec.periods.includes("day") ||
+        !spec.rival ||
         (options.metricIds && !options.metricIds.includes(m.id)) ||
         (m.accumulating && day === today)
       )
         continue;
-      const mine = metricSeries(observations, m.id);
-      const theirs = new Map(
-        metricSeries(peer.observations, m.id, undefined, day).map((p) => [p.day, p.value]),
-      );
-      const matched = mine.filter((p) => theirs.has(p.day));
-      const current = matched.at(-1);
-      const previous = matched.at(-2);
-      if (
-        !current ||
-        !previous ||
-        current.day !== day ||
-        matched.length < 30 ||
-        dayDistance(previous.day, current.day) !== 1
-      )
+      const pairs = rivalry(options.observations, peer.observations, m.id, day);
+      const current = pairs.at(-1);
+      if (!current || current.day !== day || pairs.length < FRIEND_MIN_SHARED_DAYS || current.gap <= EPS)
         continue;
-      const gap = current.value - theirs.get(current.day)!;
-      const oldGap = previous.value - theirs.get(previous.day)!;
-      const kind: RecordKind | null =
-        gap > 0 && oldGap <= 0
-          ? "friend_lead"
-          : Math.abs(gap) <= m.resolution && Math.abs(oldGap) > m.resolution
-            ? "friend_close"
-            : null;
-      if (!kind) continue;
-      const close = kind === "friend_close";
-      const gaps = matched.map((p) => {
-        const g = p.value - theirs.get(p.day)!;
-        return close ? Math.abs(g) : g;
-      });
-      const direction: RecordDirection = close ? "low" : "high";
-      const { rank, tied } = competitionRank(gaps, gaps.at(-1)!, direction);
-      const rarity = 1 - (rank - 1 + (tied - 1) / 2) / gaps.length;
-      if (rarity < 0.7) continue;
-      const baseline = gaps.slice(0, -1).reduce((a, b) => a + b, 0) / (gaps.length - 1);
-      const label = spec.name.toLowerCase();
-      events.push({
-        id: `${options.profileId}:${m.id}:${kind}:${day}:${peer.profileId}`,
-        profileId: options.profileId,
-        metricId: m.id,
-        category: m.category,
-        family: kind,
-        kind,
-        period: "day",
-        direction,
-        tone: "neutral",
-        day,
-        startDay: day,
-        value: gap,
-        unit: m.unit,
-        title: close ? `Neck and neck in ${label}` : `A new lead in ${label}`,
-        description: `${formatMetricValue(m, Math.abs(gap))} apart · ${matched.length} shared days`,
-        score: recordScore(kind, "day", 0),
-        evidence: {
-          windowDays: null,
-          coverageStart: matched[0].day,
-          completeHistory: false,
-          rank,
-          tied,
-          sampleCount: gaps.length,
-          baseline,
-          difference: gaps.at(-1)! - baseline,
-        },
-        relatedEvidence: [],
-        sourceIds: [],
-        revision: options.revision || RULES_VERSION,
-        provisional: false,
-        peerId: peer.profileId,
-        detailPath: `/metrics/${m.id}?profile=${encodeURIComponent(options.profileId)}&day=${day}`,
-      });
-    }
-    for (const record of own) {
-      const spec = RECORD_SPEC_BY_ID[record.metricId];
-      const m = METRIC_BY_ID[record.metricId];
-      if (
-        record.period !== "day" ||
-        record.tone !== "positive" ||
-        record.provisional ||
-        record.evidence.rank > 3 ||
-        m.comparison !== "direct"
-      )
-        continue;
-      const points = metricSeries(peer.observations, m.id, undefined, day);
-      const current = points.at(-1);
-      if (!current || current.day !== day || points.length < 30) continue;
-      const ahead = points.filter((p) => isBetter(p.value, current.value, spec.better)).length;
-      if (ahead > 2) continue;
-      events.push({
-        ...record,
-        id: `${record.id}:shared:${peer.profileId}`,
-        family: "shared",
-        kind: "shared",
-        peerId: peer.profileId,
-        title: `A standout ${spec.name.toLowerCase()} day for you both`,
-        description: `Both among your own top 3 · ${record.description}`,
-        score: recordScore("shared", "day", 0),
-      });
+      const shared = { ownValue: current.own, peerValue: current.peer, coverageStart: pairs[0].day };
+      const priorWins = pairs.slice(0, -1).filter((p) => p.gap > EPS);
+      const biggest = priorWins.reduce<RivalPoint | null>((best, p) => (!best || p.gap >= best.gap ? p : best), null);
+      if (priorWins.length >= FRIEND_MIN_PRIOR_WINS && biggest && current.gap > biggest.gap + EPS)
+        events.push(
+          friendEvent(ctx, spec, peer, "friend_margin", { value: current.gap, day, startDay: day }, pairs.map((p) => p.gap), {
+            ...shared,
+            previousRecord: { value: biggest.gap, day: biggest.day, startDay: biggest.day },
+          }),
+        );
+      const runs = winningRuns(pairs);
+      const run = runs.at(-1);
+      if (!run || run.day !== day) continue;
+      const previous = runs
+        .slice(0, -1)
+        .reduce<RecordPoint | null>((best, r) => (!best || r.value >= best.value ? r : best), null);
+      if (run.value === Math.max(MIN_STREAK_RECORD, (previous?.value ?? 0) + 1) || isStreakMilestone(run.value))
+        events.push(
+          friendEvent(ctx, spec, peer, "friend_streak", run, runs.map((r) => r.value), {
+            ...shared,
+            previousRecord: previous,
+          }),
+        );
     }
   }
   return events;
@@ -725,7 +752,7 @@ export function evaluateHighlights(options: EvaluateOptions): {
     const streak = streakRecord(ctx, spec, series);
     if (streak) events.push(streak);
   }
-  events.push(...friendRecords(ctx, events));
+  events.push(...friendRecords(ctx));
   return {
     events: events.sort(compareRecordPriority),
     featured: selectFeatured(events, options.cooldowns, options.asOfDay),
@@ -741,7 +768,8 @@ export const toCooldown = (e: HighlightEvent, featuredOn: string): FeaturedCoold
   provisional: e.provisional,
   featuredOn,
 });
-/** At most three, one per metric, two per category, and never more than one low. */
+const featuredGroup = (e: HighlightEvent) => (e.tone === "unfavorable" ? 2 : isFriendRecord(e) ? 1 : 0);
+/** At most three, one per metric, two per category, and at most one low and one friend record. */
 export function selectFeatured(
   events: HighlightEvent[],
   cooldowns: FeaturedCooldown[] = [],
@@ -779,27 +807,27 @@ export function selectFeatured(
       }
       return true;
     })
-    // A low never outranks a positive record for the headline slot.
-    .sort(
-      (a, b) =>
-        Number(a.tone === "unfavorable") - Number(b.tone === "unfavorable") ||
-        compareRecordPriority(a, b),
-    );
+    // Your own good results lead, then a friend milestone, then a low.
+    .sort((a, b) => featuredGroup(a) - featuredGroup(b) || compareRecordPriority(a, b));
   const chosen: HighlightEvent[] = [];
   const metrics = new Set<string>();
   const categories = new Map<string, number>();
-  let lows = 0;
+  let lows = 0,
+    friends = 0;
   for (const e of eligible) {
+    const friend = isFriendRecord(e);
     if (
       metrics.has(e.metricId) ||
       (categories.get(e.category) || 0) >= 2 ||
-      (e.tone === "unfavorable" && lows >= 1)
+      (e.tone === "unfavorable" && lows >= 1) ||
+      (friend && friends >= 1)
     )
       continue;
     chosen.push(e);
     metrics.add(e.metricId);
     categories.set(e.category, (categories.get(e.category) || 0) + 1);
     if (e.tone === "unfavorable") lows++;
+    if (friend) friends++;
     if (chosen.length === 3) break;
   }
   return chosen;
@@ -884,28 +912,16 @@ export function rankRecordHistory(
 ): RecordRankingRow[] {
   const metric = METRIC_BY_ID[event.metricId];
   if (!metric || !event.kind) return [];
-  if (event.kind === "friend_lead" || event.kind === "friend_close") {
-    const peer = new Map(
-      metricSeries(peerObservations, metric.id, undefined, event.day).map((p) => [p.day, p.value]),
-    );
-    const points = metricSeries(observations, metric.id, undefined, event.day).flatMap((p) => {
-      const other = peer.get(p.day);
-      if (other == null) return [];
-      const gap = p.value - other;
-      return [
-        {
-          day: p.day,
-          startDay: p.day,
-          value: event.kind === "friend_close" ? Math.abs(gap) : gap,
-          ownValue: p.value,
-          peerValue: other,
-        },
-      ];
-    });
-    return rankRows(points, event.direction, event);
+  if (event.kind === "friend_margin" || event.kind === "friend_streak") {
+    const pairs = rivalry(observations, peerObservations, metric.id, event.day);
+    const points =
+      event.kind === "friend_margin"
+        ? pairs.map((p) => ({ day: p.day, startDay: p.day, value: p.gap, ownValue: p.own, peerValue: p.peer }))
+        : winningRuns(pairs);
+    return rankRows(points, "high", event);
   }
   const spec = RECORD_SPEC_BY_ID[event.metricId];
-  const period: EventPeriod | undefined = event.kind === "shared" ? "day" : event.period;
+  const period = event.period;
   if (!spec || !period) return [];
   const points = comparisonSet(recordSeries(observations, spec), period, event.day).map((p) => ({
     day: p.day,

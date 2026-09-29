@@ -313,6 +313,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 };
 
+/** A profile's current first name; undefined outside the provider (tests, previews). */
+export const useProfileFirstName = (id?: string) => {
+    const context = useContext(UserContext);
+    return id ? context?.profiles.find((profile) => profile.id === id)?.firstName || undefined : undefined;
+};
+
 export const useUser = () => {
     const context = useContext(UserContext);
     if (!context) {

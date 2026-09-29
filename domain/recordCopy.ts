@@ -1,5 +1,5 @@
 import { METRIC_BY_ID, dayDistance, formatMetricValue, shiftDay } from "./metrics.js";
-import { RECORD_SPEC_BY_ID, type RecordSpec } from "./recordSpecs.js";
+import { MIN_STREAK_RECORD, RECORD_SPEC_BY_ID, type RecordSpec } from "./recordSpecs.js";
 import type {
   EventPeriod,
   HighlightEvent,
@@ -24,7 +24,7 @@ export const eventPeriod = (e: Pick<HighlightEvent, "period" | "family">): Event
   e.period ??
   (e.family === "week" || e.family === "month" || e.family === "streak"
     ? e.family
-    : ["daily", "shared", "friend_lead", "friend_close"].includes(e.family)
+    : ["daily", "shared", "friend_lead", "friend_close", "friend_margin"].includes(e.family)
       ? "day"
       : null);
 
@@ -89,12 +89,28 @@ export function legacyComparisonLabel(evidence: RecordEvidence) {
       ? "of all time"
       : `since ${shortDate(evidence.coverageStart)}`;
 }
-const isFriendKind = (e: HighlightEvent) =>
-  e.kind === "friend_lead" || e.kind === "friend_close" || e.kind === "shared";
+/** The friend's current name when the app knows it, else the name stored with the record. */
+export const friendName = (e: Pick<HighlightEvent, "peerName">, current?: string) =>
+  current || e.peerName || "your friend";
+const possessive = (name: string) => (name === "your friend" ? "your friend’s" : `${name}’s`);
+/** "You out-stepped Sam", "You beat Sam’s sleep score". */
+const beat = (e: HighlightEvent, name: string) => {
+  const rival = RECORD_SPEC_BY_ID[e.metricId]?.rival;
+  return rival?.verb ? `You ${rival.verb} ${name}` : `You beat ${possessive(name)} ${rival?.noun || "result"}`;
+};
+function friendHeadline(e: HighlightEvent, name: string) {
+  const spec = RECORD_SPEC_BY_ID[e.metricId];
+  if (e.kind === "friend_margin") return `Your biggest ${spec?.rival?.noun || "result"} win over ${name}`;
+  const run = `${beat(e, name)} ${e.value} ${units(spec, e.value)} in a row`;
+  const previous = e.evidence.previousRecord;
+  return e.value === Math.max(MIN_STREAK_RECORD, (previous?.value ?? 0) + 1)
+    ? `New longest run: ${lowerFirst(run)}`
+    : run;
+}
 
-export function recordHeadline(e: HighlightEvent): string {
+export function recordHeadline(e: HighlightEvent, peerName?: string): string {
   if (!e.kind) return e.title.replace(` ${legacyComparisonLabel(e.evidence)}`, "");
-  if (isFriendKind(e)) return e.title;
+  if (e.kind === "friend_margin" || e.kind === "friend_streak") return friendHeadline(e, friendName(e, peerName));
   const spec = RECORD_SPEC_BY_ID[e.metricId];
   const period = eventPeriod(e);
   if (!spec || !period) return e.title;
@@ -126,8 +142,28 @@ export function recordHeadline(e: HighlightEvent): string {
 }
 
 /** The value and what it means: "92 · previous best 90 (Jun 3, 2025)". */
-export function recordValueLine(e: HighlightEvent): string {
-  if (!e.kind || isFriendKind(e)) return e.description;
+export function recordValueLine(e: HighlightEvent, peerName?: string): string {
+  if (!e.kind) return e.description;
+  if (e.kind === "friend_margin" || e.kind === "friend_streak") {
+    const name = friendName(e, peerName);
+    const plain = (value: number) => formatRecordNumber(e.metricId, "day", value, false);
+    const previous = e.evidence.previousRecord;
+    const scores =
+      e.kind === "friend_margin" && e.evidence.ownValue != null && e.evidence.peerValue != null
+        ? `You ${plain(e.evidence.ownValue)}, ${name} ${plain(e.evidence.peerValue)}`
+        : "";
+    const clause =
+      e.kind === "friend_margin"
+        ? previous
+          ? `previous biggest win ${plain(previous.value)} (${shortDate(previous.day)})`
+          : ""
+        : previous && previous.value >= e.value
+          ? `your longest run is ${previous.value}`
+          : previous
+            ? `previous longest ${previous.value} (${monthYear(previous.day)})`
+            : "your longest run yet";
+    return upperFirst([scores, clause].filter(Boolean).join(" · "));
+  }
   const spec = RECORD_SPEC_BY_ID[e.metricId];
   const period = eventPeriod(e);
   if (!spec || !period) return e.description;
@@ -186,7 +222,7 @@ export function recordContext(e: HighlightEvent, relativeTo?: string): string | 
 }
 
 export type RecordIcon = "trophy" | "medal" | "sparkles" | "flame" | "trending-down" | "users";
-export function recordEyebrow(e: HighlightEvent): { label: string; icon: RecordIcon } {
+export function recordEyebrow(e: HighlightEvent, peerName?: string): { label: string; icon: RecordIcon } {
   switch (e.kind) {
     case "personal_best":
       return { label: "Personal best", icon: "trophy" };
@@ -200,10 +236,9 @@ export function recordEyebrow(e: HighlightEvent): { label: string; icon: RecordI
       return { label: "Streak", icon: "flame" };
     case "worst":
       return { label: "Worth noticing", icon: "trending-down" };
-    case "friend_lead":
-    case "friend_close":
-    case "shared":
-      return { label: "With friends", icon: "users" };
+    case "friend_margin":
+    case "friend_streak":
+      return { label: `You vs ${friendName(e, peerName)}`, icon: "users" };
   }
   return e.tone === "unfavorable"
     ? { label: "Worth noticing", icon: "trending-down" }
@@ -212,7 +247,8 @@ export function recordEyebrow(e: HighlightEvent): { label: string; icon: RecordI
       : { label: "Something stands out", icon: "sparkles" };
 }
 export function rankNoun(e: HighlightEvent): string {
-  if (e.kind === "friend_lead" || e.kind === "friend_close") return "shared days";
+  if (e.kind === "friend_margin") return "days you both recorded";
+  if (e.kind === "friend_streak") return "winning runs";
   const period = eventPeriod(e);
   const spec = RECORD_SPEC_BY_ID[e.metricId];
   if (!e.kind || !period) return "results";
@@ -226,7 +262,8 @@ export function rankLabel(e: HighlightEvent): string {
 }
 export function rankOrderLabel(e: HighlightEvent): string {
   if (e.kind === "streak_record" || e.kind === "streak_milestone" || e.family === "streak") return "Longest first";
-  if (e.kind === "friend_close" || e.family === "friend_close") return "Closest first";
+  if (e.kind === "friend_streak") return "Longest first";
+  if (e.kind === "friend_margin") return "Biggest margin first";
   return e.direction === "high" ? "Highest first" : "Lowest first";
 }
 export const streakCondition = (metricId: string) => RECORD_SPEC_BY_ID[metricId]?.streak?.condition || "";

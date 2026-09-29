@@ -3,19 +3,22 @@ import { dayDistance, shiftDay, type MetricObservation } from "./metrics";
 import {
   compareRecordPriority,
   evaluateHighlights,
+  selectFeatured,
+  isFriendRecord,
   rankRecordHistory,
+  splitFeatured,
   recordScore,
   surroundingRankings,
   type HighlightEvent,
 } from "./records";
-import { rankLabel } from "./recordCopy";
+import { rankLabel, recordHeadline, recordValueLine } from "./recordCopy";
 
 const days = (values: number[], metricId = "sleep_score") => values.map((value, i) => ({
   day: shiftDay("2025-01-01", i), values: { [metricId]: value }, sources: {},
 }));
 const findDaily = (rows: MetricObservation[]) => evaluateHighlights({ profileId: "me", observations: rows,
   asOfDay: rows.at(-1)!.day, today: shiftDay(rows.at(-1)!.day, 1), metricIds: ["sleep_score"]
-}).events.find(e => e.period === "day" && e.kind !== "shared")!;
+}).events.find(e => e.period === "day" && !isFriendRecord(e))!;
 
 describe("surrounding record rankings", () => {
   it("shows first, second, the selected third, and the following results, without future data", () => {
@@ -93,28 +96,50 @@ describe("surrounding record rankings", () => {
     expect(ranked.map(r => r.value)).toEqual([6,5,4,3]);
     expect(ranked[0]).toMatchObject({ rank: 1, selected: true, threshold: 100 });
   });
-  it("ranks friend gaps only on matched dates, and shared records by personal results", () => {
-    for (const close of [false, true]) {
-      const own = days([...Array.from({ length: 80 }, (_, i) => (close ? 85 : 60) + i % 5), 99]);
-      const peer = days([...Array.from({ length: 80 }, () => close ? 70 : 80), close ? 98 : 80]);
-      peer.splice(10, 1);
-      const events = evaluateHighlights({ profileId: "me", observations: own, peers: [{ profileId: "peer", observations: peer }],
-        asOfDay: own.at(-1)!.day, metricIds: ["sleep_score"] }).events;
-      const friend = events.find(e => e.kind === (close ? "friend_close" : "friend_lead"))!;
-      expect(friend).toBeDefined();
-      const ranked = rankRecordHistory(friend, own, peer);
-      expect(ranked).toHaveLength(peer.length);
-      expect(ranked.find(r => r.selected)?.rank).toBe(friend.evidence.rank);
-      const shared = events.find(e => e.kind === "shared");
-      if (shared) expect(rankRecordHistory(shared, own, peer).find(r => r.selected)?.rank).toBe(shared.evidence.rank);
-    }
+  const rivals = (own: number[], peer: number[], dropPeerDay?: number) => {
+    const mine = days(own);
+    const theirs = days(peer);
+    if (dropPeerDay != null) theirs.splice(dropPeerDay, 1);
+    return { mine, theirs, peers: [{ profileId: "peer", name: "Sam", observations: theirs }] };
+  };
+  const friendEvents = (mine: MetricObservation[], peers: Array<{ profileId: string; name: string; observations: MetricObservation[] }>, asOfDay = mine.at(-1)!.day) =>
+    evaluateHighlights({ profileId: "me", observations: mine, peers, asOfDay, today: "2030-01-01", metricIds: ["sleep_score"] })
+      .events.filter(isFriendRecord);
+  it("names the friend and ranks a biggest-ever win over them on days you both recorded", () => {
+    const { mine, theirs, peers } = rivals([...Array.from({ length: 80 }, (_, i) => 60 + i % 15), 90], Array(81).fill(70), 10);
+    const [win] = friendEvents(mine, peers);
+    expect(win).toMatchObject({ kind: "friend_margin", peerId: "peer", peerName: "Sam", value: 20, evidence: { rank: 1, sampleCount: 80, ownValue: 90, peerValue: 70 } });
+    expect(recordHeadline(win)).toBe("Your biggest sleep score win over Sam");
+    expect(recordValueLine(win)).toMatch(/^You 90, Sam 70 · previous biggest win 4 \(/);
+    expect(recordHeadline(win, "Samantha")).toBe("Your biggest sleep score win over Samantha");
+    const ranked = rankRecordHistory(win, mine, theirs);
+    expect(ranked).toHaveLength(theirs.length);
+    expect(ranked.find(r => r.selected)).toMatchObject({ rank: 1, value: 20, ownValue: 90, peerValue: 70 });
+    const fewWins = rivals([...Array(80).fill(60), 90], Array(81).fill(70));
+    expect(friendEvents(fewWins.mine, fewWins.peers)).toEqual([]);
   });
-  it("never builds a shared record from a low", () => {
-    const rows = days(Array.from({ length: 100 }, (_, i) => (i === 99 ? 1 : 70 + (i % 20))));
-    const events = evaluateHighlights({ profileId: "me", observations: rows, asOfDay: rows.at(-1)!.day,
-      peers: [{ profileId: "friend", observations: rows }] }).events;
-    expect(events.find(e => e.kind === "worst")).toBeDefined();
-    expect(events.some(e => e.kind === "shared")).toBe(false);
+  it("recognizes a winning run when it becomes the longest and at milestones, never day-to-day swaps", () => {
+    const own = Array.from({ length: 67 }, (_, i) => (i >= 20 && i <= 23) || i >= 60 ? 80 : 70);
+    const { mine, theirs, peers } = rivals(own, Array(67).fill(75));
+    const found = mine.slice(60).flatMap(o => friendEvents(mine, peers, o.day)).map(e => [e.value, recordHeadline(e)]);
+    expect(found).toEqual([
+      [5, "New longest run: you beat Sam’s sleep score 5 nights in a row"],
+      [7, "You beat Sam’s sleep score 7 nights in a row"],
+    ]);
+    const run = friendEvents(mine, peers).find(e => e.kind === "friend_streak")!;
+    expect(rankRecordHistory(run, mine, theirs).map(r => [r.value, r.selected])).toEqual([[7, true], [4, false]]);
+    const swaps = rivals(Array.from({ length: 90 }, (_, i) => i % 2 ? 80 : 70), Array(90).fill(75));
+    expect(friendEvents(swaps.mine, swaps.peers)).toEqual([]);
+  });
+  it("keeps friend records out of the headline and features at most one", () => {
+    const own = findDaily(days([...Array.from({ length: 80 }, (_, i) => 50 + i % 20), 99]));
+    const friend = (id: string, metricId: string) =>
+      ({ ...own, id, metricId, family: "friend_margin", kind: "friend_margin", tone: "neutral", score: 999 }) as HighlightEvent;
+    const featured = selectFeatured([friend("a", "steps"), friend("b", "readiness_score"), own]);
+    expect(featured[0].id).toBe(own.id);
+    expect(featured.filter(isFriendRecord)).toHaveLength(1);
+    expect(splitFeatured([friend("a", "steps")])).toEqual({ hero: null, supporting: [friend("a", "steps")] });
+    expect(splitFeatured(featured).hero?.id).toBe(own.id);
   });
   it("returns no ranking for archived records-1 events rather than a contradictory one", () => {
     const rows = days(Array.from({ length: 100 }, (_, i) => 50 + i % 40));

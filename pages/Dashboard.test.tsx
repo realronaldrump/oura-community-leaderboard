@@ -42,6 +42,7 @@ beforeEach(() => {
 });
 
 vi.mock('../contexts/UserContext', () => ({
+    useProfileFirstName: () => undefined,
     useUser: () => ({
         activeProfile: mocks.profile,
         profiles: [mocks.profile],

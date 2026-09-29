@@ -394,6 +394,7 @@ export async function runInsightJob(
     const coverage: MetricCoverage = metadata.sourceCoverage || {};
     const peers: Array<{
       profileId: string;
+      name?: string;
       observations: MetricObservation[];
     }> = [];
     const peerInputs: NonNullable<PublishedInsights["peerInputs"]> = {};
@@ -416,7 +417,11 @@ export async function runInsightJob(
           peer.id,
           peerSummary.months,
         );
-        peers.push({ profileId: peer.id, observations: peerObservations });
+        peers.push({
+          profileId: peer.id,
+          name: (peer.data() as UserProfile).firstName || undefined,
+          observations: peerObservations,
+        });
         peerInputs[peer.id] = {
           months: peerSummary.months,
           exclusions: peerSummary.exclusions,

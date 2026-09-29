@@ -72,9 +72,8 @@ export async function readPublishedRecordRankings(db: Firestore, input: {
     ]);
     const rows = rankRecordHistory(event, observations, peers);
     const selected = rows.find(row => row.selected);
-    const expectedValue = event.family === "friend_close" ? Math.abs(event.value) : event.value;
     if (!selected || rows.length !== event.evidence.sampleCount || selected.rank !== event.evidence.rank ||
-        Math.abs(selected.value - expectedValue) > METRIC_BY_ID[event.metricId].resolution / 100)
+        Math.abs(selected.value - event.value) > METRIC_BY_ID[event.metricId].resolution / 100)
       fail("rankings_preparing");
     found = { event, rows };
     if (cache.size >= 12) cache.delete(cache.keys().next().value!);

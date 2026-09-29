@@ -29,7 +29,7 @@ import {
   validDay,
   type MetricCategory,
 } from "../domain/metrics";
-import type { HighlightEvent } from "../domain/records";
+import { splitFeatured, type HighlightEvent } from "../domain/records";
 import type { DailyStats, UserProfile } from "../types";
 import { getProfileDisplayName } from "../utils/profileName";
 import { filterDailyStatsForProfile } from "../utils/dataExclusions";
@@ -220,7 +220,7 @@ function DashboardContent({
       : route.pathname.startsWith("/records")
         ? "/records"
         : route.pathname;
-  const featured = insights.highlights;
+  const { hero, supporting } = splitFeatured(insights.highlights);
   const openMetric = (id: string) => {
     setCategory(null);
     navigate(`/metrics/${id}?day=${day}`);
@@ -290,12 +290,12 @@ function DashboardContent({
                   {dateLabel(day)}
                 </button>
               </div>
-              {featured[0] ? (
+              {hero ? (
                 <HighlightCard
-                  event={featured[0]}
+                  event={hero}
                   hero
                   relativeTo={day}
-                  onClick={() => openRecord(featured[0])}
+                  onClick={() => openRecord(hero)}
                 />
               ) : (
                 <section className="quiet-hero">
@@ -352,9 +352,9 @@ function DashboardContent({
                   );
                 })}
               </div>
-              {featured.length > 1 && (
+              {supporting.length > 0 && (
                 <section className="supporting-highlights">
-                  {featured.slice(1).map((e) => (
+                  {supporting.map((e) => (
                     <HighlightCard
                       key={e.id}
                       event={e}

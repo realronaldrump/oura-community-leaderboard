@@ -95,6 +95,17 @@ describe("record wording", () => {
     expect(recordValueLine(streak)).toBe("Previous longest 9 (Mar 2025)");
     expect(recordContext(streak)).toBe("Since Sep 18");
   });
+  it("names the friend in friend records, with a sensible fallback", () => {
+    const run: HighlightEvent = { ...base, metricId: "steps", family: "friend_streak", kind: "friend_streak", period: "streak", tone: "neutral", value: 7, startDay: "2026-09-23", peerId: "p", peerName: "Sam", evidence: { ...base.evidence, rank: 1, sampleCount: 6, previousRecord: { value: 9, day: "2025-05-10", startDay: "2025-05-02" } } };
+    expect(recordHeadline(run)).toBe("You out-stepped Sam 7 days in a row");
+    expect(recordValueLine(run)).toBe("Your longest run is 9");
+    expect(recordEyebrow(run)).toEqual({ label: "You vs Sam", icon: "users" });
+    expect(rankLabel(run)).toBe("#1 of 6 winning runs");
+    expect(recordContext(run)).toBe("Since Sep 23");
+    expect(recordHeadline({ ...run, peerName: undefined })).toBe("You out-stepped your friend 7 days in a row");
+    expect(recordHeadline({ ...run, metricId: "readiness_score", value: 5, evidence: { ...run.evidence, previousRecord: null } }, "Alex"))
+      .toBe("New longest run: you beat Alex’s readiness 5 days in a row");
+  });
   it("shows archived records-1 events exactly as they were stored", () => {
     const legacy = { ...base, kind: undefined, title: "Best 30-day average sleep score of all time", description: "79 · 477 comparable periods", evidence: { ...base.evidence, rank: 1 } };
     expect(recordHeadline(legacy)).toBe("Best 30-day average sleep score");

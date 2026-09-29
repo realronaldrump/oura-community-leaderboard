@@ -19,8 +19,12 @@ export interface RecordSpec {
   /** Keeps a ring-off day or a missing night from reading as a low. */
   lowGate?: "worn" | "scoredNight";
   streak?: { threshold: number; condition: string };
+  /** Friend records compare these directly: "You beat Sam’s sleep score", "You out-stepped Sam". */
+  rival?: { noun: string; verb?: string };
   priority: number;
 }
+/** A streak first counts as a record at this length. */
+export const MIN_STREAK_RECORD = 5;
 const periods = (day: string, week: string, month: string) => ({ day, week, month });
 const scored = (
   metricId: string,
@@ -46,13 +50,16 @@ export const RECORD_SPECS: readonly RecordSpec[] = [
     unit: "night",
     lowGate: "scoredNight",
     streak: { threshold: 85, condition: "with a sleep score of 85+" },
+    rival: { noun: "sleep score" },
   }),
   scored("readiness_score", "Readiness", "readiness", 2, {
     streak: { threshold: 85, condition: "with readiness of 85+" },
+    rival: { noun: "readiness" },
   }),
   scored("activity_score", "Activity score", "activity score", 3, {
     lowGate: "worn",
     streak: { threshold: 85, condition: "with an activity score of 85+" },
+    rival: { noun: "activity score" },
   }),
   {
     metricId: "sleep_duration",
@@ -116,6 +123,7 @@ export const RECORD_SPECS: readonly RecordSpec[] = [
     lowPeriods: ["day", "week", "month"],
     lowGate: "worn",
     streak: { threshold: 10000, condition: "with 10,000+ steps" },
+    rival: { noun: "steps", verb: "out-stepped" },
     priority: 7,
   },
   {

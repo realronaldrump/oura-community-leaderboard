@@ -10,6 +10,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { HighlightEvent } from "../../domain/records";
+import { useProfileFirstName } from "../../contexts/UserContext";
 import {
   rankLabel,
   recordContext,
@@ -38,7 +39,8 @@ export default function HighlightCard({
   relativeTo?: string;
   onClick: () => void;
 }) {
-  const eyebrow = recordEyebrow(event);
+  const peerName = useProfileFirstName(event.peerId);
+  const eyebrow = recordEyebrow(event, peerName);
   const Icon = ICONS[eyebrow.icon];
   const context = recordContext(event, relativeTo);
   return (
@@ -54,8 +56,8 @@ export default function HighlightCard({
         </span>
         <ArrowUpRight size={18} aria-hidden="true" />
       </div>
-      <h2>{recordHeadline(event)}</h2>
-      <p className="highlight-value">{recordValueLine(event)}</p>
+      <h2>{recordHeadline(event, peerName)}</h2>
+      <p className="highlight-value">{recordValueLine(event, peerName)}</p>
       {context && <p className="highlight-context">{context}</p>}
       {hero && (
         <div className="highlight-card__foot">
