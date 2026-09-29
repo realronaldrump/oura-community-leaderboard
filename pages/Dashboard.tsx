@@ -294,6 +294,7 @@ function DashboardContent({
                 <HighlightCard
                   event={featured[0]}
                   hero
+                  relativeTo={day}
                   onClick={() => openRecord(featured[0])}
                 />
               ) : (
@@ -348,6 +349,7 @@ function DashboardContent({
                     <HighlightCard
                       key={e.id}
                       event={e}
+                      relativeTo={day}
                       onClick={() => openRecord(e)}
                     />
                   ))}

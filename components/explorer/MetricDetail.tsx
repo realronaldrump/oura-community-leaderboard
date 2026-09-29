@@ -13,7 +13,7 @@ import {
   shiftDay,
   type MetricObservation,
 } from "../../domain/metrics";
-import { compareRecordPriority, type HighlightEvent } from "../../domain/records";
+import { RECORD_SPEC_BY_ID, compareRecordPriority, isPresentableRecord, type HighlightEvent } from "../../domain/records";
 import RecordEvidenceSheet from "./RecordEvidenceSheet";
 import type { DailyStats, UserProfile } from "../../types";
 import {
@@ -270,7 +270,7 @@ export default function MetricDetail({
     ? values.reduce((a, b) => a + b, 0) / values.length
     : null;
   const records = (summary?.recent || [])
-    .filter((e) => e.metricId === id)
+    .filter((e) => e.metricId === id && isPresentableRecord(e))
     .sort(compareRecordPriority)
     .slice(0, 3);
   const main = mainSleepSession(
@@ -476,21 +476,23 @@ export default function MetricDetail({
       )}
       {records.length > 0 && (
         <section className="detail-section">
-          <h2>Recent recognitions</h2>
+          <h2>Recent records</h2>
           {records.map((e) => (
             <HighlightCard key={e.id} event={e} onClick={() => setEvent(e)} />
           ))}
         </section>
       )}
-      <section className="detail-section">
-        <button
-          className="text-action"
-          onClick={() => navigate(`/records?metric=${id}`)}
-        >
-          <Sparkles size={16} /> All records for this metric{" "}
-          <ChevronRight size={16} />
-        </button>
-      </section>
+      {RECORD_SPEC_BY_ID[id] && (
+        <section className="detail-section">
+          <button
+            className="text-action"
+            onClick={() => navigate(`/records?metric=${id}`)}
+          >
+            <Sparkles size={16} /> All records for this metric{" "}
+            <ChevronRight size={16} />
+          </button>
+        </section>
+      )}
       {!metric.clock && (
         <details
           className="quiet-disclosure"

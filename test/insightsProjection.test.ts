@@ -4,6 +4,7 @@ import {
   runInsightJob,
 } from "../api/_lib/insightsProjection";
 import { shiftDay } from "../domain/metrics";
+import { RULES_VERSION } from "../domain/records";
 
 /** Small transaction-aware Firestore adapter; no live account or health data. */
 function memoryFirestore() {
@@ -135,6 +136,9 @@ describe("server records publication", () => {
       store.data.get(`profileStats/me/recordIndexes/${summary.archiveIndex}`),
     );
     expect(summary.featured.length).toBeLessThanOrEqual(3);
+    expect(summary.featured[0]).toMatchObject({ kind: "personal_best", day: summary.day });
+    expect(summary.personalBests.metrics[0]).toMatchObject({ metricId: "sleep_score" });
+    expect(new Set(summary.recent.map((e: any) => e.id)).size).toBe(summary.recent.length);
     expect(summary.archiveBefore).toBeTruthy();
     expect(JSON.stringify(summary).length).toBeLessThan(64000);
     await runInsightJob("me", {
@@ -149,6 +153,47 @@ describe("server records publication", () => {
     expect(
       store.data.get(`profileStats/me/recordIndexes/${summary.archiveIndex}`),
     ).toEqual(originalIndex);
+  });
+  it("indexes only days that have records", async () => {
+    const store = memoryFirestore();
+    const now = seed(store);
+    await runInsightJob("me", { db: store.db, now, archiveDays: 60 });
+    const summary = store.data.get("profileStats/me/snapshots/insights");
+    expect(summary.archiveBefore).toBeNull();
+    const index = store.data.get(`profileStats/me/recordIndexes/${summary.archiveIndex}`);
+    expect(Object.keys(index.days)).toContain(summary.day);
+    for (const id of Object.values<string>(index.days)) {
+      const pages = store.data.get(`profileStats/me/recordDays/${id}`).pages;
+      expect(pages.length).toBeGreaterThan(0);
+    }
+    expect(index.cooldowns).toEqual([
+      expect.objectContaining({ id: summary.featured[0].id, featuredOn: summary.day }),
+    ]);
+  });
+  it("starts fresh after a rules change and never rebuilds over newer rules", async () => {
+    const store = memoryFirestore();
+    const now = seed(store);
+    const day = shiftDay("2026-01-01", 49);
+    const legacy = { id: `me:sleep_score:mean:30:high:${shiftDay(day, -1)}`, metricId: "sleep_score", family: "mean", day: shiftDay(day, -1), evidence: { rank: 1 } };
+    store.data.set("profileStats/me/recordIndexes/old", {
+      days: {},
+      cooldowns: [{ metricId: "sleep_score", family: "daily", direction: "high", day: shiftDay(day, -1), value: 1, evidence: { rank: 1 } }],
+    });
+    store.data.set("profileStats/me/snapshots/insights", {
+      rulesVersion: "records-1", exclusions: "[]", archiveIndex: "old", recent: [legacy], featured: [], months: {},
+    });
+    expect((await runInsightJob("me", { db: store.db, now, archiveDays: 1 })).status).toBe("ready");
+    const summary = store.data.get("profileStats/me/snapshots/insights");
+    expect(summary.rulesVersion).toBe(RULES_VERSION);
+    expect(summary.recent.some((e: any) => e.id === legacy.id)).toBe(false);
+    const index = store.data.get(`profileStats/me/recordIndexes/${summary.archiveIndex}`);
+    expect(index.cooldowns.every((c: any) => c.featuredOn)).toBe(true);
+    const newer = { ...summary, rulesVersion: "records-99", inputKey: "other" };
+    store.data.set("profileStats/me/snapshots/insights", newer);
+    const writes = store.data.size;
+    expect((await runInsightJob("me", { db: store.db, now, archiveDays: 1 })).status).toBe("newer_rules");
+    expect(store.data.get("profileStats/me/snapshots/insights")).toEqual(newer);
+    expect(store.data.size).toBe(writes);
   });
   it("retains the last published snapshot when a new generation fails", async () => {
     const store = memoryFirestore();
@@ -177,7 +222,7 @@ describe("server records publication", () => {
     const now = seed(store, 20);
     store.data.set("profileStats/me/snapshots/insights-draft", {
       exclusions: "old",
-      rulesVersion: "records-1",
+      rulesVersion: RULES_VERSION,
       baseRevision: null,
       completedMonths: ["2026-01"],
       months: { "2026-01": "nonexistent-stale-month" },

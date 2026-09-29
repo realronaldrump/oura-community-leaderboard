@@ -11,9 +11,13 @@ import {
   type MetricObservation,
 } from "../../domain/metrics.js";
 import {
+  compareRecordPriority,
+  computePersonalBests,
   evaluateHighlights,
   evaluateDailyHighlights,
   RULES_VERSION,
+  toCooldown,
+  type FeaturedCooldown,
   type HighlightEvent,
   type InsightSummary,
 } from "../../domain/records.js";
@@ -44,6 +48,8 @@ const hash = (value: unknown) =>
     .update(canonicalJson(value))
     .digest("hex")
     .slice(0, 20);
+const rulesNumber = (version?: string) =>
+  Number(/^records-(\d+)$/.exec(version || "")?.[1] || 0);
 export const monthsBetween = (start: string, end: string) => {
   const months: string[] = [];
   let month = `${start.slice(0, 7)}-01`;
@@ -280,6 +286,9 @@ export async function runInsightJob(
     const today = localDay(profile, now);
     const exclusions = exclusionKey(profile);
     const previous = previousDoc.data() as PublishedInsights | undefined;
+    // An older bundle must never rebuild over records a newer bundle already published.
+    if (rulesNumber(previous?.rulesVersion) > rulesNumber(RULES_VERSION))
+      return { status: "newer_rules" };
     const job = jobDoc.data() as InsightJob;
     const fullRebuild =
       !previous ||
@@ -443,8 +452,10 @@ export async function runInsightJob(
     let archiveBefore = historicalChange
       ? shiftDay(day, -1)
       : (previous?.archiveBefore ?? null);
-    const priorEvents =
-      previous?.exclusions === exclusions ? previous.recent || [] : [];
+    // Only events and featured history produced by these same rules may carry forward.
+    const compatible =
+      previous?.rulesVersion === RULES_VERSION && previous.exclusions === exclusions;
+    const priorEvents = compatible ? previous.recent || [] : [];
     const previousIndex = previous?.archiveIndex
       ? (
           await root
@@ -453,6 +464,9 @@ export async function runInsightJob(
             .get()
         ).data() || {}
       : {};
+    const priorCooldowns: FeaturedCooldown[] = compatible
+      ? previousIndex.cooldowns || []
+      : [];
     const recordDays: Record<string, string> = historicalChange
       ? {}
       : { ...(previousIndex.days || {}) };
@@ -465,6 +479,16 @@ export async function runInsightJob(
           delete recordDays[d];
           delete metricMasks[d];
         }
+    // Quiet days are not indexed, so paging back always finds records.
+    const publishDay = async (eventDay: string, events: HighlightEvent[]) => {
+      if (!events.length) {
+        delete recordDays[eventDay];
+        delete metricMasks[eventDay];
+        return;
+      }
+      recordDays[eventDay] = await writeDay(db, profileId, generation, eventDay, events);
+      metricMasks[eventDay] = metricMask(events.map((e) => e.metricId));
+    };
     const evaluated = evaluateDailyHighlights({
       profileId,
       observations,
@@ -472,28 +496,16 @@ export async function runInsightJob(
       today,
       coverage,
       peers,
-      priorEvents: previousIndex.cooldowns || priorEvents,
+      cooldowns: priorCooldowns,
       revision,
     });
-    recordDays[day] = await writeDay(
-      db,
-      profileId,
-      generation,
-      day,
-      evaluated.events,
-    );
-    metricMasks[day] = metricMask(evaluated.events.map((e) => e.metricId));
+    await publishDay(day, evaluated.events);
+    const evaluatedDays = new Set([day]);
+    const fresh = [...evaluated.events];
     if (evaluated.completedDay) {
-      recordDays[evaluated.completedDay] = await writeDay(
-        db,
-        profileId,
-        generation,
-        evaluated.completedDay,
-        evaluated.completedEvents,
-      );
-      metricMasks[evaluated.completedDay] = metricMask(
-        evaluated.completedEvents.map((e) => e.metricId),
-      );
+      await publishDay(evaluated.completedDay, evaluated.completedEvents);
+      evaluatedDays.add(evaluated.completedDay);
+      fresh.push(...evaluated.completedEvents);
       if (archiveBefore === evaluated.completedDay)
         archiveBefore = observations.some(
           (o) => o.day < evaluated.completedDay!,
@@ -501,16 +513,6 @@ export async function runInsightJob(
           ? shiftDay(evaluated.completedDay, -1)
           : null;
     }
-    const recent = [
-      ...evaluated.events,
-      ...evaluated.completedEvents,
-      ...priorEvents.filter(
-        (e) =>
-          e.day < day &&
-          e.day >= shiftDay(day, -7) &&
-          (!changed || e.day < earliestChanged),
-      ),
-    ].slice(0, 24);
     // Corrections in the recent month are replayed, not merely appended to today's findings.
     const replayStart = changed && !historicalChange ? earliestChanged : day;
     const replayDays = observations
@@ -540,15 +542,9 @@ export async function runInsightJob(
         peers,
         revision,
       });
-      recordDays[eventDay] = await writeDay(
-        db,
-        profileId,
-        generation,
-        eventDay,
-        result.events,
-      );
-      metricMasks[eventDay] = metricMask(result.events.map((e) => e.metricId));
-      if (eventDay >= shiftDay(day, -7)) recent.push(...result.events);
+      await publishDay(eventDay, result.events);
+      evaluatedDays.add(eventDay);
+      if (eventDay >= shiftDay(day, -7)) fresh.push(...result.events);
       if (archiveBefore && eventDay <= archiveBefore)
         archiveBefore = observations.some((o) => o.day < eventDay)
           ? shiftDay(eventDay, -1)
@@ -562,22 +558,29 @@ export async function runInsightJob(
       archiveBefore =
         [archiveBefore, unfinishedReplay[0]].filter(Boolean).sort().at(-1) ||
         null;
-    const cooldownMap = new Map<string, any>();
-    for (const e of [...(previousIndex.cooldowns || []), ...evaluated.events]) {
-      if (e.day < shiftDay(day, -7) || e.day > day) continue;
-      const key = `${e.metricId}:${e.family}:${e.direction}`;
-      const old = cooldownMap.get(key);
-      if (!old || old.day <= e.day)
-        cooldownMap.set(key, {
-          metricId: e.metricId,
-          family: e.family,
-          direction: e.direction,
-          day: e.day,
-          value: e.value,
-          evidence: { rank: e.evidence.rank },
-        });
-    }
-    const cooldowns = [...cooldownMap.values()];
+    // Fresh results win; earlier results survive only for days this run did not re-evaluate.
+    const recentById = new Map<string, HighlightEvent>();
+    for (const e of fresh) if (!recentById.has(e.id)) recentById.set(e.id, e);
+    for (const e of priorEvents)
+      if (
+        e.day < day &&
+        e.day >= shiftDay(day, -7) &&
+        !evaluatedDays.has(e.day) &&
+        (!changed || e.day < earliestChanged) &&
+        !recentById.has(e.id)
+      )
+        recentById.set(e.id, e);
+    const recent = [...recentById.values()]
+      .sort((a, b) => b.day.localeCompare(a.day) || compareRecordPriority(a, b))
+      .slice(0, 36);
+    const cooldownById = new Map<string, FeaturedCooldown>();
+    for (const c of [
+      ...priorCooldowns,
+      ...evaluated.featured.map((e) => toCooldown(e, day)),
+    ])
+      if (c.featuredOn >= shiftDay(day, -7) && c.featuredOn <= day)
+        cooldownById.set(c.id, c);
+    const cooldowns = [...cooldownById.values()];
     const archiveIndex = hash({ recordDays, metricMasks, cooldowns });
     await root
       .collection("recordIndexes")
@@ -594,7 +597,8 @@ export async function runInsightJob(
       generation,
       status: "ready",
       featured: evaluated.featured,
-      recent: recent.slice(0, 36),
+      recent,
+      personalBests: computePersonalBests({ observations, asOfDay: day, today, coverage }),
       coverage,
       months,
       archiveBefore,

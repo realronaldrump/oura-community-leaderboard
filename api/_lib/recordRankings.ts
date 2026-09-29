@@ -1,7 +1,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import type { UserProfile } from "../../types.js";
 import { exclusionKey, METRIC_BY_ID, type MetricObservation } from "../../domain/metrics.js";
-import { rankRecordHistory, surroundingRankings, type HighlightEvent, type RecordRankingRow } from "../../domain/records.js";
+import { rankRecordHistory, recordEventDay, surroundingRankings, type HighlightEvent, type RecordRankingRow } from "../../domain/records.js";
 import type { PublishedInsights } from "./insightsProjection.js";
 
 export interface RecordRankingPage {
@@ -52,7 +52,7 @@ export async function readPublishedRecordRankings(db: Firestore, input: {
   if (!found) {
     let event = [...summary.featured, ...summary.recent].find(e => e.id === eventId);
     if (!event) {
-      const day = eventId.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+      const day = recordEventDay(profileId, eventId);
       const index = await root.collection("recordIndexes").doc(summary.archiveIndex).get();
       const id = day && index.data()?.days?.[day];
       if (!id) fail("record_not_found", 404);

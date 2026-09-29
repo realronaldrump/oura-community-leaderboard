@@ -4,9 +4,10 @@ import { evaluateHighlights } from "../domain/records";
 import { shiftDay } from "../domain/metrics";
 let fixtureId = 0;
 function fixture() {
-  const profileId = `ranking-test-${++fixtureId}`;
+  // A date inside the profile id must not be mistaken for the record's archive day.
+  const profileId = `ranking-test-2020-01-01-${++fixtureId}`;
   const observations = Array.from({ length: 100 }, (_, i) => ({ day: shiftDay("2025-01-01", i), values: { sleep_score: i === 99 ? 97 : i === 0 ? 99 : i === 1 ? 98 : 50 + i % 40 }, sources: {} }));
-  const event = evaluateHighlights({ profileId, observations, asOfDay: observations.at(-1)!.day, metricIds: ["sleep_score"] }).events.find(e => e.family === "daily" && e.direction === "high" && e.evidence.windowDays == null)!;
+  const event = evaluateHighlights({ profileId, observations, asOfDay: observations.at(-1)!.day, metricIds: ["sleep_score"] }).events.find(e => e.period === "day")!;
   const root = `profileStats/${profileId}`;
   const data = new Map<string, any>([
     [`profiles/${profileId}`, { id: profileId }],
@@ -25,6 +26,7 @@ function fixture() {
 }
 it("pages exact historical ranks from compact projections without reading raw data", async () => {
   const f = fixture();
+  expect(f.event).toMatchObject({ kind: "top3", evidence: { rank: 3 } });
   const first = await readPublishedRecordRankings(f.db, f.input);
   expect(first.rows).toHaveLength(20);
   expect(first.total).toBe(100);

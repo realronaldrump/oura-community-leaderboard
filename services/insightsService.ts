@@ -10,7 +10,7 @@ import {
 import { db } from "./firebaseConfig";
 import type { DailyStats } from "../types";
 import { hasMetricInMask, type MetricObservation } from "../domain/metrics";
-import { compareRecordPriority, type HighlightEvent, type InsightSummary } from "../domain/records";
+import { compareRecordPriority, recordEventDay, type HighlightEvent, type InsightSummary } from "../domain/records";
 import type { RecordRankingPage } from "../api/_lib/recordRankings";
 export interface PublishedInsights extends InsightSummary {
   months: Record<string, string>;
@@ -99,7 +99,8 @@ export async function readRecordPage(
     )
     .sort()
     .reverse();
-  const selected = days.slice(0, 3);
+  // Quiet days are not indexed, so a week of days is a reasonable page.
+  const selected = days.slice(0, 7);
   const manifests = await Promise.all(
     selected.map((day) =>
       getDoc(doc(db, "profileStats", profileId, "recordDays", pointers[day])),
@@ -136,7 +137,7 @@ export async function readRecordEvent(
   archiveIndex: string,
   eventId: string,
 ): Promise<HighlightEvent | null> {
-  const day = eventId.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+  const day = recordEventDay(profileId, eventId);
   if (!day) return null;
   const index = await getDoc(
     doc(db, "profileStats", profileId, "recordIndexes", archiveIndex),

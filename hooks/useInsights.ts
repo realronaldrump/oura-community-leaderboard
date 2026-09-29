@@ -7,7 +7,7 @@ import {
 } from "../services/insightsService";
 import type { UserProfile } from "../types";
 import { exclusionKey } from "../domain/metrics";
-import { compareRecordPriority, isSecondaryRecord } from "../domain/records";
+import { compareRecordPriority, isPresentableRecord } from "../domain/records";
 export function useInsights(profile: UserProfile, peers: UserProfile[] = []) {
   const client = useQueryClient();
   const result = useQuery({
@@ -40,8 +40,9 @@ export function useInsights(profile: UserProfile, peers: UserProfile[] = []) {
   const data = unfiltered
     ? {
         ...unfiltered,
-        featured: unfiltered.featured.filter(e => eligible(e) && !isSecondaryRecord(e)).sort(compareRecordPriority),
-        recent: unfiltered.recent.filter(eligible).sort((a, b) => b.day.localeCompare(a.day) || compareRecordPriority(a, b)),
+        // Older published summaries may still hold records-1 rolling-window events until rebuilt.
+        featured: unfiltered.featured.filter(e => eligible(e) && isPresentableRecord(e)).sort(compareRecordPriority),
+        recent: unfiltered.recent.filter(e => eligible(e) && isPresentableRecord(e)).sort((a, b) => b.day.localeCompare(a.day) || compareRecordPriority(a, b)),
       }
     : null;
   return {

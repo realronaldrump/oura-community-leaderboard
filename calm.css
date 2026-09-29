@@ -773,7 +773,6 @@
 .record-search {
   display: flex;
   gap: 10px;
-  margin-bottom: 23px;
 }
 .record-search > label {
   flex: 1;
@@ -1068,6 +1067,188 @@
 .record-result > span { text-align: right; font-size: 19px; font-weight: 700; }
 .record-result small { display: block; max-width: 170px; margin-top: 3px; font-size: 11px; font-weight: 500; color: var(--color-ink-secondary); }
 .record-evidence > .record-comparison { margin: 9px 0 24px; }
+.highlight-card .highlight-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+.highlight-card--unfavorable .highlight-card__top {
+  color: #8b5a48;
+}
+.record-search {
+  margin-bottom: 12px;
+}
+.record-chips {
+  display: flex;
+  gap: 8px;
+  margin: 0 -20px 18px;
+  padding: 2px 20px 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.record-chips::-webkit-scrollbar {
+  display: none;
+}
+.record-chips button {
+  flex: none;
+  min-height: 40px;
+  padding: 0 15px;
+  border: 1px solid #ffffffa8;
+  border-radius: 20px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-ink-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.record-chips button[aria-pressed="true"] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+.metric-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 13px;
+  margin-bottom: 6px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-hover);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.trophy-case {
+  margin: 4px 0 26px;
+}
+.trophy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.trophy-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  padding: 14px 15px;
+  border: 1px solid #ffffffa8;
+  border-radius: 20px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-ink);
+  text-align: left;
+  cursor: pointer;
+}
+.trophy-tile:active {
+  transform: scale(0.985);
+  box-shadow: var(--shadow-pressed);
+}
+.trophy-tile__name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-ink-secondary);
+}
+.trophy-tile--sleep .trophy-tile__name { color: var(--color-sleep); }
+.trophy-tile--recovery .trophy-tile__name { color: var(--color-readiness); }
+.trophy-tile--activity .trophy-tile__name { color: var(--color-activity); }
+.trophy-tile--body .trophy-tile__name { color: var(--color-insight); }
+.trophy-tile strong {
+  max-width: 100%;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.trophy-tile small {
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--color-ink-secondary);
+}
+.records-refresh {
+  margin: -8px 0 18px;
+}
+.trophy-more {
+  display: block;
+  margin: 8px auto 0;
+  min-height: var(--touch-target);
+}
+.trophy-tile__pace {
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-hover);
+  font-size: 10px;
+  font-weight: 650;
+}
+.record-glance {
+  display: grid;
+  gap: 1px;
+  margin: 16px 0 22px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--color-line);
+}
+.record-glance > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 14px;
+  padding: 12px 15px;
+  background: var(--color-surface-raised);
+}
+.record-glance dt {
+  font-size: 12px;
+  color: var(--color-ink-secondary);
+}
+.record-glance dd {
+  margin: 0;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.record-glance dd small {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--color-ink-secondary);
+}
+.bests-section {
+  margin-bottom: 22px;
+}
+.bests-section h3 {
+  margin: 0 0 3px;
+  font-size: 16px;
+  font-weight: 750;
+}
+.bests-section > .fine-print {
+  margin: 0 0 8px;
+}
+.bests-progress {
+  margin: 0 0 8px;
+  padding: 9px 12px;
+  border-radius: 14px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-hover);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
 .record-rankings h3 { margin: 0 0 5px; font-size: 18px; font-weight: 750; }
 .record-rankings > .fine-print { margin: 5px 0 13px; line-height: 1.6; }
 .ranking-list { list-style: none; margin: 0; padding: 0; }

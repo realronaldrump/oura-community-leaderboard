@@ -2,38 +2,123 @@ import React, { Fragment, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
 import { Button, Dialog } from "../ui";
-import { METRIC_BY_ID, dayDistance, formatMetricValue, shiftDay } from "../../domain/metrics";
-import { comparisonLabel, formatRecordValue, isSecondaryRecord, recordTitle, type HighlightEvent, type RecordRankingRow } from "../../domain/records";
+import { dayDistance, formatMetricValue } from "../../domain/metrics";
+import {
+  RECORD_SPEC_BY_ID,
+  detailRange,
+  isFriendRecord,
+  type EventPeriod,
+  type HighlightEvent,
+  type RecordPoint,
+  type RecordRankingRow,
+} from "../../domain/records";
+import {
+  eventPeriod,
+  formatRecordNumber,
+  gapLabel,
+  legacyComparisonLabel,
+  periodLabel,
+  rankNoun,
+  rankOrderLabel,
+  recordHeadline,
+  shortDate,
+  streakCondition,
+} from "../../domain/recordCopy";
 import { readRecordRankings } from "../../services/insightsService";
 import { navigate } from "../../hooks/useAppRoute";
 
-const dateLabel = (day: string) => new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", {
-  month: "short", day: "numeric", year: "numeric", timeZone: "UTC",
-});
-export function recordPeriodLabel(start: string, end: string): string {
-  if (start === end) return dateLabel(end);
-  if (start.slice(0, 7) === end.slice(0, 7))
-    return `${new Date(`${start}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}–${Number(end.slice(-2))}, ${end.slice(0, 4)}`;
-  return `${dateLabel(start)} – ${dateLabel(end)}`;
+const signed = (event: HighlightEvent, value: number) =>
+  `${value > 0 ? "+" : value < 0 ? "−" : ""}${formatMetricValue(event.metricId, Math.abs(value))}`;
+function valueLabel(event: HighlightEvent, period: EventPeriod | null, value: number) {
+  if (event.kind === "friend_lead") return signed(event, value);
+  if (event.kind === "friend_close") return formatMetricValue(event.metricId, Math.abs(value));
+  if (!event.kind || !period) return formatMetricValue(event.metricId, value);
+  return formatRecordNumber(event.metricId, period, value, false);
 }
-const rankingKind = (event: HighlightEvent) => {
-  const days = dayDistance(event.startDay, event.day) + 1;
-  switch (event.family) {
-    case "mean": return `${days}-day averages`;
-    case "sum": return `${days}-day totals`;
-    case "spread": return `${days}-day ${METRIC_BY_ID[event.metricId]?.clock ? "consistency" : "variation"}`;
-    case "week": return "calendar weeks";
-    case "month": return "calendar months";
-    case "streak": return "streaks";
-    case "change": return "changes in the 7-day average";
-    case "friend_close": case "friend_lead": return "gaps on shared days";
-    default: return "recorded days";
+const pointLabel = (point: RecordPoint, period: EventPeriod) =>
+  periodLabel(period, point.startDay, point.day);
+
+function Glance({ event, period }: { event: HighlightEvent; period: EventPeriod }) {
+  const { previousRecord, lastAsExtreme, usual, coveredDays, expectedDays, total } = event.evidence;
+  const spec = RECORD_SPEC_BY_ID[event.metricId];
+  const number = (value: number) => formatRecordNumber(event.metricId, period, value, false);
+  const rows: Array<[string, string, string?]> = [];
+  const high = event.direction === "high";
+  if (event.kind === "streak_record" || event.kind === "streak_milestone") {
+    rows.push(["Counts when", `Every ${spec?.unit === "night" ? "night" : "day"} ${streakCondition(event.metricId)}`]);
+    if (previousRecord)
+      rows.push(["Previous longest", number(previousRecord.value), pointLabel(previousRecord, "streak")]);
+  } else {
+    if (event.kind === "personal_best" && previousRecord)
+      rows.push([
+        event.evidence.tied > 1 ? "Matches" : "Previous best",
+        number(previousRecord.value),
+        `${pointLabel(previousRecord, period)} · stood for ${gapLabel(dayDistance(previousRecord.day, event.day))}`,
+      ]);
+    if (event.kind === "top3" && previousRecord)
+      rows.push(["Your best", number(previousRecord.value), pointLabel(previousRecord, period)]);
+    if (event.kind === "worst" && previousRecord && !lastAsExtreme)
+      rows.push(["Previous low", number(previousRecord.value), pointLabel(previousRecord, period)]);
+    if (lastAsExtreme)
+      rows.push([
+        `Last this ${high ? "high" : "low"}`,
+        number(lastAsExtreme.value),
+        pointLabel(lastAsExtreme, period),
+      ]);
+    if (usual) {
+      const window = period === "day" ? "previous 90 days" : period === "week" ? "previous 12 weeks" : "previous 6 months";
+      rows.push(["Your usual", number(usual.value), `Median of the ${window}`]);
+      const difference = event.value - usual.value;
+      if (Math.abs(difference) > 1e-9)
+        rows.push(["Difference", `${difference > 0 ? "+" : "−"}${number(Math.abs(difference))}`, "Compared with your usual"]);
+    }
+    if (period !== "day" && coveredDays && expectedDays)
+      rows.push(["Recorded", `${coveredDays} of ${expectedDays} days`, spec?.perDay && total ? `${total.toLocaleString("en-US")} total` : undefined]);
   }
-};
-const valueLabel = (event: HighlightEvent, value: number) => {
-  const signed = event.family === "change" || event.family === "friend_lead";
-  return `${signed && value !== 0 ? value > 0 ? "+" : "−" : ""}${formatRecordValue(METRIC_BY_ID[event.metricId], signed ? Math.abs(value) : value, event.family)}`;
-};
+  if (!rows.length) return null;
+  return (
+    <dl className="record-glance">
+      {rows.map(([label, value, note]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>
+            {value}
+            {note && <small>{note}</small>}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function HowRecordsWork({ event }: { event: HighlightEvent }) {
+  const spec = RECORD_SPEC_BY_ID[event.metricId];
+  return (
+    <details>
+      <summary>How records work</summary>
+      <p>
+        Every record compares against your whole history up to {shortDate(event.day)}. Nothing
+        recorded later is counted.
+      </p>
+      <p>
+        Weeks run Monday to Sunday and need at least 6 recorded days. Months need 80% of their
+        days. {spec?.aggregate === "sum" ? "Weekly and monthly workouts are totals." : "Weeks and months use your daily average."}
+      </p>
+      {spec?.streak && (
+        <p>
+          Streaks count consecutive days {spec.streak.condition}. A missing day ends a streak.
+        </p>
+      )}
+      <p>
+        “Best in a while” means nothing this good has happened in at least 3 months.
+        “Worth noticing” means nothing this far off has happened in at least 4 months.
+      </p>
+      {!event.evidence.completeHistory && (
+        <p>Your earlier history isn’t fully available, so “ever” means since {shortDate(event.evidence.coverageStart)}.</p>
+      )}
+    </details>
+  );
+}
 
 function EvidenceContent({ event: supplied, onExplore }: { event: HighlightEvent; onExplore: (destination: string) => void }) {
   const [expanded, setExpanded] = useState(false);
@@ -46,21 +131,24 @@ function EvidenceContent({ event: supplied, onExplore }: { event: HighlightEvent
   });
   const first = rankings.data?.pages[0];
   const event = first?.event || supplied;
+  const period = eventPeriod(event);
+  const legacy = !event.kind;
   const rows = expanded ? rankings.data?.pages.flatMap(page => page.rows) || [] : first?.nearby || [];
-  const openRow = (row: RecordRankingRow) => onExplore(`/metrics/${event.metricId}?profile=${encodeURIComponent(event.profileId)}&day=${row.day}&range=${Math.max(7, dayDistance(row.startDay, row.day) + 1)}`);
-  const comparison = comparisonLabel(event.evidence);
+  const openRow = (row: RecordRankingRow) => onExplore(`/metrics/${event.metricId}?profile=${encodeURIComponent(event.profileId)}&day=${row.day}&range=${detailRange(period || "day", dayDistance(row.startDay, row.day) + 1)}`);
+  const lowSide = event.kind === "worst" ? (RECORD_SPEC_BY_ID[event.metricId]?.better === "low" ? "highest " : "lowest ") : "";
   return <div className="record-evidence">
-    <p className="eyebrow">{recordPeriodLabel(event.startDay, event.day)}</p>
-    <h2>{recordTitle(event).replace(` ${comparison}`, "")}</h2>
+    <p className="eyebrow">{period ? periodLabel(period, event.startDay, event.day) : shortDate(event.day)}</p>
+    <h2>{recordHeadline(event)}</h2>
     <div className="record-result">
-      <strong>{valueLabel(event, event.family === "friend_close" ? Math.abs(event.value) : event.value)}</strong>
-      <span>#{event.evidence.rank}{event.evidence.tied > 1 ? " · tied" : ""}<small>of {event.evidence.sampleCount.toLocaleString()} {rankingKind(event)}</small></span>
+      <strong>{valueLabel(event, period, event.family === "friend_close" ? Math.abs(event.value) : event.value)}</strong>
+      <span>#{event.evidence.rank}{event.evidence.tied > 1 ? " · tied" : ""}<small>{lowSide}of {event.evidence.sampleCount.toLocaleString("en-US")} {rankNoun(event)}</small></span>
     </div>
-    <p className="record-comparison">{comparison[0].toUpperCase() + comparison.slice(1)}</p>
-    {event.provisional && <p className="empty-note">Still updating today. This result can change.</p>}
+    {legacy && <p className="record-comparison">{legacyComparisonLabel(event.evidence).replace(/^./, c => c.toUpperCase())}</p>}
+    {!legacy && period && <Glance event={event} period={period} />}
+    {event.provisional && <p className="empty-note">Still counting today. This result can change.</p>}
     <section className="record-rankings" aria-labelledby="record-rankings-title">
       <h3 id="record-rankings-title">How this compares</h3>
-      <p className="fine-print">{event.family === "streak" ? "Longest first" : event.family === "friend_close" ? "Closest first" : event.family === "spread" ? event.direction === "low" ? "Most consistent first" : "Most changeable first" : event.direction === "high" ? "Highest first" : "Lowest first"} · Ranked as of {dateLabel(event.day)}</p>
+      <p className="fine-print">{rankOrderLabel(event)} · Through {shortDate(event.day)}</p>
       {rankings.isPending && <p className="empty-note" role="status">Finding the results around this record…</p>}
       {rankings.isError && <div className="empty-note" role="alert">
         <p>{["rankings_preparing", "rankings_updated"].includes((rankings.error as { code?: string })?.code || "")
@@ -75,35 +163,22 @@ function EvidenceContent({ event: supplied, onExplore }: { event: HighlightEvent
             <button type="button" className={`ranking-row ${row.selected ? "ranking-row--selected" : ""}`}
               aria-current={row.selected ? "true" : undefined} onClick={() => openRow(row)}>
               <span className="ranking-number">#{row.rank}{row.tied > 1 && <small>Tied</small>}</span>
-              <span className="ranking-period">{recordPeriodLabel(row.startDay, row.day)}
+              <span className="ranking-period">{period ? periodLabel(period, row.startDay, row.day) : shortDate(row.day)}
                 {row.selected && <small className="ranking-selected-label">This record</small>}
-                {event.family === "change" && <small>vs {recordPeriodLabel(shiftDay(row.startDay, -7), shiftDay(row.day, -7))}</small>}
-                {row.threshold != null && <small>{event.direction === "high" ? "At or above" : "Below"} {formatMetricValue(event.metricId, row.threshold)}</small>}
                 {row.ownValue != null && <small>You {formatMetricValue(event.metricId, row.ownValue)} · Friend {formatMetricValue(event.metricId, row.peerValue)}</small>}
               </span>
-              <strong className="ranking-value">{valueLabel(event, row.value)}</strong>
+              <strong className="ranking-value">{valueLabel(event, period, row.value)}</strong>
               <ChevronRight size={14} aria-hidden="true" />
             </button>
           </li>
         </Fragment>)}
       </ol>
-      {first && !expanded && first.total > first.nearby.length && <Button variant="secondary" className="w-full" onClick={() => setExpanded(true)}>Browse all {first.total.toLocaleString()} results</Button>}
+      {first && !expanded && first.total > first.nearby.length && <Button variant="secondary" className="w-full" onClick={() => setExpanded(true)}>Browse all {first.total.toLocaleString("en-US")} results</Button>}
       {expanded && rankings.hasNextPage && <Button variant="secondary" className="w-full" disabled={rankings.isFetchingNextPage} onClick={() => void rankings.fetchNextPage()}>{rankings.isFetchingNextPage ? "Loading…" : "Show more rankings"}</Button>}
       {expanded && <button type="button" className="text-action ranking-reset" onClick={() => setExpanded(false)}>Back to the surrounding results</button>}
-      {first && <p className="fine-print">Tap a result to explore that date. Tied results share a rank.{["mean", "sum", "spread", "change"].includes(event.family) ? " Rolling periods can overlap." : ""}</p>}
+      {first && <p className="fine-print">Tap a result to explore that date. Tied results share a rank.</p>}
     </section>
-    <details>
-      <summary>About this comparison</summary>
-      <p>Only results recorded on or before {dateLabel(event.day)} are included. Missing or excluded days do not count toward complete periods or streaks.</p>
-      {event.family === "spread" && <p>Smaller numbers mean the daily values stayed closer together; larger numbers mean they changed more.</p>}
-      {event.evidence.threshold != null && <p>Each streak uses its own baseline, fixed before the streak began.{event.evidence.baselineStart && event.evidence.baselineEnd ? ` This one used ${dateLabel(event.evidence.baselineStart)} through ${dateLabel(event.evidence.baselineEnd)}.` : ""}</p>}
-      {event.relatedEvidence.length > 0 && <><h4>Also stands out in</h4>{event.relatedEvidence.map(e => <p key={e.windowDays || "all"}>#{e.rank} {comparisonLabel(e)} · {e.sampleCount.toLocaleString()} results</p>)}</>}
-    </details>
-    <details>
-      <summary>Why this stood out</summary>
-      <p>This result ranked #{event.evidence.rank} among {event.evidence.sampleCount.toLocaleString()} comparable results. Its notability score is {event.score}/100, based on rarity, history, size of change, persistence and how recently it happened.</p>
-      {isSecondaryRecord(event) && <p>Variation records stay in your archive; clearer day-to-day achievements take priority in your highlights.</p>}
-    </details>
+    {!legacy && !isFriendRecord(event) && <HowRecordsWork event={event} />}
     <Button className="w-full" onClick={() => onExplore(event.detailPath)}>Explore this metric <ChevronRight size={16} /></Button>
   </div>;
 }
