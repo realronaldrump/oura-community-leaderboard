@@ -3,6 +3,7 @@ import { type Firestore } from "firebase-admin/firestore";
 import type { DailyStats, UserProfile } from "../../types.js";
 import {
   normalizeMetricDays,
+  METRIC_BY_ID,
   metricMask,
   localDay,
   exclusionKey,
@@ -16,6 +17,7 @@ import {
   evaluateHighlights,
   evaluateDailyHighlights,
   RULES_VERSION,
+  RECORD_SPECS,
   toCooldown,
   type FeaturedCooldown,
   type HighlightEvent,
@@ -50,6 +52,12 @@ const hash = (value: unknown) =>
     .slice(0, 20);
 const rulesNumber = (version?: string) =>
   Number(/^records-(\d+)$/.exec(version || "")?.[1] || 0);
+// Unavailable feeds outside Records must not restart an otherwise complete archive.
+const recordSources = new Set<string>(
+  RECORD_SPECS.map((spec) => METRIC_BY_ID[spec.metricId].source),
+);
+const recordCoverage = (coverage: MetricCoverage): MetricCoverage =>
+  Object.fromEntries(Object.entries(coverage).filter(([source]) => recordSources.has(source)));
 export const monthsBetween = (start: string, end: string) => {
   const months: string[] = [];
   let month = `${start.slice(0, 7)}-01`;
@@ -435,13 +443,13 @@ export async function runInsightJob(
       months,
       exclusions,
       rules: RULES_VERSION,
-      coverage,
+      coverage: recordCoverage(coverage),
       peerInputs,
     });
     const changed = revision !== previous?.revision;
     const coverageChanged =
-      historicalCoverageKey(previous?.coverage || {}) !==
-      historicalCoverageKey(coverage);
+      historicalCoverageKey(recordCoverage(previous?.coverage || {})) !==
+      historicalCoverageKey(recordCoverage(coverage));
     const historicalChange =
       fullRebuild ||
       coverageChanged ||

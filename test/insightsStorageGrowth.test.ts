@@ -103,4 +103,49 @@ describe.skipIf(Number(process.versions.node.split(".")[0]) < 22)("Records growt
       expect(generatedCount(store)).toBe(count);
     } finally { store.close(); }
   });
+
+  it("does not rebuild the archive when unrelated feeds change availability during sync", async () => {
+    const store = new DocumentStore(":memory:");
+    try {
+      await seed(store);
+      const sleep = { startDay: "2000-01-01", endDay: "2026-02-09", complete: true, status: "ready", intervals: [{ startDay: "2000-01-01", endDay: "2026-02-09" }] };
+      const metadata = store.doc("profileStats/me");
+      await metadata.set({ sourceCoverage: { sleep, heartrate: { startDay: "2025-08-14", endDay: "2026-02-09", complete: false, status: "unavailable" } } }, { merge: true });
+      await runInsightJob("me", options(store));
+      const before = (await store.doc("profileStats/me/snapshots/insights").get()).data();
+      const count = generatedCount(store);
+      for (const [round, status] of ["partial", "unavailable", "partial"].entries()) {
+        const sourceCoverage = {
+          sleep,
+          heartrate: { startDay: status === "partial" ? "2026-02-02" : "2025-08-14", endDay: "2026-02-09", complete: false, status },
+          ringBatteryLevel: { startDay: status === "partial" ? "2026-02-02" : "2025-08-14", endDay: "2026-02-09", complete: false, status: "unavailable" },
+        };
+        await metadata.set({ sourceCoverage, updatedAt: `sync-${round}` }, { merge: true });
+        await requestInsightRefresh(store as any, "me", ["2026-02"]);
+        await runInsightJob("me", { ...options(store), archiveDays: 1 });
+        const after = (await store.doc("profileStats/me/snapshots/insights").get()).data();
+        expect(after.generation).toBe(before.generation);
+        expect(after.revision).toBe(before.revision);
+        expect(after.archiveBefore).toBeNull();
+        expect(after.coverage.heartrate.status).toBe(status);
+        expect(generatedCount(store)).toBe(count);
+      }
+    } finally { store.close(); }
+  });
+
+  it("still rebuilds when coverage of a Records source changes", async () => {
+    const store = new DocumentStore(":memory:");
+    try {
+      await seed(store);
+      await store.doc("profileStats/me").set({ sourceCoverage: { sleep: { startDay: "2026-01-01", endDay: "2026-02-09", complete: false, status: "partial" } } }, { merge: true });
+      await runInsightJob("me", options(store));
+      const before = (await store.doc("profileStats/me/snapshots/insights").get()).data();
+      await store.doc("profileStats/me").set({ sourceCoverage: { sleep: { startDay: "2000-01-01", endDay: "2026-02-09", complete: true, status: "ready" } }, updatedAt: "coverage-finished" }, { merge: true });
+      await requestInsightRefresh(store as any, "me", ["2026-01", "2026-02"]);
+      await runInsightJob("me", { ...options(store), archiveDays: 1 });
+      const after = (await store.doc("profileStats/me/snapshots/insights").get()).data();
+      expect(after.generation).not.toBe(before.generation);
+      expect(after.archiveBefore).not.toBeNull();
+    } finally { store.close(); }
+  });
 });
