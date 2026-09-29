@@ -2,13 +2,14 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   readInsightSummary,
+  readRecordDay,
   subscribeInsights,
   type PublishedInsights,
 } from "../services/insightsService";
 import type { UserProfile } from "../types";
 import { exclusionKey } from "../domain/metrics";
-import { compareRecordPriority, isPresentableRecord } from "../domain/records";
-export function useInsights(profile: UserProfile, peers: UserProfile[] = []) {
+import { compareRecordPriority, isPresentableRecord, selectFeatured } from "../domain/records";
+export function useInsights(profile: UserProfile, peers: UserProfile[] = [], selectedDay?: string) {
   const client = useQueryClient();
   const result = useQuery({
     queryKey: ["insights", profile.id],
@@ -30,6 +31,15 @@ export function useInsights(profile: UserProfile, peers: UserProfile[] = []) {
   );
   const unfiltered =
     result.data?.exclusions === exclusionKey(profile) ? result.data : null;
+  const historicalDay = selectedDay && unfiltered && selectedDay !== unfiltered.day
+    ? selectedDay : null;
+  const archivePending = Boolean(historicalDay && unfiltered?.archiveBefore && historicalDay <= unfiltered.archiveBefore);
+  const historical = useQuery({
+    queryKey: ["insight-day", profile.id, unfiltered?.archiveIndex, historicalDay],
+    queryFn: () => readRecordDay(profile.id, unfiltered!.archiveIndex, historicalDay!),
+    enabled: Boolean(historicalDay && unfiltered?.archiveIndex && !archivePending),
+    staleTime: 60_000,
+  });
   const eligible = (event: PublishedInsights["recent"][number]) =>
     !event.peerId ||
     peers.some(
@@ -48,6 +58,17 @@ export function useInsights(profile: UserProfile, peers: UserProfile[] = []) {
   return {
     ...result,
     data: data as PublishedInsights | null,
+    // A past date reads its saved day only; the current feed keeps the server's selection.
+    highlights: historicalDay
+      ? archivePending ? [] : selectFeatured(
+        (historical.data || []).filter((event) => eligible(event) && isPresentableRecord(event)),
+        [],
+        historicalDay,
+      )
+      : data?.featured || [],
+    highlightsPending: Boolean(historicalDay && (archivePending || historical.isPending)),
+    highlightsError: Boolean(historicalDay && historical.isError),
+    refetchHighlights: historical.refetch,
     rebuilding: Boolean(result.data && !data),
   };
 }

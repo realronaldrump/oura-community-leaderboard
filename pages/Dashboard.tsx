@@ -133,7 +133,7 @@ function DashboardContent({
   const requestedDay = route.searchParams.get("day");
   const latest = available.filter((o) => o.day <= today).at(-1)?.day;
   const day = validDay(requestedDay) ? requestedDay : latest || today;
-  const insights = useInsights(activeProfile, profiles);
+  const insights = useInsights(activeProfile, profiles, route.pathname === "/" ? day : undefined);
   const summary = insights.data;
   const metricProfile =
     profiles.find((p) => p.id === route.searchParams.get("profile")) ||
@@ -220,7 +220,7 @@ function DashboardContent({
       : route.pathname.startsWith("/records")
         ? "/records"
         : route.pathname;
-  const featured = summary?.day === day ? summary.featured : [];
+  const featured = insights.highlights;
   const openMetric = (id: string) => {
     setCategory(null);
     navigate(`/metrics/${id}?day=${day}`);
@@ -311,12 +311,21 @@ function DashboardContent({
                   <p>
                     {insights.rebuilding
                       ? "Your highlights are being updated to reflect your excluded days."
+                      : insights.highlightsError
+                        ? "Records for this day couldn't be loaded. Try again in a moment."
+                      : insights.highlightsPending
+                        ? "Your history is being checked for the records from this day."
                       : summary
                         ? "Nothing unusual to flag. Your measurements are here whenever you want a closer look."
                         : raw
                           ? "Your scores are here. Your history is being checked for the moments that stand out."
                           : "Loading your saved Oura measurements…"}
                   </p>
+                  {insights.highlightsError && (
+                    <Button variant="quiet" onClick={() => void insights.refetchHighlights()}>
+                      Try again
+                    </Button>
+                  )}
                 </section>
               )}
               <div className="daily-scores">

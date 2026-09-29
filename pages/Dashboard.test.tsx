@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DailyStats, UserProfile } from '../types';
+import { evaluateHighlights } from '../domain/records';
+import { shiftDay } from '../domain/metrics';
 import Dashboard from './Dashboard';
 
 const mocks = vi.hoisted(() => ({
@@ -16,6 +18,7 @@ const mocks = vi.hoisted(() => ({
     dayDetail: vi.fn(),
     competitionProps: null as { profileData: Array<{ data?: DailyStats; isLoading: boolean; isError: boolean }> } | null,
     loadHistory: vi.fn(),
+    insights: vi.fn(),
 }));
 
 vi.mock('../services/firestoreStatsService', async (importOriginal) => ({
@@ -34,6 +37,7 @@ beforeEach(() => {
     mocks.loadHistory.mockReset().mockResolvedValue(null);
     mocks.competitionProps = null;
     mocks.dayDetail.mockReset().mockImplementation(async () => makeStats(new Date().toISOString().slice(0, 10)));
+    mocks.insights.mockReset().mockReturnValue({ data: null, rebuilding: false, highlights: [] });
     window.scrollTo = vi.fn();
 });
 
@@ -55,7 +59,7 @@ vi.mock('../hooks/useProfileStatsHydration', () => ({
     }),
 }));
 
-vi.mock('../hooks/useInsights', () => ({ useInsights: () => ({ data: null, rebuilding: false }) }));
+vi.mock('../hooks/useInsights', () => ({ useInsights: (...args: unknown[]) => mocks.insights(...args) }));
 vi.mock('../services/insightsService', () => ({
     readDayDetail: (...args: unknown[]) => mocks.dayDetail(...args),
     readInsightSummary: vi.fn().mockResolvedValue(null),
@@ -118,6 +122,34 @@ const makeStats = (day: string): DailyStats => ({
 });
 
 describe('Dashboard sleep details', () => {
+    it('shows a past day record even when the latest summary has no featured cards', async () => {
+        const day = '2026-09-27';
+        const best = evaluateHighlights({
+            profileId: mocks.profile.id,
+            observations: Array.from({ length: 400 }, (_, i) => ({
+                day: shiftDay(day, i - 399),
+                values: { sleep_score: i === 399 ? 99 : 70 },
+                sources: {},
+            })),
+            asOfDay: day,
+            today: '2026-09-29',
+        }).events.find((event) => event.period === 'day' && event.kind === 'personal_best')!;
+        mocks.insights.mockReturnValue({
+            data: { day: '2026-09-29', featured: [] },
+            rebuilding: false,
+            highlights: [best],
+        });
+        window.history.replaceState({}, '', `/?day=${day}`);
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        client.setQueryData(['dailyStats', mocks.profile.id], makeStats(day));
+        render(<QueryClientProvider client={client}><Dashboard /></QueryClientProvider>);
+
+        expect(await screen.findByRole('heading', { name: /Best sleep score/ })).toBeInTheDocument();
+        expect(screen.queryByText(/Nothing unusual to flag/)).toBeNull();
+        expect(mocks.insights).toHaveBeenCalledWith(mocks.profile, [mocks.profile], day);
+        expect(mocks.loadHistory).not.toHaveBeenCalled();
+    });
+
     it('launches from saved data without exposing sync controls or freshness alarms', async () => {
         const day = new Date().toISOString().slice(0, 10);
         const queryClient = new QueryClient({

@@ -132,18 +132,16 @@ export async function readRecordRankings(profileId: string, eventId: string,
   if (!response.ok) throw Object.assign(new Error(payload.error || "rankings_unavailable"), { code: payload.error });
   return payload;
 }
-export async function readRecordEvent(
+export async function readRecordDay(
   profileId: string,
   archiveIndex: string,
-  eventId: string,
-): Promise<HighlightEvent | null> {
-  const day = recordEventDay(profileId, eventId);
-  if (!day) return null;
+  day: string,
+): Promise<HighlightEvent[]> {
   const index = await getDoc(
     doc(db, "profileStats", profileId, "recordIndexes", archiveIndex),
   );
   const id = index.data()?.days?.[day];
-  if (!id) return null;
+  if (!id) return [];
   const manifest = await getDoc(
     doc(db, "profileStats", profileId, "recordDays", id),
   );
@@ -152,11 +150,20 @@ export async function readRecordEvent(
       getDoc(doc(db, "profileStats", profileId, "recordPages", id)),
     ),
   );
-  return (
-    pages
-      .flatMap((p) => p.data()?.events || [])
-      .find((e) => e.id === eventId) || null
-  );
+  return pages
+    .flatMap((p) => p.data()?.events || [])
+    .filter((event) => event.day === day)
+    .sort(compareRecordPriority);
+}
+export async function readRecordEvent(
+  profileId: string,
+  archiveIndex: string,
+  eventId: string,
+): Promise<HighlightEvent | null> {
+  const day = recordEventDay(profileId, eventId);
+  if (!day) return null;
+  return (await readRecordDay(profileId, archiveIndex, day))
+    .find((event) => event.id === eventId) || null;
 }
 export async function readDayDetail(
   profileId: string,
