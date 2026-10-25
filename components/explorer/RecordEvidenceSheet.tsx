@@ -107,12 +107,11 @@ function HowRecordsWork({ event }: { event: HighlightEvent }) {
     return (
       <details>
         <summary>How friend records work</summary>
-        <p>Friend records only compare days you both recorded, up to {shortDate(event.day)}.</p>
+        <p>Only days you both recorded count, up to {shortDate(event.day)}.</p>
         <p>
-          A biggest win counts once you have at least 10 earlier wins and needs a bigger margin than
-          all of them. A winning run counts consecutive days you came out ahead; a tie or a missing
-          day ends it. Runs are recognized when they become your longest or reach 7, 14, 21 or 30
-          days and beyond.
+          A biggest win needs at least 10 earlier wins and a bigger margin than all of them. A
+          winning run is consecutive days ahead; a tie or a missing day ends it. Runs count when they
+          become your longest or reach 7, 14, 21 or 30 days.
         </p>
       </details>
     );
@@ -120,12 +119,11 @@ function HowRecordsWork({ event }: { event: HighlightEvent }) {
     <details>
       <summary>How records work</summary>
       <p>
-        Every record compares against your whole history up to {shortDate(event.day)}. Nothing
-        recorded later is counted.
+        Each record is compared with your history up to {shortDate(event.day)}. Later days don’t count.
       </p>
       <p>
-        Weeks run Monday to Sunday and need at least 6 recorded days. Months need 80% of their
-        days. {spec?.aggregate === "sum" ? "Weekly and monthly workouts are totals." : "Weeks and months use your daily average."}
+        Weeks run Monday to Sunday and need 6 recorded days. Months need 80% of their days.{" "}
+        {spec?.aggregate === "sum" ? "Weekly and monthly workouts are totals." : "Weeks and months use your daily average."}
       </p>
       {spec?.streak && (
         <p>
@@ -133,11 +131,10 @@ function HowRecordsWork({ event }: { event: HighlightEvent }) {
         </p>
       )}
       <p>
-        “Best in a while” means nothing this good has happened in at least 3 months.
-        “Worth noticing” means nothing this far off has happened in at least 4 months.
+        “Best in a while” means the best in at least 3 months. A low is the lowest in at least 4 months.
       </p>
       {!event.evidence.completeHistory && (
-        <p>Your earlier history isn’t fully available, so “ever” means since {shortDate(event.evidence.coverageStart)}.</p>
+        <p>Older history isn’t available, so “ever” means since {shortDate(event.evidence.coverageStart)}.</p>
       )}
     </details>
   );
@@ -171,18 +168,18 @@ function EvidenceContent({ event: supplied, onExplore }: { event: HighlightEvent
     {!legacy && period && <Glance event={event} period={period} name={name} />}
     {event.provisional && <p className="empty-note">Still counting today. This result can change.</p>}
     <section className="record-rankings" aria-labelledby="record-rankings-title">
-      <h3 id="record-rankings-title">How this compares</h3>
+      <h3 id="record-rankings-title">Ranking</h3>
       <p className="fine-print">{rankOrderLabel(event)} · Through {shortDate(event.day)}</p>
-      {rankings.isPending && <p className="empty-note" role="status">Finding the results around this record…</p>}
+      {rankings.isPending && <p className="empty-note" role="status">Loading rankings…</p>}
       {rankings.isError && <div className="empty-note" role="alert">
         <p>{["rankings_preparing", "rankings_updated"].includes((rankings.error as { code?: string })?.code || "")
-          ? "Your history is being updated. The matching rankings will be ready shortly."
-          : "The surrounding results couldn’t load."}</p>
+          ? "Your history is being updated. Try again in a minute."
+          : "Rankings didn’t load."}</p>
         <Button variant="secondary" onClick={() => void rankings.refetch()}>Try again</Button>
       </div>}
       <ol className="ranking-list" aria-label="Historical rankings">
         {rows.map((row, index) => <Fragment key={`${row.startDay}:${row.day}`}>
-          {index > 0 && row.position > rows[index - 1].position + 1 && <li className="ranking-gap">Other results between these ranks</li>}
+          {index > 0 && row.position > rows[index - 1].position + 1 && <li className="ranking-gap" aria-label="Ranks skipped">⋯</li>}
           <li>
             <button type="button" className={`ranking-row ${row.selected ? "ranking-row--selected" : ""}`}
               aria-current={row.selected ? "true" : undefined} onClick={() => openRow(row)}>
@@ -199,11 +196,11 @@ function EvidenceContent({ event: supplied, onExplore }: { event: HighlightEvent
       </ol>
       {first && !expanded && first.total > first.nearby.length && <Button variant="secondary" className="w-full" onClick={() => setExpanded(true)}>Browse all {first.total.toLocaleString("en-US")} results</Button>}
       {expanded && rankings.hasNextPage && <Button variant="secondary" className="w-full" disabled={rankings.isFetchingNextPage} onClick={() => void rankings.fetchNextPage()}>{rankings.isFetchingNextPage ? "Loading…" : "Show more rankings"}</Button>}
-      {expanded && <button type="button" className="text-action ranking-reset" onClick={() => setExpanded(false)}>Back to the surrounding results</button>}
-      {first && <p className="fine-print">Tap a result to explore that date. Tied results share a rank.</p>}
+      {expanded && <button type="button" className="text-action ranking-reset" onClick={() => setExpanded(false)}>Show nearby results</button>}
+      {first && <p className="fine-print">Tap a result to open that date. Ties share a rank.</p>}
     </section>
     {!legacy && <HowRecordsWork event={event} />}
-    <Button className="w-full" onClick={() => onExplore(event.detailPath)}>Explore this metric <ChevronRight size={16} /></Button>
+    <Button className="w-full" onClick={() => onExplore(event.detailPath)}>View history <ChevronRight size={16} aria-hidden="true" /></Button>
   </div>;
 }
 
@@ -211,7 +208,7 @@ export default function RecordEvidenceSheet({ event, onClose, onExplore }: {
   event: HighlightEvent | null; onClose: () => void; onExplore?: (destination: string) => void;
 }) {
   const explore = onExplore || ((destination: string) => { onClose(); navigate(destination); });
-  return <Dialog isOpen={Boolean(event)} title="The story behind the record" onClose={onClose}>
+  return <Dialog isOpen={Boolean(event)} title="Record" onClose={onClose}>
     {event && <EvidenceContent key={`${event.id}:${event.revision}`} event={event} onExplore={explore} />}
   </Dialog>;
 }

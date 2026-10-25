@@ -1,224 +1,111 @@
 import React, { useMemo, useState } from 'react';
-import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, ReferenceLine } from 'recharts';
 import { HeartRate } from '../../types';
-import { IOSModal, IOSButton, IOSListItem } from '../ios';
-import { Clock, Info } from 'lucide-react';
-import { CHART_TOOLTIP_STYLE, CHART_TOOLTIP_LABEL_STYLE } from '../../utils/chartStyles';
-import {
-    extractLocalHourMinuteFromIso,
-    extractIsoDayFromTimestamp,
-    formatRecordLocalClockTime,
-    getWallClockTimestampMsFromIso,
-} from '../../utils/temporal';
-import { formatISODateForDisplay } from '../../utils/date';
+import { formatMetricValue } from '../../domain/metrics';
 import { getDataAwareChartDomain } from '../../utils/chartScale';
-
-type TimeRange = '6h' | '12h' | '24h' | '48h';
+import { parseUtcOffsetMinutesFromIso } from '../../utils/temporal';
 
 interface Props {
     data: HeartRate[];
-    showLabels?: boolean;
+    /** The local day to draw, YYYY-MM-DD. */
+    day: string;
+    /** The profile's offset, used for samples Oura reports in UTC. */
+    offsetMinutes?: number | null;
 }
 
-type HeartRateChartPoint = {
-    timestamp: number;
-    absoluteTimestamp: number;
-    bpm: number;
-    time: string;
-    hour: number;
-    source: HeartRate['source'];
-    fullData: HeartRate;
+type Sample = { minute: number; bpm: number };
+
+const W = 360;
+const H = 170;
+const LEFT = 30;
+const RIGHT = W - 6;
+const TOP = 8;
+const BOTTOM = H - 22;
+const TICKS = [0, 360, 720, 1080, 1440];
+const tickLabel = (minute: number) => (minute % 1440 === 0 ? '12a' : minute === 720 ? '12p' : minute < 720 ? `${minute / 60}a` : `${minute / 60 - 12}p`);
+
+/** Converts each sample to minutes of the selected local day; samples from other days are dropped. */
+export const localDaySamples = (data: HeartRate[], day: string, offsetMinutes?: number | null): Sample[] => {
+    const dayStart = Date.parse(`${day}T00:00:00Z`);
+    return data
+        .flatMap((item) => {
+            const absolute = Date.parse(item.timestamp);
+            if (!Number.isFinite(absolute) || !Number.isFinite(item.bpm)) return [];
+            // Oura reports heart rate in UTC; a zero offset is translated with the profile's own offset.
+            const offset = parseUtcOffsetMinutesFromIso(item.timestamp) || offsetMinutes || 0;
+            const minute = (absolute + offset * 60_000 - dayStart) / 60_000;
+            return minute >= 0 && minute < 1440 ? [{ minute, bpm: item.bpm }] : [];
+        })
+        .sort((a, b) => a.minute - b.minute);
 };
 
-const HeartRateChart: React.FC<Props> = ({ data, showLabels = false }) => {
-    const [timeRange, setTimeRange] = useState<TimeRange>('24h');
-    const [selectedPoint, setSelectedPoint] = useState<HeartRateChartPoint | null>(null);
+const HeartRateChart: React.FC<Props> = ({ data, day, offsetMinutes }) => {
+    const samples = useMemo(() => localDaySamples(data, day, offsetMinutes), [data, day, offsetMinutes]);
+    const [selected, setSelected] = useState<number | null>(null);
+    if (!samples.length) return <p className="empty-note">No heart rate samples for this day.</p>;
 
-    const getTimeRangeHours = (range: TimeRange): number => {
-        switch (range) {
-            case '6h': return 6;
-            case '12h': return 12;
-            case '24h': return 24;
-            case '48h': return 48;
-            default: return 24;
-        }
-    };
-
-    // Filter to selected time range and transform data for chart
-    const chartData = useMemo(() => {
-        const now = new Date();
-        const hoursAgo = new Date(now.getTime() - getTimeRangeHours(timeRange) * 60 * 60 * 1000);
-
-        return data
-            .filter(hr => new Date(hr.timestamp) >= hoursAgo)
-            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-            .map((hr): HeartRateChartPoint => {
-                const hourMinute = extractLocalHourMinuteFromIso(hr.timestamp);
-                return {
-                    timestamp: getWallClockTimestampMsFromIso(hr.timestamp) ?? new Date(hr.timestamp).getTime(),
-                    absoluteTimestamp: new Date(hr.timestamp).getTime(),
-                    bpm: hr.bpm,
-                    time: formatRecordLocalClockTime(hr.timestamp),
-                    hour: hourMinute?.hour ?? 0,
-                    source: hr.source,
-                    fullData: hr,
-                };
-            });
-    }, [data, timeRange]);
-
-    // Calculate stats
-    const bpmValues = chartData.map(d => d.bpm).filter(Boolean);
-    const avgBpm = bpmValues.length > 0
-        ? Math.round(bpmValues.reduce((a, b) => a + b, 0) / bpmValues.length)
-        : null;
-    const minBpm = bpmValues.length > 0 ? Math.min(...bpmValues) : null;
-    const maxBpm = bpmValues.length > 0 ? Math.max(...bpmValues) : null;
-    const chartDomain = getDataAwareChartDomain(bpmValues, { min: 0 });
-
-    if (chartData.length === 0) {
-        return (
-            <div className="h-full flex items-center justify-center text-text-muted text-sm">
-                No heart rate data available for the last 24 hours
-            </div>
-        );
-    }
-
-    // Format hour for X-axis ticks
-    const formatHour = (timestamp: number) => {
-        const date = new Date(timestamp);
-        const hours = date.getUTCHours();
-        if (hours === 0) return '12am';
-        if (hours === 12) return '12pm';
-        return hours > 12 ? `${hours - 12}pm` : `${hours}am`;
+    const values = samples.map((sample) => sample.bpm);
+    const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const [low, high] = getDataAwareChartDomain(values, { min: 0 }).map(Number);
+    const x = (minute: number) => LEFT + (minute / 1440) * (RIGHT - LEFT);
+    const y = (bpm: number) => BOTTOM - ((bpm - low) / Math.max(1, high - low)) * (BOTTOM - TOP);
+    const path = samples
+        .map((sample, index) => `${index === 0 || sample.minute - samples[index - 1].minute > 30 ? 'M' : 'L'}${x(sample.minute).toFixed(1)},${y(sample.bpm).toFixed(1)}`)
+        .join(' ');
+    const active = selected == null ? null : samples[selected];
+    const inspect = (event: React.PointerEvent<SVGSVGElement>) => {
+        const bounds = event.currentTarget.getBoundingClientRect();
+        const minute = ((((event.clientX - bounds.left) / bounds.width) * W - LEFT) / (RIGHT - LEFT)) * 1440;
+        let nearest = 0;
+        samples.forEach((sample, index) => {
+            if (Math.abs(sample.minute - minute) < Math.abs(samples[nearest].minute - minute)) nearest = index;
+        });
+        setSelected(nearest);
     };
 
     return (
-        <>
-            <div className="h-full">
-                {/* Time Range Selector */}
-                {showLabels && (
-                    <div className="flex items-center justify-between mb-2">
-                        <div className="flex gap-2" role="group" aria-label="Heart-rate chart time range">
-                            {(['6h', '12h', '24h', '48h'] as TimeRange[]).map((range) => (
-                                <button
-                                    key={range}
-                                    type="button"
-                                    onClick={() => setTimeRange(range)}
-                                    aria-pressed={timeRange === range}
-                                    className={`min-h-11 px-3 py-1 rounded-lg text-xs font-medium transition-all ${timeRange === range
-                                        ? 'bg-error text-white'
-                                        : 'bg-canvas text-text-muted hover:text-text-primary'
-                                        }`}
-                                >
-                                    {range}
-                                </button>
-                            ))}
-                        </div>
-                        <div className="flex items-center gap-4 text-xs text-text-secondary">
-                            <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                Min: <span className="text-metric-hr font-mono">{minBpm}</span>
-                            </span>
-                            <span className="flex items-center gap-1">
-                                <Info className="w-3 h-3" />
-                                Avg: <span className="text-text-primary font-mono">{avgBpm}</span>
-                            </span>
-                            <span>Max: <span className="text-metric-hr font-mono">{maxBpm}</span></span>
-                        </div>
-                    </div>
-                )}
-                <ResponsiveContainer
-                    width="100%"
-                    height={showLabels ? "80%" : "100%"}
-                    minWidth={0}
-                    minHeight={100}
-                    initialDimension={{ width: 560, height: 160 }}
-                >
-                    <LineChart data={chartData}>
-                        <XAxis
-                            dataKey="timestamp"
-                            type="number"
-                            domain={['dataMin', 'dataMax']}
-                            hide={!showLabels}
-                            tick={{ fill: '#A8A29E', fontSize: 10 }}
-                            axisLine={false}
-                            tickLine={false}
-                            tickFormatter={formatHour}
-                            interval="preserveStartEnd"
-                            minTickGap={40}
-                        />
-                        <YAxis
-                            domain={chartDomain}
-                            hide
-                        />
-                        {avgBpm && (
-                            <ReferenceLine
-                                y={avgBpm}
-                                stroke="rgba(0,0,0,0.1)"
-                                strokeDasharray="3 3"
-                            />
-                        )}
-                        <Tooltip
-                            contentStyle={CHART_TOOLTIP_STYLE}
-                            labelStyle={CHART_TOOLTIP_LABEL_STYLE}
-                            labelFormatter={(timestamp: number) => new Date(timestamp).toLocaleTimeString('en-US', {
-                                hour: 'numeric',
-                                minute: '2-digit',
-                                hour12: true,
-                                timeZone: 'UTC',
-                            })}
-                            formatter={(value: number) => [`${value} bpm`, 'Heart Rate']}
-                        />
-                        <Line
-                            type="monotone"
-                            dataKey="bpm"
-                            stroke="#D4897B"
-                            dot={false}
-                            activeDot={false}
-                            strokeWidth={2}
-                        />
-                    </LineChart>
-                </ResponsiveContainer>
+        <div className="metric-chart">
+            <dl className="hr-stats">
+                <div><dt>Low</dt><dd>{Math.min(...values)} bpm</dd></div>
+                <div><dt>Average</dt><dd>{Math.round(average)} bpm</dd></div>
+                <div><dt>High</dt><dd>{Math.max(...values)} bpm</dd></div>
+            </dl>
+            <div className="chart-reading" aria-live="polite">
+                <span>{active ? formatMetricValue('bedtime', active.minute) : 'Tap the chart to inspect'}</span>
+                {active && <strong><i style={{ background: 'var(--color-error)' }} />{active.bpm} bpm</strong>}
             </div>
-
-            {/* Data Point Detail Modal */}
-            {selectedPoint && (
-                <IOSModal
-                    isOpen={!!selectedPoint}
-                    onClose={() => setSelectedPoint(null)}
-                    title="Heart Rate Detail"
-                >
-                    <div className="space-y-4">
-                        <IOSListItem
-                            title="Heart Rate"
-                            subtitle={`${selectedPoint.bpm} bpm`}
-                            icon={<div className="text-error"><Clock className="w-4 h-4" /></div>}
-                            rightElement={<div className="text-xs text-text-muted">
-                                {formatRecordLocalClockTime(selectedPoint.fullData?.timestamp)}
-                            </div>}
-                        />
-                        <IOSListItem
-                            title="Date & Time"
-                            subtitle={`${formatISODateForDisplay(extractIsoDayFromTimestamp(selectedPoint.fullData?.timestamp) || '', 'en-US', {
-                                weekday: 'long',
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                            })} at ${formatRecordLocalClockTime(selectedPoint.fullData?.timestamp)}`}
-                            icon={<div className="text-[#6B7280]"><Info className="w-4 h-4" /></div>}
-                        />
-                        <IOSListItem
-                            title="Source"
-                            subtitle={selectedPoint.source}
-                            icon={<div className="text-metric-sleep"><Clock className="w-4 h-4" /></div>}
-                        />
-                        <IOSButton onClick={() => setSelectedPoint(null)} className="w-full" variant="secondary">
-                            Close
-                        </IOSButton>
-                    </div>
-                </IOSModal>
-            )}
-        </>
+            <svg
+                viewBox={`0 0 ${W} ${H}`}
+                role="img"
+                aria-label={`Heart rate through the day: low ${Math.min(...values)}, average ${Math.round(average)}, high ${Math.max(...values)} beats per minute`}
+                onPointerDown={inspect}
+                onPointerMove={(event) => {
+                    if (event.buttons || event.pointerType === 'mouse') inspect(event);
+                }}
+                onPointerLeave={(event) => {
+                    if (event.pointerType === 'mouse') setSelected(null);
+                }}
+            >
+                {[low, (low + high) / 2, high].map((value) => (
+                    <g key={value}>
+                        <line className="chart-grid" x1={LEFT} x2={RIGHT} y1={y(value)} y2={y(value)} />
+                        <text x={LEFT - 6} y={y(value) + 4} textAnchor="end">{Math.round(value)}</text>
+                    </g>
+                ))}
+                <line className="chart-guide" x1={LEFT} x2={RIGHT} y1={y(average)} y2={y(average)} />
+                <path d={path} fill="none" stroke="var(--color-error)" strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" />
+                {active && (
+                    <>
+                        <line className="chart-guide" x1={x(active.minute)} x2={x(active.minute)} y1={TOP} y2={BOTTOM} />
+                        <circle cx={x(active.minute)} cy={y(active.bpm)} r={4} fill="var(--color-error)" stroke="var(--color-surface)" strokeWidth={2} />
+                    </>
+                )}
+                {TICKS.map((minute) => (
+                    <text key={minute} x={x(minute)} y={H - 4} textAnchor={minute === 0 ? 'start' : minute === 1440 ? 'end' : 'middle'}>
+                        {tickLabel(minute)}
+                    </text>
+                ))}
+            </svg>
+        </div>
     );
 };
 

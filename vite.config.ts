@@ -129,10 +129,10 @@ const createDevOAuthPlugin = (env: Record<string, string>): Plugin => ({
 
         sendJson(res, 200, mapOAuthTokenResponse(tokenResponse.payload));
       } catch (error) {
-        sendJson(res, 500, {
-          error: 'server_error',
-          details: error instanceof Error ? error.message : 'Unexpected OAuth proxy error.',
-        });
+        const code = error instanceof Error && /^oura_token_endpoint_(timeout|unavailable)$/.test(error.message)
+          ? error.message
+          : 'unexpected_error';
+        sendJson(res, 500, { error: 'server_error', details: code });
       }
     });
   },
@@ -157,7 +157,7 @@ export default defineConfig(({ mode }) => {
           manualChunks: (id: string) => {
             if (!id.includes('node_modules')) return undefined;
             // Firebase has no React dependency, so it can be split without
-            // creating circular chunk-initialization issues. The React/recharts
+            // creating circular chunk-initialization issues. The React
             // graph must stay together with its CJS interop helpers.
             if (id.includes('firebase')) return 'vendor-firebase';
             return undefined;

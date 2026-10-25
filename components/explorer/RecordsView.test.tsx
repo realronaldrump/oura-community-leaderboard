@@ -85,13 +85,13 @@ describe("Records tab", () => {
     expect(screen.getByRole("heading", { name: "Lowest HRV ever" })).toBeInTheDocument();
     expect(screen.queryByText(/sleep regularity contributor/)).toBeNull();
     fireEvent.click(tile);
-    const sheet = await screen.findByRole("dialog", { name: "Sleep score: your bests" });
+    const sheet = await screen.findByRole("dialog", { name: "Sleep score bests" });
     expect(within(sheet).getByRole("heading", { name: "Top nights" })).toBeInTheDocument();
     expect(within(sheet).getAllByRole("list", { name: "Top nights" })[0].querySelectorAll("li")).toHaveLength(5);
   });
   it("filters by the kind of record", () => {
     show(summary());
-    fireEvent.click(screen.getByRole("button", { name: "Worth noticing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lows" }));
     expect(screen.queryByRole("heading", { name: "Best sleep score ever" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Lowest HRV ever" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Your bests" })).toBeNull();
@@ -109,7 +109,7 @@ describe("Records tab", () => {
 describe("record cards", () => {
   it("labels the kind of record and a finished yesterday", () => {
     render(<HighlightCard event={low} relativeTo={shiftDay(day, 1)} onClick={() => {}} />);
-    expect(screen.getByText("Worth noticing")).toBeInTheDocument();
+    expect(screen.getByText("Low")).toBeInTheDocument();
     expect(screen.getByText("Yesterday")).toBeInTheDocument();
     cleanup();
     render(<HighlightCard event={best} hero onClick={() => {}} />);

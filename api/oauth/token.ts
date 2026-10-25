@@ -85,9 +85,13 @@ export default async function handler(req: any, res: any) {
             tokenType: tokenJson.token_type || null,
         });
     } catch (error: any) {
-        sendJson(res, 500, {
+        // Only the sanitized token-request codes are safe to return; anything else stays server-side.
+        const code = error?.message === 'oura_token_endpoint_timeout' || error?.message === 'oura_token_endpoint_unavailable'
+            ? error.message
+            : 'unexpected_error';
+        sendJson(res, code === 'oura_token_endpoint_timeout' ? 504 : code === 'oura_token_endpoint_unavailable' ? 502 : 500, {
             error: 'server_error',
-            details: error?.message || 'Unexpected error exchanging OAuth code.',
+            details: code,
         });
     }
 }

@@ -9,7 +9,7 @@ import {
 } from "./documentClient";
 import { db } from "./firebaseConfig";
 import type { DailyStats } from "../types";
-import { hasMetricInMask, type MetricObservation } from "../domain/metrics";
+import { hasMetricInMask, shiftDay, type MetricObservation } from "../domain/metrics";
 import { compareRecordPriority, recordEventDay, type HighlightEvent, type InsightSummary } from "../domain/records";
 import type { RecordRankingPage } from "../api/_lib/recordRankings";
 export interface PublishedInsights extends InsightSummary {
@@ -211,7 +211,12 @@ export async function readDayDetail(
         where("day", "==", day),
       ),
     ),
-    getDoc(doc(db, "profileStats", profileId, "heartRateDays", day)),
+    // Samples are stored by UTC date, so one local day can span the neighbouring stored days.
+    Promise.all(
+      [shiftDay(day, -1), day, shiftDay(day, 1)].map((d) =>
+        getDoc(doc(db, "profileStats", profileId, "heartRateDays", d)),
+      ),
+    ),
     getDocs(
       query(
         collection(db, "profileStats", profileId, "sleepTime"),
@@ -248,7 +253,7 @@ export async function readDayDetail(
   stats.guidedSession = guided.docs.map((d) => d.data());
   stats.tag = tags.docs.map((d) => d.data());
   stats.enhancedTag = enhancedTags.docs.map((d) => d.data());
-  stats.heartrate = heartRates.data()?.items || [];
+  stats.heartrate = heartRates.flatMap((snapshot) => snapshot.data()?.items || []);
   stats.sleepTime = sleepTime.docs.map((d) => d.data());
   return stats;
 }

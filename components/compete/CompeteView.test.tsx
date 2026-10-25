@@ -40,17 +40,17 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 describe('competition flow', () => {
     it('has one creation entry point, without a template wall or setup counters', () => {
         setup();
-        expect(screen.getAllByRole('button', { name: 'New competition' })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: 'New challenge' })).toHaveLength(1);
         expect(screen.queryByText(/templates|pending invites|starting tomorrow/i)).not.toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'New competition' }));
-        expect(screen.getByRole('dialog', { name: 'New competition' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'New challenge' }));
+        expect(screen.getByRole('dialog', { name: 'New challenge' })).toBeInTheDocument();
     });
 
     it('creates, shows the new card immediately, and copies its invitation without a second lookup', async () => {
         mocks.create.mockImplementation(async (input: CreateCompetitionInput) => ({ competition: makeCompetition({ ...input, id: 'created' }), invite: makeCompetitionInvite() }));
         setup();
-        fireEvent.click(screen.getByRole('button', { name: 'New competition' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Create competition' }));
+        fireEvent.click(screen.getByRole('button', { name: 'New challenge' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create challenge' }));
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
         expect(screen.getByRole('heading', { name: 'Step Week' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Invite friends' }));
@@ -79,7 +79,7 @@ describe('competition flow', () => {
         mocks.previewError = state === 'error' ? 'Could not load this invite.' : null;
         if (state === 'closed') mocks.preview = { invite: makeCompetitionInvite(), competition: makeCompetition({ status: 'cancelled', participants: [] }) };
         setup('token');
-        expect(screen.queryByRole('button', { name: 'Join competition' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Join challenge' })).not.toBeInTheDocument();
         expect(screen.queryByText(/already in|already joined/i)).not.toBeInTheDocument();
     });
 
@@ -87,7 +87,7 @@ describe('competition flow', () => {
         mocks.preview = { invite: makeCompetitionInvite(), competition: makeCompetition({ startDate: '2099-01-01', endDate: '2099-01-07', participants: [] }) };
         mocks.accept.mockResolvedValue({ ...mocks.preview, competition: makeCompetition() });
         const { onClear } = setup('token');
-        fireEvent.click(screen.getByRole('button', { name: 'Join competition' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Join challenge' }));
         await waitFor(() => expect(onClear).toHaveBeenCalledOnce());
         expect(mocks.accept).toHaveBeenCalledWith('token', { profileId: competitionProfile.id, displayName: 'Alex' });
     });
@@ -97,7 +97,7 @@ describe('competition flow', () => {
         const { container } = setup();
         const details = container.querySelector('details');
         expect(details).not.toHaveAttribute('open');
-        expect(screen.getByText('Past competitions (10)')).toBeInTheDocument();
+        expect(screen.getByText('Past challenges (10)')).toBeInTheDocument();
         expect(container.querySelectorAll('article')).toHaveLength(10);
     });
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trophy } from 'lucide-react';
+import { Plus, Swords } from 'lucide-react';
 import { useCompetitionInvitePreview, useCompetitions } from '../../hooks/useCompetitions';
 import { competitionService, CreateCompetitionInput } from '../../services/competitionService';
 import { buildCompetitionSummary, deriveCompetitionStatus, evaluateCompetition } from '../../services/competitionEngine';
@@ -82,7 +82,7 @@ const CompeteView: React.FC<CompeteViewProps> = ({
         const { competition, invite } = await competitionService.createCompetition(input);
         setCreatedCompetition(competition);
         if (invite) setInviteByCompetitionId((current) => ({ ...current, [competition.id]: invite }));
-        setNotice({ tone: 'success', message: `${competition.title} is ready. Starts ${formatISODateForDisplay(competition.startDate, 'en-US', { month: 'short', day: 'numeric' })}.` });
+        setNotice({ tone: 'success', message: `${competition.title} starts ${formatISODateForDisplay(competition.startDate, 'en-US', { month: 'short', day: 'numeric' })}.` });
     };
 
     const handleRespondToInvite = async (competitionId: string, status: 'accepted' | 'declined') => {
@@ -94,7 +94,7 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             setNotice({ tone: 'success', message: status === 'accepted' ? 'You’re in.' : 'Invite declined.' });
         } catch (responseError) {
             console.error('Failed to respond to competition invite:', responseError);
-            setNotice({ tone: 'error', message: 'Could not update the invite. Try again.' });
+            setNotice({ tone: 'error', message: 'Couldn’t update the invite. Try again.' });
         } finally {
             responseIds.current.delete(competitionId);
             setRespondingIds((current) => current.filter((id) => id !== competitionId));
@@ -130,7 +130,7 @@ const CompeteView: React.FC<CompeteViewProps> = ({
             onClearCompetitionInviteToken?.();
         } catch (acceptError) {
             console.error('Failed to accept token invite:', acceptError);
-            setNotice({ tone: 'error', message: 'Could not join. The invite may have closed. Try again.' });
+            setNotice({ tone: 'error', message: 'Couldn’t join. The invite may have closed.' });
         } finally {
             setIsAcceptingTokenInvite(false);
         }
@@ -149,77 +149,80 @@ const CompeteView: React.FC<CompeteViewProps> = ({
         />;
     };
 
+    const section = (title: string, cards: Array<ReturnType<typeof evaluateCompetition>>) => cards.length > 0 ? (
+        <section className="detail-section" aria-label={title}>
+            <div className="section-title"><h2>{title}</h2></div>
+            <div className="challenge-list">{cards.map(renderCard)}</div>
+        </section>
+    ) : null;
+
     return (
-        <div className="space-y-6 pt-6">
-            <header className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">Competitions</h1>
-                    <p className="mt-1 text-sm text-ink-secondary">A little friendly motivation.</p>
-                </div>
-                <Button onClick={() => setIsBuilderOpen(true)}>
-                    <Plus className="h-4 w-4" aria-hidden="true" />New competition
+        <div>
+            <header className="page-heading page-heading--row">
+                <h1>Challenges</h1>
+                <Button size="sm" onClick={() => setIsBuilderOpen(true)}>
+                    <Plus className="h-4 w-4" aria-hidden="true" />New challenge
                 </Button>
             </header>
 
-            {notice ? <p role={notice.tone === 'error' ? 'alert' : 'status'} className={`rounded-2xl border px-4 py-3 text-sm ${notice.tone === 'error' ? 'border-error/30 bg-error-soft text-error' : 'border-success/30 bg-success-soft text-success'}`}>{notice.message}</p> : null}
+            {notice ? <p role={notice.tone === 'error' ? 'alert' : 'status'} className={`status-note ${notice.tone === 'error' ? 'status-note--error' : 'status-note--success'}`}>{notice.message}</p> : null}
 
             {competitionInviteToken ? (
-                <section className="rounded-2xl border border-accent/30 bg-surface p-5" aria-label="Competition invite">
-                    {invitePreviewLoading ? <p role="status" className="text-sm text-ink-secondary">Loading invite…</p> : invitePreview ? (
+                <section className="challenge-card mt-4" aria-label="Challenge invite">
+                    {invitePreviewLoading ? <p role="status" className="empty-note">Loading invite…</p> : invitePreview ? (
                         <>
-                            <p className="text-xs text-accent">You’re invited</p>
-                            <h2 className="mt-2 text-xl font-semibold text-ink">{invitePreview.competition.title}</h2>
-                            <p className="mt-2 text-sm text-ink-secondary">{buildCompetitionSummary(invitePreview.competition)}</p>
-                            <p className="mt-2 text-xs text-ink-muted">{formatDates(invitePreview.competition)}</p>
-                            {linkInviteAlreadyJoined ? <p role="status" className="mt-3 text-sm text-accent">You’re already in.</p> : linkInviteClosed ? <p className="mt-3 text-sm text-ink-muted">This competition is no longer accepting players.</p> : null}
+                            <p className="eyebrow">You’re invited</p>
+                            <h2 className="m-0 text-[1.375rem] font-bold tracking-tight">{invitePreview.competition.title}</h2>
+                            <p className="challenge-card__summary">{buildCompetitionSummary(invitePreview.competition)}</p>
+                            <p className="challenge-card__meta">{formatDates(invitePreview.competition)}</p>
+                            {linkInviteAlreadyJoined ? <p role="status" className="challenge-card__note">You’re already in.</p> : linkInviteClosed ? <p className="challenge-card__note">This challenge isn’t taking new players.</p> : null}
                         </>
-                    ) : <p role="status" className="text-sm text-ink-secondary">{invitePreviewError || 'This invite is no longer available.'}</p>}
+                    ) : <p role="status" className="empty-note">{invitePreviewError || 'This invite is no longer available.'}</p>}
                     <div className="mt-4 flex gap-2">
-                        {invitePreview && !invitePreviewLoading && !linkInviteAlreadyJoined && !linkInviteClosed ? <Button onClick={handleAcceptLinkInvite} disabled={isAcceptingTokenInvite}>{isAcceptingTokenInvite ? 'Joining…' : 'Join competition'}</Button> : null}
+                        {invitePreview && !invitePreviewLoading && !linkInviteAlreadyJoined && !linkInviteClosed ? <Button onClick={handleAcceptLinkInvite} disabled={isAcceptingTokenInvite}>{isAcceptingTokenInvite ? 'Joining…' : 'Join challenge'}</Button> : null}
                         <Button variant="quiet" onClick={onClearCompetitionInviteToken} disabled={isAcceptingTokenInvite}>Dismiss</Button>
                     </div>
                 </section>
             ) : null}
 
             {pendingInvites.length > 0 ? (
-                <section className="space-y-3" aria-labelledby="competition-invites-heading">
-                    <h2 id="competition-invites-heading" className="text-lg font-semibold text-ink">Invites</h2>
-                    {pendingInvites.map((competition) => (
-                        <div key={competition.id} className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-surface p-5">
-                            <div className="min-w-0">
-                                <h3 className="break-words font-semibold text-ink">{competition.title}</h3>
-                                <p className="mt-1 text-sm text-ink-secondary">{buildCompetitionSummary(competition)}</p>
-                                <p className="mt-2 text-xs text-ink-muted">{formatDates(competition)}</p>
+                <section className="detail-section" aria-labelledby="competition-invites-heading">
+                    <div className="section-title"><h2 id="competition-invites-heading">Invites</h2></div>
+                    <div className="challenge-list">
+                        {pendingInvites.map((competition) => (
+                            <div key={competition.id} className="challenge-card">
+                                <h3>{competition.title}</h3>
+                                <p className="challenge-card__meta">{formatDates(competition)}</p>
+                                <p className="challenge-card__summary">{buildCompetitionSummary(competition)}</p>
+                                <div className="mt-4 flex gap-2">
+                                    <Button onClick={() => handleRespondToInvite(competition.id, 'accepted')} disabled={respondingIds.includes(competition.id)}>Join</Button>
+                                    <Button variant="quiet" onClick={() => handleRespondToInvite(competition.id, 'declined')} disabled={respondingIds.includes(competition.id)}>Decline</Button>
+                                </div>
                             </div>
-                            <div className="flex gap-2">
-                                <Button onClick={() => handleRespondToInvite(competition.id, 'accepted')} disabled={respondingIds.includes(competition.id)}>Join</Button>
-                                <Button variant="quiet" onClick={() => handleRespondToInvite(competition.id, 'declined')} disabled={respondingIds.includes(competition.id)}>Decline</Button>
-                            </div>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </section>
             ) : null}
 
-            {isLoading ? <p role="status" className="py-6 text-sm text-ink-muted">Loading competitions…</p> : null}
-            {error ? <p role="status" className="rounded-2xl border border-line p-5 text-sm text-ink-secondary">{error}</p> : null}
+            {isLoading ? <p role="status" className="empty-note">Loading challenges…</p> : null}
+            {error ? <p role="status" className="status-note status-note--error">{error}</p> : null}
 
-            {createdEvaluation ? <section className="space-y-3" aria-label="Your new competition"><h2 className="text-lg font-semibold text-ink">Ready to go</h2>{renderCard(createdEvaluation)}</section> : null}
-
-            {activeEvaluations.length > 0 ? <section className="space-y-3" aria-label="In progress"><h2 className="text-lg font-semibold text-ink">In progress</h2>{activeEvaluations.map(renderCard)}</section> : null}
-            {scheduledEvaluations.length > 0 ? <section className="space-y-3" aria-label="Upcoming"><h2 className="text-lg font-semibold text-ink">Upcoming</h2>{scheduledEvaluations.map(renderCard)}</section> : null}
+            {section('Just created', createdEvaluation ? [createdEvaluation] : [])}
+            {section('In progress', activeEvaluations)}
+            {section('Upcoming', scheduledEvaluations)}
 
             {!isLoading && !error && !createdEvaluation && activeEvaluations.length === 0 && scheduledEvaluations.length === 0 && pendingInvites.length === 0 && !competitionInviteToken ? (
-                <div className="rounded-3xl border border-dashed border-line-strong px-5 py-10 text-center">
-                    <Trophy className="mx-auto h-8 w-8 text-accent" aria-hidden="true" />
-                    <h2 className="mt-4 text-xl font-semibold text-ink">Make this week a challenge</h2>
-                    <p className="mx-auto mt-2 max-w-sm text-sm text-ink-secondary">Steps, sleep, or readiness. Pick one and you’re ready for a week with friends—or yourself.</p>
+                <div className="quiet-state">
+                    <Swords size={28} aria-hidden="true" />
+                    <h2>No challenges yet</h2>
+                    <p>Pick steps, sleep or readiness and go for a week, with friends or on your own.</p>
                 </div>
             ) : null}
 
             {completedEvaluations.length > 0 ? (
-                <details className="group">
-                    <summary className="w-fit cursor-pointer py-3 text-sm font-medium text-ink-secondary">Past competitions ({completedEvaluations.length})</summary>
-                    <div className="mt-2 space-y-3">{completedEvaluations.map(renderCard)}</div>
+                <details className="metric-group mt-6">
+                    <summary><span>Past challenges ({completedEvaluations.length})</span></summary>
+                    <div className="challenge-list pb-4">{completedEvaluations.map(renderCard)}</div>
                 </details>
             ) : null}
 

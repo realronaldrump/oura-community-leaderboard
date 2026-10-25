@@ -68,4 +68,37 @@ describe('/api/oauth/token', () => {
         expect(result.headers.get('cache-control')).toBe('no-store');
         expect(result.headers.get('pragma')).toBe('no-cache');
     });
+
+    it('reports an unreachable token endpoint without retrying the one-time code', async () => {
+        const fetchMock = vi.fn(async () => {
+            throw new TypeError('fetch failed: connect ECONNREFUSED');
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        const result = createResponse();
+
+        await handler({
+            method: 'POST',
+            body: { code: 'one-time-code', redirectUri: 'https://example.com/callback' },
+        }, result.response);
+
+        expect(fetchMock).toHaveBeenCalledOnce();
+        expect(result.statusCode).toBe(502);
+        expect(result.body).toEqual({ error: 'server_error', details: 'oura_token_endpoint_unavailable' });
+    });
+
+    it('never echoes unexpected internal error messages', async () => {
+        const result = createResponse();
+        const request = {
+            method: 'POST',
+            get body(): never {
+                throw new Error('internal detail: /srv/secrets/config.json');
+            },
+        };
+
+        await handler(request, result.response);
+
+        expect(result.statusCode).toBe(500);
+        expect(result.body).toEqual({ error: 'server_error', details: 'unexpected_error' });
+        expect(JSON.stringify(result.body)).not.toContain('secrets');
+    });
 });

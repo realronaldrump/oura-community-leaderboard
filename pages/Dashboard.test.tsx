@@ -186,14 +186,14 @@ describe('Dashboard sleep details', () => {
         );
 
         fireEvent.click(await screen.findByRole('button', {
-            name: /Time asleep7h 45mBedtime & wake time/i,
+            name: /Time asleep7h 45mLast night/i,
         }));
 
         expect(await screen.findByRole('heading', { name: 'Time asleep', level: 1 })).toBeInTheDocument();
         expect(window.location.pathname).toBe('/metrics/sleep_duration');
-        expect(await screen.findByText('22:47', { selector: '.sleep-clock strong' })).toBeInTheDocument();
-        expect(screen.getByText('06:32', { selector: '.sleep-clock strong' })).toBeInTheDocument();
-        expect(screen.queryByText('14:00', { selector: '.sleep-clock strong' })).not.toBeInTheDocument();
+        expect(await screen.findByText('10:47 PM', { selector: '.sleep-clock strong' })).toBeInTheDocument();
+        expect(screen.getByText('6:32 AM', { selector: '.sleep-clock strong' })).toBeInTheDocument();
+        expect(screen.queryByText('2:00 PM', { selector: '.sleep-clock strong' })).not.toBeInTheDocument();
         expect(mocks.loadHistory).not.toHaveBeenCalled();
     });
 });

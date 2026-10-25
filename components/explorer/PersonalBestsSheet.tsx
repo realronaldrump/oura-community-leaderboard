@@ -60,7 +60,7 @@ export default function PersonalBestsSheet({
       })
     : [];
   return (
-    <Dialog isOpen={Boolean(bests && spec)} title={spec ? `${spec.name}: your bests` : "Your bests"} onClose={onClose}>
+    <Dialog isOpen={Boolean(bests && spec)} title={spec ? `${spec.name} bests` : "Your bests"} onClose={onClose}>
       {bests && spec && (
         <div className="bests-sheet">
           {sections.map(({ period, set }) => {

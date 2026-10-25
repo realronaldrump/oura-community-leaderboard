@@ -28,7 +28,7 @@ const FILTERS = [
   ["all", "All"],
   ["bests", "Bests"],
   ["streaks", "Streaks"],
-  ["lows", "Worth noticing"],
+  ["lows", "Lows"],
   ["friends", "Friends"],
 ] as const;
 type Filter = (typeof FILTERS)[number][0];
@@ -146,13 +146,11 @@ export default function RecordsView({
   return (
     <div>
       <header className="page-heading">
-        <p className="eyebrow">Your history, ranked</p>
         <h1>Records</h1>
-        <p>Personal bests, streaks and the days that stood out.</p>
       </header>
       {summary && summary.rulesVersion !== RULES_VERSION && (
         <p className="fine-print records-refresh" role="status">
-          Your records are being refreshed. New personal bests and streaks will appear shortly.
+          Your records are being refreshed to the latest rules.
         </p>
       )}
       {browsing && summary?.personalBests && (
@@ -160,7 +158,7 @@ export default function RecordsView({
       )}
       <div className="record-search">
         <label className="search-field">
-          <Search size={18} />
+          <Search size={18} aria-hidden="true" />
           <input
             type="search"
             aria-label="Search records"
@@ -183,9 +181,14 @@ export default function RecordsView({
         ))}
       </div>
       {metric && (
-        <button type="button" className="metric-pill" onClick={clearMetric}>
+        <button
+          type="button"
+          className="metric-pill"
+          onClick={clearMetric}
+          aria-label={`${RECORD_SPEC_BY_ID[metric].name} only. Show all metrics`}
+        >
           {RECORD_SPEC_BY_ID[metric].name}
-          <X size={14} aria-label="Show every metric" />
+          <X size={14} aria-hidden="true" />
         </button>
       )}
       {days.map((day) => (
@@ -212,12 +215,12 @@ export default function RecordsView({
       ))}
       {records.isFetching && (
         <p className="empty-note" role="status">
-          Finding your records…
+          Loading records…
         </p>
       )}
       {records.isError && (
         <p className="empty-note" role="alert">
-          Records couldn’t load.{" "}
+          Records didn’t load.{" "}
           <button type="button" onClick={() => void records.refetch()}>
             Try again
           </button>
@@ -225,16 +228,14 @@ export default function RecordsView({
       )}
       {!events.length && !records.isFetching && (
         <div className="quiet-state">
-          <Sparkles size={30} />
-          <h2>
-            {summary ? "Nothing here yet" : "Your story is taking shape"}
-          </h2>
+          <Sparkles size={28} aria-hidden="true" />
+          <h2>{summary ? "No matching records" : "No records yet"}</h2>
           <p>
             {summary
               ? records.hasNextPage
-                ? "Nothing matches in recent weeks. Look further back, or try another filter."
-                : "No records match this view. Try another filter or search."
-              : "Your history is being checked for personal bests and streaks."}
+                ? "Nothing in recent weeks. Load older records or change the filter."
+                : "Try another filter or search."
+              : "Records appear once your history has been checked."}
           </p>
         </div>
       )}
@@ -244,7 +245,7 @@ export default function RecordsView({
           className="w-full"
           onClick={() => setVisibleCount((count) => count + 20)}
         >
-          More records
+          Show more
         </Button>
       )}
       {events.length <= visibleCount && records.hasNextPage && (
@@ -254,13 +255,13 @@ export default function RecordsView({
           disabled={records.isFetchingNextPage}
           onClick={() => void records.fetchNextPage()}
         >
-          Look further back
+          Load older records
         </Button>
       )}
       {summary?.archiveBefore && summary.archiveThrough && (
         <p className="fine-print">
-          Earlier history is still being checked. Records are ready from{" "}
-          {shortDate(summary.archiveThrough)}.
+          Older history is still being checked. Records go back to{" "}
+          {shortDate(summary.archiveThrough)} so far.
         </p>
       )}
       <PersonalBestsSheet

@@ -58,6 +58,17 @@ const json = (res, status, value) => {
   res.end(JSON.stringify(value));
 };
 const readBody = async (req) => (await readRequestBytes(req)).toString("utf8");
+/** A malformed public request is the caller's error, not a storage failure. */
+const readJsonBody = async (req) => {
+  try {
+    return JSON.parse((await readBody(req)) || "null");
+  } catch (error) {
+    if (error instanceof SyntaxError) return undefined;
+    throw error;
+  }
+};
+const isObject = (value) =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
 const snapshotWire = (snapshot) => ({
   path: snapshot.ref.path,
   exists: snapshot.exists,
@@ -259,8 +270,10 @@ const server = http.createServer(
       }
       if (url.pathname === "/public/record-rankings" && req.method === "POST") {
         if (!store.getControl("activeMigration")) return json(res, 503, { error: "storage_not_ready" });
+        const input = await readJsonBody(req);
+        if (!isObject(input)) return json(res, 400, { error: "invalid_json" });
         try {
-          return json(res, 200, await readPublishedRecordRankings(store, JSON.parse(await readBody(req))));
+          return json(res, 200, await readPublishedRecordRankings(store, input));
         } catch (error) {
           if (error.status) return json(res, error.status, { error: error.message });
           throw error;
@@ -274,7 +287,8 @@ const server = http.createServer(
           message:
             "Your complete history is being copied and verified. The app has not switched storage yet.",
         });
-      const body = JSON.parse(await readBody(req));
+      const body = await readJsonBody(req);
+      if (!isObject(body)) return json(res, 400, { error: "invalid_json" });
       if (body.action === "get") {
         if (!canRead(body.path))
           return json(res, 403, { error: "permission-denied" });

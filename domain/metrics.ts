@@ -74,6 +74,20 @@ export const dayDistance = (a: string, b: string) =>
   Math.round(
     (Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / DAY_MS,
   );
+/** History windows offered by Trends and metric detail, in days ("all" means everything saved). */
+export const HISTORY_RANGES = [
+  ["7", "7D"],
+  ["30", "30D"],
+  ["90", "90D"],
+  ["365", "1Y"],
+  ["all", "All"],
+] as const;
+export type HistoryRange = (typeof HISTORY_RANGES)[number][0];
+/** Unknown values from the address bar fall back to 30 days instead of producing an invalid date. */
+export const historyRange = (value: string | null | undefined): HistoryRange =>
+  HISTORY_RANGES.find(([range]) => range === value)?.[0] ?? "30";
+export const historyStart = (day: string, range: HistoryRange) =>
+  range === "all" ? undefined : shiftDay(day, -Number(range) + 1);
 export const localDay = (
   profile: Pick<UserProfile, "lastKnownUtcOffsetMinutes">,
   now = new Date(),
@@ -141,12 +155,13 @@ function metric(
     clock: unit === "minutes",
     resolution: unit === "seconds" ? 60 : unit === "celsius" ? 0.1 : 1,
     recordable: true,
-    description:
-      "An observation from your Oura history. Comparisons use your own recorded data.",
+    description: "",
     ...options,
   });
 }
-metric("sleep_score", "Sleep score", "sleep", "sleep", "score", "score");
+metric("sleep_score", "Sleep score", "sleep", "sleep", "score", "score", {
+  description: "Oura’s 0 to 100 rating of the night: how long, how well and when you slept.",
+});
 metric(
   "readiness_score",
   "Readiness score",
@@ -154,6 +169,10 @@ metric(
   "readiness",
   "score",
   "score",
+  {
+    description:
+      "Oura’s 0 to 100 estimate of recovery, from sleep, HRV, resting heart rate and temperature.",
+  },
 );
 metric(
   "activity_score",
@@ -162,7 +181,10 @@ metric(
   "activity",
   "score",
   "score",
-  { accumulating: true },
+  {
+    accumulating: true,
+    description: "Oura’s 0 to 100 rating of how active you were, balanced against rest.",
+  },
 );
 const contributorGroups = [
   [
@@ -223,7 +245,7 @@ for (const [source, category, fields] of contributorGroups)
       `contributors.${field}`,
       "score",
       {
-        description: `Oura's ${humanize(field).toLowerCase()} contribution to ${source}. This is a contribution score, not a physiological measurement.`,
+        description: `One of the parts Oura combines into your ${source} score, rated 1 to 100.`,
       },
     );
 const sessionFields: Array<
@@ -263,14 +285,15 @@ const sessionFields: Array<
 ];
 for (const [id, label, field, unit, category] of sessionFields)
   metric(id, label, category, "session", field, unit, {
-    description:
-      "Measured during your main sleep session on this Oura day. Naps are shown separately.",
+    description: "From your main sleep of the night. Naps are counted separately.",
   });
 metric("bedtime", "Bedtime", "sleep", "session", "bedtime_start", "minutes", {
   comparison: "none",
+  description: "When your main sleep of the night started.",
 });
 metric("wake_time", "Wake time", "sleep", "session", "bedtime_end", "minutes", {
   comparison: "none",
+  description: "When your main sleep of the night ended.",
 });
 for (const stage of ["deep", "rem", "light"])
   metric(

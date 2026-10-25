@@ -3,12 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Search } from "lucide-react";
 import {
   CATEGORIES,
+  HISTORY_RANGES,
   METRICS,
   METRIC_BY_ID,
   formatMetricValue,
+  historyRange,
+  historyStart,
   metricSeries,
   metricColor,
-  shiftDay,
   type MetricCategory,
   type MetricObservation,
 } from "../../domain/metrics";
@@ -19,6 +21,13 @@ import {
 } from "../../services/insightsService";
 import { navigate } from "../../hooks/useAppRoute";
 import MetricChart from "./MetricChart";
+const SCORE_IDS = ["sleep_score", "readiness_score", "activity_score"];
+const shortDate = (day: string) =>
+  new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 export default function TrendsView({
   profile,
   summary,
@@ -33,9 +42,8 @@ export default function TrendsView({
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<MetricCategory | "all">("all");
   const [metricId, setMetricId] = useState("sleep_score");
-  const range =
-    new URLSearchParams(window.location.search).get("range") || "30";
-  const start = range === "all" ? undefined : shiftDay(day, -Number(range) + 1);
+  const range = historyRange(new URLSearchParams(window.location.search).get("range"));
+  const start = historyStart(day, range);
   const history = useQuery({
     queryKey: ["metric-history", profile.id, summary?.revision, start, day],
     queryFn: () => readMetricHistory(profile.id, summary!.months, start, day),
@@ -50,17 +58,15 @@ export default function TrendsView({
   );
   const metric = METRIC_BY_ID[metricId];
   const points = metricSeries(observations, metricId);
-  const first = points[0];
-  const last = points.at(-1);
-  const average = points.length
-    ? points.reduce((a, p) => a + p.value, 0) / points.length
+  const values = points.map((p) => p.value);
+  const average = values.length
+    ? values.reduce((a, b) => a + b, 0) / values.length
     : null;
+  const query = search.trim().toLowerCase();
   const visible = METRICS.filter(
     (m) =>
       (category === "all" || m.category === category) &&
-      `${m.label} ${CATEGORIES[m.category]}`
-        .toLowerCase()
-        .includes(search.toLowerCase()) &&
+      `${m.label} ${CATEGORIES[m.category]}`.toLowerCase().includes(query) &&
       observations.some((o) => o.values[m.id] != null),
   );
   const open = (id: string) =>
@@ -68,35 +74,27 @@ export default function TrendsView({
   return (
     <div>
       <header className="page-heading">
-        <p className="eyebrow">The longer view</p>
-        <h1>Your progress</h1>
-        <p>Small changes. A bigger picture.</p>
+        <h1>Trends</h1>
       </header>
       <div className="range-tabs" role="group" aria-label="Trend range">
-        {[
-          ["7", "7D"],
-          ["30", "30D"],
-          ["90", "90D"],
-          ["365", "1Y"],
-          ["all", "All"],
-        ].map(([value, label]) => (
+        {HISTORY_RANGES.map(([value, label]) => (
           <button
             type="button"
             key={value}
             aria-pressed={range === value}
-            onClick={() => navigate(`/trends?range=${value}`)}
+            onClick={() => navigate(`/trends?range=${value}`, true)}
           >
             {label}
           </button>
         ))}
       </div>
-      <section className="trend-feature">
+      <section className="trend-feature" aria-label={`${metric.label} trend`}>
         <div
           className="score-selector"
           role="group"
           aria-label="Score to chart"
         >
-          {["sleep_score", "readiness_score", "activity_score"].map((id) => (
+          {SCORE_IDS.map((id) => (
             <button
               key={id}
               type="button"
@@ -109,14 +107,21 @@ export default function TrendsView({
         </div>
         <div className="trend-feature__reading">
           <div>
-            <span>Average {metric.label.toLowerCase()}</span>
+            <span>Average</span>
             <strong>{formatMetricValue(metric, average)}</strong>
           </div>
-          <p>
-            {first && last
-              ? `${points.length} recorded days`
-              : "Waiting for measurements"}
-          </p>
+          {values.length ? (
+            <dl>
+              <dt>Low</dt>
+              <dd>{formatMetricValue(metric, Math.min(...values))}</dd>
+              <dt>High</dt>
+              <dd>{formatMetricValue(metric, Math.max(...values))}</dd>
+              <dt>Days</dt>
+              <dd>{values.length}</dd>
+            </dl>
+          ) : (
+            <p>No data yet</p>
+          )}
         </div>
         <MetricChart
           metric={metric}
@@ -133,17 +138,17 @@ export default function TrendsView({
           className="text-action"
           onClick={() => open(metricId)}
         >
-          Explore {metric.label.toLowerCase()} <ChevronRight size={16} />
+          {metric.label} details <ChevronRight size={16} aria-hidden="true" />
         </button>
       </section>
       {!summary && (
-        <p className="empty-note">
-          Showing recent saved measurements while your full history is prepared.
+        <p className="fine-print">
+          Full history is still loading. Showing recent days.
         </p>
       )}
       {history.isError && (
         <p role="alert" className="empty-note">
-          History couldn’t load.{" "}
+          History didn’t load.{" "}
           <button type="button" onClick={() => void history.refetch()}>
             Try again
           </button>
@@ -154,38 +159,40 @@ export default function TrendsView({
           Loading history…
         </p>
       )}
-      <section className="detail-section">
+      <section className="detail-section" aria-labelledby="all-measurements">
         <div className="section-title">
-          <h2>Every measurement</h2>
+          <h2 id="all-measurements">All measurements</h2>
           <span>{visible.length}</span>
         </div>
-        <label className="search-field">
-          <Search size={18} />
-          <input
-            type="search"
-            aria-label="Find a measurement"
-            placeholder="Find a measurement"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </label>
-        <label className="field-label">
-          <span className="sr-only">Metric category</span>
-          <select
-            aria-label="Metric category"
-            value={category}
-            onChange={(e) =>
-              setCategory(e.target.value as MetricCategory | "all")
-            }
-          >
-            <option value="all">All categories</option>
-            {Object.entries(CATEGORIES).map(([id, label]) => (
-              <option key={id} value={id}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="measurement-filters">
+          <label className="search-field">
+            <Search size={18} aria-hidden="true" />
+            <input
+              type="search"
+              aria-label="Find a measurement"
+              placeholder="Find a measurement"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
+          <label className="field-label">
+            <span className="sr-only">Category</span>
+            <select
+              aria-label="Category"
+              value={category}
+              onChange={(e) =>
+                setCategory(e.target.value as MetricCategory | "all")
+              }
+            >
+              <option value="all">All categories</option>
+              {Object.entries(CATEGORIES).map(([id, label]) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         {Object.entries(CATEGORIES).map(([cat, label]) => {
           const metrics = visible
             .filter((m) => m.category === cat)
@@ -198,15 +205,16 @@ export default function TrendsView({
             <details
               className="metric-group"
               key={cat}
-              open={Boolean(search) || category !== "all"}
+              open={Boolean(query) || category !== "all"}
             >
               <summary>
+                <span className={`category-dot tone-${cat}`} aria-hidden="true" />
                 <span>{label}</span>
-                <small>{metrics.length} metrics</small>
+                <small>{metrics.length}</small>
               </summary>
               <div className="metric-list">
                 {metrics.map((m) => {
-                  const series = metricSeries(observations, m.id);
+                  const latest = metricSeries(observations, m.id).at(-1);
                   return (
                     <button
                       type="button"
@@ -216,12 +224,10 @@ export default function TrendsView({
                     >
                       <span>
                         {m.label}
-                        <small>Latest · {series.at(-1)?.day}</small>
+                        {latest && <small>{latest.day === day ? "Latest" : shortDate(latest.day)}</small>}
                       </span>
-                      <strong>
-                        {formatMetricValue(m, series.at(-1)?.value)}
-                      </strong>
-                      <ChevronRight size={16} />
+                      <strong>{formatMetricValue(m, latest?.value)}</strong>
+                      <ChevronRight size={16} aria-hidden="true" />
                     </button>
                   );
                 })}
@@ -231,7 +237,7 @@ export default function TrendsView({
         })}
         {!visible.length && (
           <p className="empty-note">
-            No recorded measurements match this search.
+            {query ? "No measurements match your search." : "No measurements in this range."}
           </p>
         )}
       </section>

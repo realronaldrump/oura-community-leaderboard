@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Download, FileText, Database, TrendingUp, AlertCircle, Heart, Activity, Moon, Zap, Wind, RefreshCw } from 'lucide-react';
+import { Download } from 'lucide-react';
+import { Field, Input } from '../components/ui';
 import Papa from 'papaparse';
 import { useUser } from '../contexts/UserContext';
 import {
@@ -94,7 +95,7 @@ const DataExport: React.FC = () => {
                 setData(storedData);
                 setMetadata(storedMetadata);
             })
-            .catch(() => setError('Saved history is temporarily unavailable. It will keep filling in automatically.'))
+            .catch(() => setError('Saved history didn’t load. Try again in a moment.'))
             .finally(() => setIsLoading(false));
     }, [activeProfile?.id]);
 
@@ -501,363 +502,144 @@ const DataExport: React.FC = () => {
         }))
         : [];
 
-    if (!activeProfile) {
-        return (
-            <div className="min-h-screen flex flex-col items-center justify-center p-8">
-                <div className="text-center">
-                    <AlertCircle className="w-16 h-16 text-text-muted mx-auto mb-4" />
-                    <h2 className="text-xl font-bold text-text-primary mb-2">No Profile Selected</h2>
-                    <p className="text-text-secondary">Please select a profile to export data.</p>
-                </div>
-            </div>
-        );
-    }
+    if (!activeProfile) return null;
 
     type ExportButton = {
         label: string;
         description: string;
-        icon: React.ReactNode;
-        color: string;
         count: number;
         onClick: () => void;
         filename: string;
     };
 
     const exportButtons: ExportButton[] = analysisData ? [
-        {
-            label: 'Sleep Scores',
-            description: 'Daily score + 7 contributing factors',
-            icon: <Moon className="w-5 h-5 text-metric-sleep" />,
-            color: 'bg-metric-sleep/20',
-            count: sleepRows.length,
-            onClick: generateSleepCSV,
-            filename: 'sleep_scores.csv',
-        },
-        {
-            label: 'Readiness Scores',
-            description: 'Daily score + contributor scores + temperature',
-            icon: <TrendingUp className="w-5 h-5 text-metric-readiness" />,
-            color: 'bg-metric-readiness/20',
-            count: readinessRows.length,
-            onClick: generateReadinessCSV,
-            filename: 'readiness_scores.csv',
-        },
-        {
-            label: 'Activity Scores',
-            description: 'Daily score + contributors + steps/calories',
-            icon: <Activity className="w-5 h-5 text-metric-activity" />,
-            color: 'bg-metric-activity/20',
-            count: activityRows.length,
-            onClick: generateActivityCSV,
-            filename: 'activity_scores.csv',
-        },
-        {
-            label: 'Sleep Session Summary',
-            description: 'Analysis columns for sleep periods; use Complete Raw CSV for every source field',
-            icon: <Moon className="w-5 h-5 text-metric-sleep" />,
-            color: 'bg-metric-sleep/10',
-            count: sleepSessionRows.length,
-            onClick: generateSleepSessionsCSV,
-            filename: 'sleep_sessions.csv',
-        },
-        {
-            label: 'Nightly Lowest HR',
-            description: 'One row per Oura day with the sleep session lowest heart rate',
-            icon: <Heart className="w-5 h-5 text-error" />,
-            color: 'bg-error/20',
-            count: nightlyRestingHeartRateRows.length,
-            onClick: generateNightlyRestingHeartRateCSV,
-            filename: 'nightly_lowest_heart_rate.csv',
-        },
-        {
-            label: 'Nightly Vitals',
-            description: 'One row per Oura day with average/lowest HR, HRV, and breathing',
-            icon: <Heart className="w-5 h-5 text-error" />,
-            color: 'bg-error/10',
-            count: nightlyVitalsRows.length,
-            onClick: generateNightlyVitalsCSV,
-            filename: 'nightly_vitals.csv',
-        },
-        {
-            label: 'Heart Rate',
-            description: 'Time-series HR samples using the profile local offset for range filtering',
-            icon: <Heart className="w-5 h-5 text-error" />,
-            color: 'bg-error/20',
-            count: heartrateRows.length,
-            onClick: generateHeartrateCSV,
-            filename: 'heart_rate.csv',
-        },
-        {
-            label: 'SpO2',
-            description: 'Daily blood oxygen average',
-            icon: <Wind className="w-5 h-5 text-metric-sleep" />,
-            color: 'bg-metric-sleep/10',
-            count: spo2Rows.length,
-            onClick: generateSpO2CSV,
-            filename: 'spo2.csv',
-        },
-        {
-            label: 'Daily Stress',
-            description: 'High stress and recovery seconds per day',
-            icon: <Zap className="w-5 h-5 text-metric-activity" />,
-            color: 'bg-metric-activity/10',
-            count: stressRows.length,
-            onClick: generateStressCSV,
-            filename: 'daily_stress.csv',
-        },
-        {
-            label: 'Resilience',
-            description: 'Resilience level + sleep/daytime contributors',
-            icon: <TrendingUp className="w-5 h-5 text-metric-readiness" />,
-            color: 'bg-metric-readiness/20',
-            count: resilienceRows.length,
-            onClick: generateResilienceCSV,
-            filename: 'resilience.csv',
-        },
-        {
-            label: 'Cardiovascular Age',
-            description: 'Estimated cardiovascular age per day',
-            icon: <Heart className="w-5 h-5 text-metric-insight" />,
-            color: 'bg-metric-insight/10',
-            count: cardiovascularAgeRows.length,
-            onClick: generateCardiovascularAgeCSV,
-            filename: 'cardiovascular_age.csv',
-        },
-        {
-            label: 'VO2 Max',
-            description: 'Cardio capacity estimates',
-            icon: <Activity className="w-5 h-5 text-metric-readiness" />,
-            color: 'bg-metric-readiness/10',
-            count: vo2MaxRows.length,
-            onClick: generateVO2MaxCSV,
-            filename: 'vo2_max.csv',
-        },
-        {
-            label: 'Workouts',
-            description: 'Logged workouts with type, duration, distance',
-            icon: <Activity className="w-5 h-5 text-metric-activity" />,
-            color: 'bg-metric-activity/20',
-            count: workoutRows.length,
-            onClick: generateWorkoutsCSV,
-            filename: 'workouts.csv',
-        },
-        {
-            label: 'Tags',
-            description: "Enhanced tags and notes you've logged",
-            icon: <FileText className="w-5 h-5 text-text-secondary" />,
-            color: 'bg-surface-raised',
-            count: enhancedTagRows.length + tagRows.length,
-            onClick: generateTagsCSV,
-            filename: 'tags.csv',
-        },
+        { label: 'Sleep scores', description: 'Score and its contributors', count: sleepRows.length, onClick: generateSleepCSV, filename: 'sleep_scores.csv' },
+        { label: 'Readiness scores', description: 'Score, contributors and temperature', count: readinessRows.length, onClick: generateReadinessCSV, filename: 'readiness_scores.csv' },
+        { label: 'Activity scores', description: 'Score, contributors, steps and calories', count: activityRows.length, onClick: generateActivityCSV, filename: 'activity_scores.csv' },
+        { label: 'Sleep sessions', description: 'Stages, heart rate and HRV for each sleep', count: sleepSessionRows.length, onClick: generateSleepSessionsCSV, filename: 'sleep_sessions.csv' },
+        { label: 'Nightly lowest heart rate', description: 'One row per night', count: nightlyRestingHeartRateRows.length, onClick: generateNightlyRestingHeartRateCSV, filename: 'nightly_lowest_heart_rate.csv' },
+        { label: 'Nightly vitals', description: 'Heart rate, HRV and breathing per night', count: nightlyVitalsRows.length, onClick: generateNightlyVitalsCSV, filename: 'nightly_vitals.csv' },
+        { label: 'Heart rate samples', description: 'Every sample in the range', count: heartrateRows.length, onClick: generateHeartrateCSV, filename: 'heart_rate.csv' },
+        { label: 'Blood oxygen', description: 'Nightly average and breathing disturbance', count: spo2Rows.length, onClick: generateSpO2CSV, filename: 'spo2.csv' },
+        { label: 'Daily stress', description: 'Stressed and restored time per day', count: stressRows.length, onClick: generateStressCSV, filename: 'daily_stress.csv' },
+        { label: 'Resilience', description: 'Level and contributors', count: resilienceRows.length, onClick: generateResilienceCSV, filename: 'resilience.csv' },
+        { label: 'Cardiovascular age', description: 'Daily estimate', count: cardiovascularAgeRows.length, onClick: generateCardiovascularAgeCSV, filename: 'cardiovascular_age.csv' },
+        { label: 'VO2 max', description: 'Fitness estimates', count: vo2MaxRows.length, onClick: generateVO2MaxCSV, filename: 'vo2_max.csv' },
+        { label: 'Workouts', description: 'Type, time, intensity and distance', count: workoutRows.length, onClick: generateWorkoutsCSV, filename: 'workouts.csv' },
+        { label: 'Tags', description: 'Tags and notes', count: enhancedTagRows.length + tagRows.length, onClick: generateTagsCSV, filename: 'tags.csv' },
     ] : [];
+    const longDate = (day: string) => formatISODateForDisplay(day, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const rowCount = (count: number, noun: string) => `${count.toLocaleString()} ${noun}${count === 1 ? '' : 's'}`;
 
     return (
-        <div className="py-2 sm:py-4">
-            <div className="max-w-4xl mx-auto">
-                {/* Header */}
-                <div className="mb-6">
-                    <h1 className="page-title mb-2 flex items-center gap-3 text-3xl text-text-primary">
-                        <Database className="w-8 h-8 text-accent" />
-                        Your data, to go
-                    </h1>
-                    <p className="text-text-secondary">
-                        Download a lossless snapshot of every current Oura V2 collection, or create analysis-ready CSVs from your saved history.
-                    </p>
+        <div>
+            <header className="page-heading">
+                <h1>Export</h1>
+                <p>Download what’s saved from Oura.</p>
+            </header>
+
+            {isLoading ? <p className="empty-note" role="status">Loading saved history…</p> : null}
+            {error ? <p className="status-note status-note--error" role="alert">{error}</p> : null}
+            {!isLoading && !error && !data ? (
+                <div className="quiet-state">
+                    <h2>Nothing saved yet</h2>
+                    <p>Your history shows up here after the first sync.</p>
                 </div>
+            ) : null}
 
-                {/* Loading */}
-                {isLoading && (
-                    <div className="ui-card ui-card--default mb-5 flex items-center gap-3 p-4 sm:p-6">
-                        <div className="w-5 h-5 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
-                        <p className="text-text-secondary">Loading saved history...</p>
-                    </div>
-                )}
-
-                {/* Error */}
-                {error && (
-                    <div className="ui-card ui-card--default mb-5 p-4 sm:p-6">
-                        <div className="flex items-center gap-3">
-                            <AlertCircle className="w-5 h-5 text-error flex-shrink-0" />
-                            <p className="text-error">{error}</p>
-                        </div>
-                    </div>
-                )}
-
-                {/* No data yet */}
-                {!isLoading && !error && !data && (
-                    <div className="ui-card ui-card--default mb-5 p-6 text-center sm:p-8">
-                        <RefreshCw className="w-12 h-12 text-text-muted mx-auto mb-4" />
-                        <h2 className="text-lg font-bold text-text-primary mb-2">History Is Still Arriving</h2>
-                        <p className="text-text-secondary">
-                            Oura history is prepared automatically in the background. Check back later.
-                        </p>
-                    </div>
-                )}
-
-                {!isLoading && data && (
-                    <>
-                        {completeBundle && (
-                            <section className="ui-card ui-card--subtle mb-5 p-4 sm:p-6">
-                                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                                    <div>
-                                        <h2 className="text-xl font-bold text-text-primary mb-1">Complete data</h2>
-                                        <p className="text-text-secondary text-sm">
-                                            Everything currently saved from Oura, including original measurements and detailed samples. Profile exclusions do not apply to this download.
-                                        </p>
-                                        <p className="text-text-muted text-xs mt-2">
-                                            Coverage: {completeBundle.manifest.snapshot_status === 'full-sync' ? 'complete history' : 'available history'}
-                                            {completeBundle.manifest.snapshot_status === 'full-sync' && completeBundle.manifest.last_full_sync_at
-                                                ? ` · Prepared ${new Date(completeBundle.manifest.last_full_sync_at).toLocaleString()}`
-                                                : ' · Full-history coverage expands automatically in the background'}
-                                        </p>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={generateCompleteJSON}
-                                        className="ui-button ui-button--primary self-start"
-                                    >
-                                        <Download className="w-4 h-4" />
-                                        Download complete JSON
-                                    </button>
-                                </div>
-
-                                <details className="quiet-disclosure"><summary>Choose individual collections</summary><div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+            {!isLoading && data ? (
+                <>
+                    {completeBundle ? (
+                        <section className="settings-section" aria-labelledby="complete-heading">
+                            <h2 id="complete-heading">Complete data</h2>
+                            <div className="panel">
+                                <button type="button" className="export-row" onClick={generateCompleteJSON}>
+                                    <Download size={18} aria-hidden="true" />
+                                    <span>
+                                        <strong>Download complete JSON</strong>
+                                        <small>Everything currently saved from Oura, including detailed samples. Ring breaks are kept.</small>
+                                    </span>
+                                </button>
+                                <details>
+                                    <summary>Choose individual collections</summary>
                                     {rawCollectionButtons.map(({ name, count, onClick }) => (
-                                        <button
-                                            key={name}
-                                            type="button"
-                                            onClick={onClick}
-                                            disabled={count === 0}
-                                            className="ui-card ui-card--default ui-card--interactive flex min-h-11 items-center gap-3 p-4 text-left disabled:cursor-not-allowed disabled:opacity-40"
-                                        >
-                                            <div className="w-10 h-10 bg-accent/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                <FileText className="w-5 h-5 text-accent" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-medium text-text-primary">{humanizeCollectionName(name)}</p>
-                                                <p className="text-xs text-text-muted font-mono">{name}</p>
-                                            </div>
-                                            <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                                                <Download className="w-4 h-4 text-text-muted" />
-                                                <span className="text-xs text-text-muted">{count.toLocaleString()} {count === 1 ? 'record' : 'records'}</span>
-                                            </div>
+                                        <button key={name} type="button" className="export-row" onClick={onClick} disabled={count === 0}>
+                                            <span>
+                                                <strong>{humanizeCollectionName(name)}</strong>
+                                                <small className="font-mono">{name}</small>
+                                            </span>
+                                            <em>{rowCount(count, 'record')}</em>
                                         </button>
                                     ))}
-                                </div></details>
-                            </section>
-                        )}
-
-                        {availableRange && selectedRange && (
-                            <div className="ui-card ui-card--default mb-5 p-4 sm:p-6">
-                                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                    <div>
-                                        <h2 className="text-xl font-bold text-text-primary mb-1">Export Range</h2>
-                                        <p className="text-text-secondary text-sm">
-                                            Choose the start and end dates for the analysis CSVs below. Complete raw exports always include all currently saved history.
-                                        </p>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={resetRange}
-                                        className="ui-button ui-button--secondary ui-button--sm self-start"
-                                    >
-                                        Use Available Range
-                                    </button>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                                    <label className="block">
-                                        <span className="block text-sm font-medium text-text-primary mb-2">Start date</span>
-                                        <input
-                                            type="date"
-                                            value={selectedRange.start}
-                                            min={availableRange.start}
-                                            max={selectedRange.end}
-                                            onChange={(event) => handleRangeChange('start', event.target.value)}
-                                            className="ui-input"
-                                        />
-                                    </label>
-                                    <label className="block">
-                                        <span className="block text-sm font-medium text-text-primary mb-2">End date</span>
-                                        <input
-                                            type="date"
-                                            value={selectedRange.end}
-                                            min={selectedRange.start}
-                                            max={availableRange.end}
-                                            onChange={(event) => handleRangeChange('end', event.target.value)}
-                                            className="ui-input"
-                                        />
-                                    </label>
-                                </div>
-
-                                <p className="mt-4 text-sm text-text-secondary">
-                                    Exporting data from{' '}
-                                    <span className="text-text-primary font-medium">
-                                        {formatISODateForDisplay(selectedRange.start, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                    </span>
-                                    {' '}to{' '}
-                                    <span className="text-text-primary font-medium">
-                                        {formatISODateForDisplay(selectedRange.end, 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                    </span>
-                                    . Saved history is available from {availableRange.start} to {availableRange.end}.
-                                    {excludedDayCount > 0 ? ` ${excludedDayCount} profile-excluded ${excludedDayCount === 1 ? 'day is' : 'days are'} omitted.` : ''}
-                                </p>
+                                </details>
                             </div>
-                        )}
+                            <p>
+                                {completeBundle.manifest.snapshot_status === 'full-sync' && completeBundle.manifest.last_full_sync_at
+                                    ? `Complete history, prepared ${new Date(completeBundle.manifest.last_full_sync_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}.`
+                                    : 'Older history is still being added in the background.'}
+                            </p>
+                        </section>
+                    ) : null}
 
-                        {/* Individual analysis exports */}
-                        <details className="ui-card ui-card--subtle mb-5 p-4 sm:p-6"><summary className="text-lg font-semibold cursor-pointer">Individual analysis CSVs</summary>
-                            <p className="text-text-secondary text-sm mb-6">Curated, selected-range tables. Profile ring-break exclusions apply only in this section.</p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <section className="settings-section" aria-labelledby="csv-heading">
+                        <h2 id="csv-heading">Spreadsheets</h2>
+                        <div className="panel">
+                            {availableRange && selectedRange ? (
+                                <div className="panel-body" style={{ borderBottom: '1px solid var(--color-line)' }}>
+                                    <div className="form-grid">
+                                        <Field label="From">
+                                            <Input
+                                                type="date"
+                                                value={selectedRange.start}
+                                                min={availableRange.start}
+                                                max={selectedRange.end}
+                                                onChange={(event) => handleRangeChange('start', event.target.value)}
+                                            />
+                                        </Field>
+                                        <Field label="To">
+                                            <Input
+                                                type="date"
+                                                value={selectedRange.end}
+                                                min={selectedRange.start}
+                                                max={availableRange.end}
+                                                onChange={(event) => handleRangeChange('end', event.target.value)}
+                                            />
+                                        </Field>
+                                    </div>
+                                    {selectedRange.start !== availableRange.start || selectedRange.end !== availableRange.end ? (
+                                        <button type="button" className="text-action" onClick={resetRange}>
+                                            Use everything ({longDate(availableRange.start)} to {longDate(availableRange.end)})
+                                        </button>
+                                    ) : null}
+                                </div>
+                            ) : null}
+                            <button type="button" className="export-row" onClick={generateAllDailyCSV}>
+                                <Download size={18} aria-hidden="true" />
+                                <span>
+                                    <strong>All daily data</strong>
+                                    <small>One row per day with every score and nightly measurement</small>
+                                </span>
+                            </button>
+                            <details>
+                                <summary>Individual tables</summary>
                                 {exportButtons.map((btn) => (
-                                    <button
-                                        key={btn.filename}
-                                        onClick={btn.onClick}
-                                        disabled={btn.count === 0}
-                                        className="ui-card ui-card--default ui-card--interactive flex min-h-11 items-center gap-3 p-4 text-left disabled:cursor-not-allowed disabled:opacity-40"
-                                    >
-                                        <div className={`w-10 h-10 ${btn.color} rounded-lg flex items-center justify-center flex-shrink-0`}>
-                                            {btn.icon}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="font-medium text-text-primary">{btn.label}</p>
-                                            <p className="text-sm text-text-secondary">{btn.description}</p>
-                                        </div>
-                                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                                            <Download className="w-4 h-4 text-text-muted" />
-                                            <span className="text-xs text-text-muted">{btn.count.toLocaleString()} rows</span>
-                                        </div>
+                                    <button key={btn.filename} type="button" className="export-row" onClick={btn.onClick} disabled={btn.count === 0}>
+                                        <span>
+                                            <strong>{btn.label}</strong>
+                                            <small>{btn.description}</small>
+                                        </span>
+                                        <em>{rowCount(btn.count, 'row')}</em>
                                     </button>
                                 ))}
-                            </div>
-                        </details>
-
-                        {/* Combined export */}
-                        <section className="ui-card ui-card--subtle p-4 sm:p-6">
-                            <h2 className="text-xl font-bold text-text-primary mb-1">Analysis CSV</h2>
-                            <p className="text-text-secondary text-sm mb-6">
-                                All daily metrics joined by date into a single wide CSV — ideal for spreadsheet or notebook analysis.
-                            </p>
-                            <button
-                                onClick={generateAllDailyCSV}
-                                className="ui-card ui-card--default ui-card--interactive flex min-h-11 w-full items-center gap-3 p-4"
-                            >
-                                <div className="w-10 h-10 bg-metric-readiness/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <Database className="w-5 h-5 text-metric-readiness" />
-                                </div>
-                                <div className="flex-1 text-left">
-                                    <p className="font-medium text-text-primary">All Daily Data Combined</p>
-                                    <p className="text-sm text-text-secondary">
-                                        Sleep + nightly resting HR + readiness + activity + SpO2 + stress + resilience + cardio age + VO2 max
-                                    </p>
-                                </div>
-                                <Download className="w-4 h-4 text-text-muted flex-shrink-0" />
-                            </button>
-                        </section>
-                    </>
-                )}
-            </div>
+                            </details>
+                        </div>
+                        <p>
+                            Ring breaks are left out of spreadsheets
+                            {excludedDayCount > 0 ? ` (${excludedDayCount} ${excludedDayCount === 1 ? 'day' : 'days'})` : ''}.
+                        </p>
+                    </section>
+                </>
+            ) : null}
         </div>
     );
 };

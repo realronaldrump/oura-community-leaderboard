@@ -11,7 +11,6 @@ import { getCompetitionInviteToken } from './utils/inviteLink';
 import { formatISODateForDisplay } from './utils/date';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
-const Settings = lazy(() => import('./pages/Settings'));
 
 const APP_PATHS = new Set([
     '/',
@@ -47,7 +46,7 @@ const PageLoadingFallback = () => (
     <div
         className="min-h-[100dvh] bg-[var(--color-canvas)] px-4 pb-10 pt-[max(1rem,env(safe-area-inset-top))] sm:px-6"
         role="status"
-        aria-label="Loading dashboard"
+        aria-label="Loading"
     >
         <header className="mx-auto flex w-full max-w-[var(--content-width)] items-center justify-between gap-4 py-4">
             <div className="flex items-center gap-3">
@@ -93,7 +92,7 @@ const PageLoadingFallback = () => (
                 ))}
             </div>
         </main>
-        <span className="sr-only">Loading dashboard…</span>
+        <span className="sr-only">Loading…</span>
     </div>
 );
 
@@ -113,46 +112,46 @@ const formatAuthFailureMessage = (error: unknown): string => {
 
         if (error.code === 'token_exchange_failed') {
             if (upstream.code === 'invalid_grant') {
-                return 'Authentication failed: the Oura authorization code expired or was already used. Please reconnect and finish the Oura authorization again.';
+                return 'The Oura sign-in expired or was already used. Connect again.';
             }
             if (upstream.code === 'invalid_client') {
-                return 'Authentication failed: Oura client credentials are misconfigured on the server.';
+                return 'The server’s Oura app credentials are wrong. Check OURA_CLIENT_ID and OURA_CLIENT_SECRET.';
             }
             if (upstream.code === 'invalid_redirect_uri') {
-                return 'Authentication failed: redirect URI mismatch between this app and your Oura developer settings.';
+                return 'This address isn’t an allowed redirect in the Oura developer settings.';
             }
             if (upstream.description) {
-                return `Authentication failed: ${upstream.description}`;
+                return `Oura said: ${upstream.description}`;
             }
-            return 'Authentication failed during token exchange with Oura.';
+            return 'Oura didn’t accept the sign-in. Try again.';
         }
 
         if (error.code === 'missing_oauth_config') {
-            return 'Authentication failed: server is missing OURA_CLIENT_ID or OURA_CLIENT_SECRET.';
+            return 'The server is missing OURA_CLIENT_SECRET.';
         }
 
         if (error.code === 'missing_redirect_uri') {
-            return 'Authentication failed: missing redirect URI in OAuth configuration.';
+            return 'The server has no redirect address configured.';
         }
 
         if (error.code === 'invalid_token_response') {
-            return 'Authentication failed: token endpoint did not return an access token.';
+            return 'Oura didn’t return an access token. Try again.';
         }
 
-        return 'Authentication failed while contacting the OAuth server.';
+        return 'Couldn’t reach the sign-in server. Try again.';
     }
 
     if (error instanceof Error) {
         const message = error.message.toLowerCase();
         if (message.includes('unauthorized') || message.includes('401')) {
-            return 'Authentication failed: received token could not access Oura personal info.';
+            return 'Oura didn’t allow access to your profile. Connect again and allow personal info.';
         }
         if (message.includes('permission') || message.includes('firestore')) {
-            return 'Authentication failed while saving your profile to Firebase.';
+            return 'Connected to Oura, but your profile didn’t save. Try again.';
         }
     }
 
-    return 'Authentication failed. Please try again.';
+    return 'Couldn’t connect Oura. Try again.';
 };
 
 const getSafeErrorDiagnostic = (error: unknown): Record<string, unknown> => {
@@ -194,8 +193,10 @@ const Router = () => {
             setIsCompletingOAuth(false);
             console.error('OAuth failed', { oauthError });
             setDialogState({
-                title: 'Authentication Unsuccessful',
-                message: `Authentication failed: ${oauthErrorDescription || oauthError}`,
+                title: 'Oura not connected',
+                message: oauthError === 'access_denied'
+                    ? 'You cancelled the Oura sign-in.'
+                    : `Oura said: ${oauthErrorDescription || oauthError}`,
             });
             return;
         }
@@ -206,8 +207,8 @@ const Router = () => {
             window.history.replaceState(null, '', window.location.pathname);
             setIsCompletingOAuth(false);
             setDialogState({
-                title: 'Authentication Unsuccessful',
-                message: 'Authentication failed: Oura returned an empty authorization code. Please reconnect and try again.',
+                title: 'Oura not connected',
+                message: 'Oura returned an empty sign-in code. Try again.',
             });
             return;
         }
@@ -229,8 +230,8 @@ const Router = () => {
                 storedStatePresent: Boolean(storedState),
             });
             setDialogState({
-                title: 'Authentication Unsuccessful',
-                message: 'Authentication failed: invalid OAuth state.',
+                title: 'Oura not connected',
+                message: 'The sign-in didn’t match this browser. Start again from this page.',
             });
             return;
         }
@@ -261,17 +262,17 @@ const Router = () => {
                             displayName: getProfileDisplayName(profile),
                         });
                         setDialogState({
-                            title: 'Competition Joined',
+                            title: 'You’re in',
                             message: `You joined ${result.competition.title}. It starts ${formatISODateForDisplay(result.competition.startDate, 'en-US', { month: 'short', day: 'numeric' })}.`,
                         });
-                        nextDestination = '/leaderboard/compete';
+                        nextDestination = '/friends/challenges';
                     } catch (error) {
                         console.error('Competition invite acceptance failed', getSafeErrorDiagnostic(error));
                         setDialogState({
-                            title: 'Invite Not Applied',
-                            message: 'Your Oura account connected successfully, but the competition invite could not be applied. You can retry it from Competitions.',
+                            title: 'Challenge not joined',
+                            message: 'Oura is connected, but the challenge invite didn’t go through. You can try again from Challenges.',
                         });
-                        nextDestination = `/leaderboard/compete?competitionInvite=${encodeURIComponent(inviteToken)}`;
+                        nextDestination = `/friends/challenges?competitionInvite=${encodeURIComponent(inviteToken)}`;
                     }
                 }
 
@@ -283,7 +284,7 @@ const Router = () => {
                 setIsCompletingOAuth(false);
                 console.error('Auth failed', getSafeErrorDiagnostic(err));
                 setDialogState({
-                    title: 'Authentication Unsuccessful',
+                    title: 'Oura not connected',
                     message: formatAuthFailureMessage(err),
                 });
             });
@@ -296,14 +297,14 @@ const Router = () => {
                 <StatePanel
                     eyebrow="404"
                     headingLevel="h1"
-                    title="This page isn’t part of the circle."
-                    description="The link may be old, or the page may have moved. Return to today’s view to keep going."
+                    title="Page not found"
+                    description="This link may be out of date."
                     action={(
                         <Button onClick={() => {
                             window.history.replaceState({}, '', '/');
                             setPath('/');
                         }}>
-                            Go to Davis Watches You Sleep
+                            Go to Today
                         </Button>
                     )}
                 />
@@ -311,9 +312,7 @@ const Router = () => {
         )
         : isCompletingOAuth || !activeProfile
             ? <Welcome isCompletingOAuth={isCompletingOAuth} />
-            : path === '/settings'
-                ? <Suspense fallback={<PageLoadingFallback />}><Settings /></Suspense>
-                : <Suspense fallback={<PageLoadingFallback />}><Dashboard /></Suspense>;
+            : <Suspense fallback={<PageLoadingFallback />}><Dashboard /></Suspense>;
 
     return (
         <>
@@ -327,7 +326,7 @@ const Router = () => {
                     {dialogState?.message || ''}
                 </p>
                 <Button className="mt-5 w-full" onClick={() => setDialogState(null)} data-autofocus>
-                    Dismiss
+                    OK
                 </Button>
             </Dialog>
         </>

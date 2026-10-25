@@ -32,9 +32,6 @@ vi.mock('./pages/Dashboard', () => {
     };
 });
 
-vi.mock('./pages/Settings', () => ({
-    default: () => <main>Settings page</main>,
-}));
 
 vi.mock('./services/oauthService', () => {
     class OAuthRequestError extends Error {
@@ -127,7 +124,7 @@ describe('OAuth destination restoration', () => {
 
         render(<App />);
 
-        expect(await screen.findByRole('dialog', { name: 'Authentication Unsuccessful' })).toBeInTheDocument();
+        expect(await screen.findByRole('dialog', { name: 'Oura not connected' })).toBeInTheDocument();
         expect(window.location.search).toBe('');
         expect(mocks.exchangeCodeForTokens).not.toHaveBeenCalled();
     });
@@ -149,9 +146,9 @@ describe('OAuth destination restoration', () => {
         render(<App />);
 
         await waitFor(() => {
-            expect(window.location.pathname).toBe('/leaderboard/compete');
+            expect(window.location.pathname).toBe('/friends/challenges');
             expect(window.location.search).toBe('?competitionInvite=invite-2');
         });
-        expect(await screen.findByRole('dialog', { name: 'Invite Not Applied' })).toBeInTheDocument();
+        expect(await screen.findByRole('dialog', { name: 'Challenge not joined' })).toBeInTheDocument();
     });
 });

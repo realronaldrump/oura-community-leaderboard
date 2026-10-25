@@ -36,12 +36,12 @@ export function paceNote(bests: MetricBests): string | null {
   const spec = RECORD_SPEC_BY_ID[bests.metricId];
   const find = (period: CurrentProgress["period"]) => bests.current.find((c) => c.period === period);
   const month = find("month");
-  if (month?.wouldRank === 1 && month.recordedDays >= 7) return "On track: best month";
+  if (month?.wouldRank === 1 && month.recordedDays >= 7) return "On pace for best month";
   const week = find("week");
-  if (week?.wouldRank === 1 && week.recordedDays >= 4) return "On track: best week";
+  if (week?.wouldRank === 1 && week.recordedDays >= 4) return "On pace for best week";
   const streak = find("streak");
   if (streak && streak.value >= 3)
-    return `${streak.value}-${spec.unit} streak going`;
+    return `${streak.value}-${spec.unit} streak`;
   return null;
 }
 const COLLAPSED = 6;
@@ -65,7 +65,6 @@ export default function TrophyCase({
     <section className="trophy-case" aria-labelledby="trophy-case-title">
       <div className="section-title">
         <h2 id="trophy-case-title">Your bests</h2>
-        <span>Tap for your top 5</span>
       </div>
       <div className="trophy-grid" id="trophy-grid">
         {(expanded ? tiles : tiles.slice(0, COLLAPSED)).map(({ bests: m, best, pace }) => {
@@ -97,7 +96,7 @@ export default function TrophyCase({
           aria-controls="trophy-grid"
           onClick={() => setExpanded((open) => !open)}
         >
-          {expanded ? "Show fewer" : `Show all ${tiles.length} bests`}
+          {expanded ? "Show fewer" : `Show all ${tiles.length}`}
         </button>
       )}
     </section>

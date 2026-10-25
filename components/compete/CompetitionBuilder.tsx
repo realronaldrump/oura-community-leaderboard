@@ -88,7 +88,7 @@ const CompetitionForm: React.FC<CompetitionBuilderProps> = ({ activeProfile, pro
             onClose();
         } catch (createError) {
             console.error('Failed to create competition:', createError);
-            setError('Could not create the competition. Try again.');
+            setError('Couldn’t create the challenge. Try again.');
         } finally {
             submitting.current = false;
             setIsSubmitting(false);
@@ -96,10 +96,10 @@ const CompetitionForm: React.FC<CompetitionBuilderProps> = ({ activeProfile, pro
     };
 
     return (
-        <Dialog isOpen onClose={onClose} title="New competition" className="!w-[min(100%,30rem)]" busy={isSubmitting}>
+        <Dialog isOpen onClose={onClose} title="New challenge" className="!w-[min(100%,30rem)]" busy={isSubmitting}>
             <form onSubmit={handleCreate} className="space-y-6">
                 <fieldset disabled={isSubmitting}>
-                    <legend className="mb-3 text-sm font-medium text-ink">Choose a challenge</legend>
+                    <legend className="form-legend">Measure</legend>
                     <div className="grid grid-cols-3 gap-2">
                         {COMPETITION_TEMPLATES.map((option, index) => {
                             const Icon = challengeIcons[index];
@@ -115,7 +115,7 @@ const CompetitionForm: React.FC<CompetitionBuilderProps> = ({ activeProfile, pro
                                         onChange={() => setTemplateId(option.id)}
                                         className="peer sr-only"
                                     />
-                                    <span className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl border text-sm font-medium transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent ${selected ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-surface-raised text-ink-secondary'}`}>
+                                    <span className="challenge-option">
                                         <Icon className="h-6 w-6" aria-hidden="true" />
                                         {challengeLabels[index]}
                                     </span>
@@ -126,12 +126,12 @@ const CompetitionForm: React.FC<CompetitionBuilderProps> = ({ activeProfile, pro
                 </fieldset>
 
                 <fieldset disabled={isSubmitting}>
-                    <legend className="mb-3 text-sm font-medium text-ink">Who’s in?</legend>
+                    <legend className="form-legend">Who’s in</legend>
                     <div className="grid grid-cols-2 gap-2">
                         {(['friends', 'solo'] as const).map((option) => (
                             <label key={option} className="cursor-pointer">
                                 <input type="radio" name="participants" value={option} checked={mode === option} onChange={() => setMode(option)} className="peer sr-only" />
-                                <span className={`flex min-h-11 items-center justify-center rounded-xl border px-3 text-sm font-medium peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent ${mode === option ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-surface-raised text-ink-secondary'}`}>
+                                <span className="challenge-option challenge-option--compact">
                                     {option === 'friends' ? 'With friends' : 'Just me'}
                                 </span>
                             </label>
@@ -148,7 +148,7 @@ const CompetitionForm: React.FC<CompetitionBuilderProps> = ({ activeProfile, pro
                                         disabled={isSubmitting}
                                         aria-pressed={selected}
                                         onClick={() => setSelectedParticipantIds((current) => selected ? current.filter((id) => id !== profile.id) : [...current, profile.id])}
-                                        className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm ${selected ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-secondary'}`}
+                                        className="challenge-option challenge-option--compact challenge-option--chip"
                                     >
                                         {selected ? <Check className="h-4 w-4" aria-hidden="true" /> : null}
                                         {getProfileDisplayName(profile)}
@@ -157,20 +157,20 @@ const CompetitionForm: React.FC<CompetitionBuilderProps> = ({ activeProfile, pro
                             })}
                         </div>
                     ) : null}
-                    {mode === 'friends' ? <p className="mt-3 text-xs text-ink-muted">You can also invite anyone with a link after creating.</p> : null}
+                    {mode === 'friends' ? <p className="fine-print">You can also share an invite link afterwards.</p> : null}
                 </fieldset>
 
-                <div className="rounded-2xl bg-surface-raised p-4">
-                    <p className="font-semibold text-ink">{template.title}</p>
-                    <p className="mt-1 text-sm text-ink-secondary">{description}</p>
-                    <p className="mt-2 text-xs text-ink-muted">
-                        Starts tomorrow · 7 days · {formatISODateForDisplay(startDate, 'en-US', { month: 'short', day: 'numeric' })}–{formatISODateForDisplay(endDate, 'en-US', { month: 'short', day: 'numeric' })}
-                    </p>
+                <div className="challenge-preview">
+                    <strong>{template.title}</strong>
+                    <p>{description}</p>
+                    <small>
+                        Starts tomorrow · 7 days · {formatISODateForDisplay(startDate, 'en-US', { month: 'short', day: 'numeric' })} to {formatISODateForDisplay(endDate, 'en-US', { month: 'short', day: 'numeric' })}
+                    </small>
                 </div>
 
-                {error ? <p role="alert" className="text-sm text-error">{error}</p> : null}
+                {error ? <p role="alert" className="status-note status-note--error">{error}</p> : null}
                 <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? 'Creating…' : 'Create competition'}
+                    {isSubmitting ? 'Creating…' : 'Create challenge'}
                 </Button>
             </form>
         </Dialog>

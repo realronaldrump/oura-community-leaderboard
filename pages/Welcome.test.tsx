@@ -71,7 +71,7 @@ describe('Welcome', () => {
 
         render(<Welcome />);
 
-        fireEvent.click(screen.getByRole('button', { name: /open dashboard/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^Open / }));
         expect(setActiveProfileId).toHaveBeenCalledWith('profile-1');
         expect(screen.queryByText(/last sync|sync recorded|connection needs attention|saved timestamps/i)).not.toBeInTheDocument();
     });
@@ -129,7 +129,7 @@ describe('Welcome', () => {
 
         render(<Welcome />);
 
-        expect(screen.getAllByRole('button', { name: /open dashboard/i })).toHaveLength(2);
+        expect(screen.getAllByRole('button', { name: /^Open / })).toHaveLength(2);
         expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument();
     });
 

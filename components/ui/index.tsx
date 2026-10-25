@@ -62,6 +62,23 @@ export const Badge: React.FC<HTMLAttributes<HTMLSpanElement> & { tone?: BadgeTon
   ...props
 }) => <span className={cx('ui-badge', `ui-badge--${tone}`, className)} {...props} />;
 
+/** The app mark: a watchful eye on a ceramic tile. Decorative; pair it with visible text. */
+export const BrandMark: React.FC<{ size?: number; className?: string }> = ({ size = 36, className }) => (
+  <svg
+    className={cx('brand-mark', className)}
+    width={size}
+    height={size}
+    viewBox="0 0 40 40"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <rect width="40" height="40" rx="12" fill="var(--color-accent-soft)" />
+    <circle cx="20" cy="20" r="11" fill="var(--color-surface-raised)" stroke="var(--color-accent)" strokeWidth="3" />
+    <circle cx="20" cy="20" r="4.5" fill="var(--color-accent)" />
+    <circle cx="22" cy="18" r="1.4" fill="var(--color-surface-raised)" />
+  </svg>
+);
+
 export const Skeleton: React.FC<HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
   <div aria-hidden="true" className={cx('ui-skeleton', className)} {...props} />
 );

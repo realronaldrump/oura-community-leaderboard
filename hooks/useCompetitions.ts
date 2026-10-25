@@ -35,7 +35,7 @@ export const useCompetitions = (activeProfileId?: string | null) => {
                 (nextError) => {
                     if (cancelled) return;
                     console.error('Competition subscription failed:', nextError);
-                    setError('Competitions are temporarily unavailable. They will return automatically.');
+                    setError('Challenges aren’t available right now. They’ll come back automatically.');
                     setIsLoading(false);
                     retryTimer = window.setTimeout(subscribe, 5_000);
                 }
@@ -79,7 +79,7 @@ export const useCompetitionInvitePreview = (token?: string | null) => {
             })
             .catch((error) => {
                 console.error('Failed to load competition invite:', error);
-                if (!cancelled) setResult({ token, preview: null, error: 'Could not load this invite. Reopen the link to try again.' });
+                if (!cancelled) setResult({ token, preview: null, error: 'This invite didn’t load. Open the link again to retry.' });
             });
         return () => { cancelled = true; };
     }, [token]);

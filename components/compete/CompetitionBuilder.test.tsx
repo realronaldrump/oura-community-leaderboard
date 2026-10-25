@@ -20,7 +20,7 @@ describe('simple competition setup', () => {
         expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
         expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
         expect(screen.queryByText(/aggregation|operator|weight|checklist|add rule/i)).not.toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Create competition' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create challenge' }));
         await waitFor(() => expect(onCreate).toHaveBeenCalledOnce());
         const input = onCreate.mock.calls[0][0];
         const tomorrow = shiftLocalISODate(getCompetitionTodayISODate({ timeZone: input.timeZone }), 1);
@@ -33,7 +33,7 @@ describe('simple competition setup', () => {
         const { onCreate } = setup();
         fireEvent.click(screen.getByRole('radio', { name: 'Sleep' }));
         fireEvent.click(screen.getByRole('button', { name: 'Sam' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Create competition' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create challenge' }));
         await waitFor(() => expect(onCreate).toHaveBeenCalledOnce());
         expect(onCreate.mock.calls[0][0]).toMatchObject({ title: 'Sleep Week', scoring: 'average', participants: [expect.objectContaining({ status: 'accepted' }), expect.objectContaining({ profileId: competitionFriend.id, status: 'invited' })] });
     });
@@ -44,7 +44,7 @@ describe('simple competition setup', () => {
         fireEvent.click(screen.getByRole('radio', { name: 'Readiness' }));
         fireEvent.click(screen.getByRole('radio', { name: 'Just me' }));
         expect(screen.getByText('Reach a readiness score of 80 each day.')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: 'Create competition' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create challenge' }));
         await waitFor(() => expect(onCreate).toHaveBeenCalledOnce());
         const input = onCreate.mock.calls[0][0];
         expect(input).toMatchObject({ mode: 'solo', format: 'goal', createShareInvite: false, rules: [expect.objectContaining({ metricId: 'readiness_score', target: 80, aggregation: 'daily', capAtTarget: true })] });
@@ -54,7 +54,7 @@ describe('simple competition setup', () => {
 
     it('opens with accessible choices, supports Escape, and resets when reopened', async () => {
         const { onClose, rerender, props } = setup();
-        expect(screen.getByRole('dialog', { name: 'New competition' })).toHaveAttribute('aria-modal', 'true');
+        expect(screen.getByRole('dialog', { name: 'New challenge' })).toHaveAttribute('aria-modal', 'true');
         await waitFor(() => expect(screen.getByRole('radio', { name: 'Steps' })).toHaveFocus());
         fireEvent.click(screen.getByRole('radio', { name: 'Just me' }));
         fireEvent.keyDown(document, { key: 'Escape' });
@@ -87,11 +87,11 @@ describe('simple competition setup', () => {
         const onCreate = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(undefined);
         const { onClose } = setup(onCreate);
         fireEvent.click(screen.getByRole('radio', { name: 'Sleep' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Create competition' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create challenge' }));
         expect(await screen.findByRole('alert')).toHaveTextContent('Try again');
         expect(onClose).not.toHaveBeenCalled();
         expect(screen.getByRole('radio', { name: 'Sleep' })).toBeChecked();
-        fireEvent.click(screen.getByRole('button', { name: 'Create competition' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create challenge' }));
         await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
     });
 });

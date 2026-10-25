@@ -59,10 +59,10 @@ export default function HighlightCard({
       <h2>{recordHeadline(event, peerName)}</h2>
       <p className="highlight-value">{recordValueLine(event, peerName)}</p>
       {context && <p className="highlight-context">{context}</p>}
-      {hero && (
+      {hero && event.kind && (
         <div className="highlight-card__foot">
-          <span>{event.kind ? rankLabel(event) : "Your history, in perspective"}</span>
-          <span>Take a closer look</span>
+          <span>{rankLabel(event)}</span>
+          <span>See ranking</span>
         </div>
       )}
     </button>

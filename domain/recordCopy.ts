@@ -227,7 +227,7 @@ export function recordEyebrow(e: HighlightEvent, peerName?: string): { label: st
     case "personal_best":
       return { label: "Personal best", icon: "trophy" };
     case "top3":
-      return { label: "One of your best", icon: "medal" };
+      return { label: "Top 3", icon: "medal" };
     case "best_since":
       return { label: "Best in a while", icon: "sparkles" };
     case "streak_record":
@@ -235,16 +235,16 @@ export function recordEyebrow(e: HighlightEvent, peerName?: string): { label: st
     case "streak_milestone":
       return { label: "Streak", icon: "flame" };
     case "worst":
-      return { label: "Worth noticing", icon: "trending-down" };
+      return { label: "Low", icon: "trending-down" };
     case "friend_margin":
     case "friend_streak":
       return { label: `You vs ${friendName(e, peerName)}`, icon: "users" };
   }
   return e.tone === "unfavorable"
-    ? { label: "Worth noticing", icon: "trending-down" }
+    ? { label: "Low", icon: "trending-down" }
     : e.evidence.rank === 1
-      ? { label: "A new record", icon: "trophy" }
-      : { label: "Something stands out", icon: "sparkles" };
+      ? { label: "New record", icon: "trophy" }
+      : { label: "Notable", icon: "sparkles" };
 }
 export function rankNoun(e: HighlightEvent): string {
   if (e.kind === "friend_margin") return "days you both recorded";

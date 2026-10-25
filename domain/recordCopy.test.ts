@@ -88,7 +88,7 @@ describe("record wording", () => {
     expect(recordValueLine(steps)).toBe("Averaged 11,240 steps a day · your best is 12,010 (week of Mar 3, 2025)");
     const heart: HighlightEvent = { ...base, metricId: "lowest_hr", kind: "worst", direction: "high", tone: "unfavorable", value: 58, evidence: { ...base.evidence, rank: 1, usual: { value: 51, count: 80 } } };
     expect(recordHeadline(heart)).toBe("Highest resting heart rate in 8 months");
-    expect(recordEyebrow(heart).label).toBe("Worth noticing");
+    expect(recordEyebrow(heart).label).toBe("Low");
     expect(rankLabel(heart)).toBe("#1 highest of 1,200 nights");
     const streak: HighlightEvent = { ...base, metricId: "steps", kind: "streak_record", period: "streak", family: "streak", value: 12, startDay: "2026-09-18", evidence: { ...base.evidence, previousRecord: { value: 9, day: "2025-03-20", startDay: "2025-03-12" } } };
     expect(recordHeadline(streak)).toBe("New longest streak: 12 days with 10,000+ steps");
@@ -111,6 +111,6 @@ describe("record wording", () => {
     expect(recordHeadline(legacy)).toBe("Best 30-day average sleep score");
     expect(recordValueLine(legacy)).toBe("79 · 477 comparable periods");
     expect(recordContext(legacy)).toBe("of all time");
-    expect(recordEyebrow(legacy).label).toBe("A new record");
+    expect(recordEyebrow(legacy).label).toBe("New record");
   });
 });

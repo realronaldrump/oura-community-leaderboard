@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { SleepSession } from '../../types';
 import SleepStagesChart from './SleepStagesChart';
 
@@ -15,32 +15,20 @@ const session: SleepSession = {
 };
 
 describe('SleepStagesChart', () => {
-    it('offers a keyboard-focusable day action that opens the stage details', () => {
-        const onStageClick = vi.fn();
+    it('shows each stage with its duration and share of the night', () => {
+        render(<SleepStagesChart data={[session]} />);
 
-        render(
-            <div style={{ width: 640, height: 260 }}>
-                <SleepStagesChart data={[session]} onStageClick={onStageClick} />
-            </div>,
-        );
-
-        const dayAction = screen.getByRole('button', {
-            name: 'View sleep stage details for Monday, July 20, 2026',
-        });
-
-        dayAction.focus();
-        expect(dayAction).toHaveFocus();
-        expect(dayAction).toHaveClass('min-h-11', 'min-w-11');
-
-        fireEvent.click(dayAction);
-
-        expect(screen.getByRole('dialog', {
-            name: 'Sleep stage details for Monday, July 20, 2026',
+        expect(screen.getByRole('img', {
+            name: 'Sleep stages: Deep 1h 30m, REM 2h 0m, Light 4h 0m, Awake 30m',
         })).toBeInTheDocument();
-        expect(screen.getByText('1h 30m')).toBeInTheDocument();
-        expect(screen.getByText('4h 0m')).toBeInTheDocument();
-        expect(screen.getByText('2h 0m')).toBeInTheDocument();
-        expect(screen.getByText('30m')).toBeInTheDocument();
-        expect(onStageClick).not.toHaveBeenCalled();
+        expect(screen.getByText('Deep').nextElementSibling).toHaveTextContent('1h 30m19%');
+        expect(screen.getByText('Light').nextElementSibling).toHaveTextContent('4h 0m50%');
+        expect(screen.getByText('REM').nextElementSibling).toHaveTextContent('2h 0m25%');
+        expect(screen.getByText('Awake').nextElementSibling).toHaveTextContent('30m6%');
+    });
+
+    it('says when a night has no stage data', () => {
+        render(<SleepStagesChart data={[{ id: 'empty', day: '2026-07-21' }]} />);
+        expect(screen.getByText('No sleep stages recorded.')).toBeInTheDocument();
     });
 });

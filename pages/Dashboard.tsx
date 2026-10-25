@@ -2,22 +2,25 @@ import React, { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
-  ArrowRight,
   CalendarDays,
+  ChevronLeft,
   ChevronRight,
+  Download,
   Flame,
   Heart,
   Moon,
+  Plus,
   Settings,
   Sparkles,
   TrendingUp,
+  UserPlus,
   Users,
 } from "lucide-react";
 import { useUser } from "../contexts/UserContext";
 import { useProfileStatsHydration } from "../hooks/useProfileStatsHydration";
 import { useInsights } from "../hooks/useInsights";
 import { goBack, navigate, useAppRoute } from "../hooks/useAppRoute";
-import { Button, Dialog, Skeleton } from "../components/ui";
+import { BrandMark, Button, Dialog, Skeleton } from "../components/ui";
 import {
   CATEGORIES,
   METRICS,
@@ -26,6 +29,7 @@ import {
   formatMetricValue,
   normalizeMetricDays,
   localDay,
+  shiftDay,
   validDay,
   type MetricCategory,
 } from "../domain/metrics";
@@ -55,6 +59,7 @@ const DayContext = lazy(() =>
 );
 const CompeteView = lazy(() => import("../components/compete/CompeteView"));
 const DataExport = lazy(() => import("./DataExport"));
+const SettingsPage = lazy(() => import("./Settings"));
 const InviteLinkModal = lazy(() => import("../components/InviteLinkModal"));
 const EMPTY: DailyStats = {
   sleep: [],
@@ -71,6 +76,11 @@ const TABS = [
   { path: "/trends", label: "Trends", icon: TrendingUp },
   { path: "/records", label: "Records", icon: Sparkles },
 ];
+const SCORES = [
+  { id: "sleep_score", label: "Sleep", icon: Moon },
+  { id: "readiness_score", label: "Readiness", icon: Heart },
+  { id: "activity_score", label: "Activity", icon: Flame },
+];
 const Loading = () => (
   <div className="page-loading" role="status" aria-label="Loading view">
     <Skeleton className="h-10 w-48" />
@@ -85,6 +95,46 @@ const dateLabel = (day: string, year = false) =>
     ...(year ? { year: "numeric" as const } : {}),
     timeZone: "UTC",
   });
+const dayHeading = (day: string, today: string) =>
+  day === today
+    ? "Today"
+    : day === shiftDay(today, -1)
+      ? "Yesterday"
+      : new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", {
+          weekday: "long",
+          timeZone: "UTC",
+        });
+const syncedLabel = (iso: string, today: string) => {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "Syncs automatically with Oura";
+  const time = at.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const sameDay = at.toLocaleDateString("en-CA") === today;
+  return `Synced ${sameDay ? "at" : `${at.toLocaleDateString("en-US", { month: "short", day: "numeric" })},`} ${time}`;
+};
+const initial = (profile: UserProfile) => (profile.firstName || getProfileDisplayName(profile) || "?").charAt(0).toUpperCase();
+function ScoreRing({ value, text }: { value: number | null | undefined; text: string }) {
+  const radius = 32;
+  const circumference = 2 * Math.PI * radius;
+  const fraction = value == null ? 0 : Math.max(0, Math.min(1, value / 100));
+  return (
+    <span className="score-ring">
+      <svg viewBox="0 0 76 76" aria-hidden="true">
+        <circle className="score-ring__track" cx="38" cy="38" r={radius} />
+        {fraction > 0 && (
+          <circle
+            className="score-ring__value"
+            cx="38"
+            cy="38"
+            r={radius}
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - fraction)}
+          />
+        )}
+      </svg>
+      <strong>{text}</strong>
+    </span>
+  );
+}
 function DashboardContent({
   activeProfile,
   profiles,
@@ -132,7 +182,11 @@ function DashboardContent({
   );
   const requestedDay = route.searchParams.get("day");
   const latest = available.filter((o) => o.day <= today).at(-1)?.day;
-  const day = validDay(requestedDay) ? requestedDay : latest || today;
+  // A future date in the address bar has nothing to show; fall back to the latest saved day.
+  const day =
+    validDay(requestedDay) && requestedDay <= today
+      ? requestedDay
+      : latest || today;
   const insights = useInsights(activeProfile, profiles, route.pathname === "/" ? day : undefined);
   const summary = insights.data;
   const metricProfile =
@@ -227,47 +281,51 @@ function DashboardContent({
   };
   const openRecord = (record: HighlightEvent) =>
     navigate(`/records/${encodeURIComponent(record.id)}`);
-  const scores = ["sleep_score", "readiness_score", "activity_score"];
+  const goToDay = (next: string) =>
+    navigate(next >= today ? "/" : `/?day=${next}`, true);
+  const sleepOn = (f: (typeof friendData)[number]) =>
+    f.observations.find((o) => o.day === day)?.values.sleep_score;
   const friendScores = friendData
-    .filter(
-      (f) =>
-        f.observations.find((o) => o.day === day)?.values.sleep_score != null,
-    )
-    .sort(
-      (a, b) =>
-        b.observations.find((o) => o.day === day)!.values.sleep_score -
-        a.observations.find((o) => o.day === day)!.values.sleep_score,
-    );
+    .filter((f) => sleepOn(f) != null)
+    .sort((a, b) => sleepOn(b)! - sleepOn(a)!);
   const rank =
     values.sleep_score == null
       ? null
-      : friendScores.filter(
-          (f) =>
-            f.observations.find((o) => o.day === day)!.values.sleep_score >
-            values.sleep_score,
-        ).length + 1;
+      : friendScores.filter((f) => sleepOn(f)! > values.sleep_score).length + 1;
+  const quiet = insights.highlightsError
+    ? { title: "Records didn’t load", text: "Check your connection and try again." }
+    : insights.rebuilding
+      ? { title: "Updating records", text: "Applying your excluded days." }
+      : insights.highlightsPending || (raw && !summary)
+        ? { title: "Checking for records", text: "Looking through your history." }
+        : summary
+          ? { title: day === today ? "No records today" : "No records this day", text: "Tap a score for the details." }
+          : { title: "Loading", text: "Getting your saved Oura data." };
+  const essentials: Array<[string, string]> = [
+    ["sleep_duration", day === today ? "Last night" : "That night"],
+    ["hrv", "Overnight average"],
+    ["lowest_hr", "Overnight low"],
+    ["steps", day === today ? "So far today" : "That day"],
+  ];
   return (
     <div className="calm-app">
       <header className="calm-header">
         <button
+          type="button"
           className="calm-brand"
           onClick={() => navigate("/")}
-          aria-label="Davis Watches You Sleep home"
+          aria-label="Davis Watches You Sleep, go to Today"
         >
-          <span>D</span>
-          <strong>
-            Davis Watches
-            <br />
-            You Sleep
-          </strong>
+          <BrandMark size={36} />
+          <strong>Davis Watches You Sleep</strong>
         </button>
         <button
           type="button"
           className="profile-button"
-          aria-label="Open profile and settings"
+          aria-label="Account and settings"
           onClick={() => setMenu(true)}
         >
-          {(activeProfile.firstName || "You")[0]}
+          {initial(activeProfile)}
         </button>
       </header>
       <main className="calm-main">
@@ -276,19 +334,36 @@ function DashboardContent({
             <>
               <div className="today-heading">
                 <div>
-                  <p className="eyebrow">
-                    {activeProfile.firstName || "Your daily perspective"}
-                  </p>
-                  <h1>{day === today ? "Today" : "A day to revisit"}</h1>
+                  {activeProfile.firstName && (
+                    <p className="eyebrow">{activeProfile.firstName}</p>
+                  )}
+                  <h1>{dayHeading(day, today)}</h1>
                 </div>
-                <button
-                  className="date-pill"
-                  type="button"
-                  onClick={() => setCalendar(true)}
-                >
-                  <CalendarDays size={15} />
-                  {dateLabel(day)}
-                </button>
+                <div className="date-stepper">
+                  <button
+                    type="button"
+                    aria-label="Previous day"
+                    onClick={() => goToDay(shiftDay(day, -1))}
+                  >
+                    <ChevronLeft size={18} aria-hidden="true" />
+                  </button>
+                  <button
+                    className="date-pill"
+                    type="button"
+                    aria-label={`Choose a date, ${dateLabel(day, true)} selected`}
+                    onClick={() => setCalendar(true)}
+                  >
+                    {dateLabel(day)}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Next day"
+                    disabled={day >= today}
+                    onClick={() => goToDay(shiftDay(day, 1))}
+                  >
+                    <ChevronRight size={18} aria-hidden="true" />
+                  </button>
+                </div>
               </div>
               {hero ? (
                 <HighlightCard
@@ -298,62 +373,44 @@ function DashboardContent({
                   onClick={() => openRecord(hero)}
                 />
               ) : (
-                <section className="quiet-hero">
-                  <div className="quiet-hero__mark">
-                    <Moon size={26} />
+                <section className="quiet-hero" aria-live="polite">
+                  <span className="quiet-hero__mark" aria-hidden="true">
+                    <Moon size={22} />
+                  </span>
+                  <div>
+                    <h2>{quiet.title}</h2>
+                    <p>{quiet.text}</p>
+                    {insights.highlightsError && (
+                      <Button variant="quiet" size="sm" onClick={() => void insights.refetchHighlights()}>
+                        Try again
+                      </Button>
+                    )}
                   </div>
-                  <p className="eyebrow">A moment for perspective</p>
-                  <h2>
-                    {raw
-                      ? "Every day tells a story."
-                      : "Making room for your day."}
-                  </h2>
-                  <p>
-                    {insights.rebuilding
-                      ? "Your highlights are being updated to reflect your excluded days."
-                      : insights.highlightsError
-                        ? "Records for this day couldn't be loaded. Try again in a moment."
-                      : insights.highlightsPending
-                        ? "Your history is being checked for the records from this day."
-                      : summary
-                        ? "Nothing unusual to flag. Your measurements are here whenever you want a closer look."
-                        : raw
-                          ? "Your scores are here. Your history is being checked for the moments that stand out."
-                          : "Loading your saved Oura measurements…"}
-                  </p>
-                  {insights.highlightsError && (
-                    <Button variant="quiet" onClick={() => void insights.refetchHighlights()}>
-                      Try again
-                    </Button>
-                  )}
                 </section>
               )}
               <div className="daily-scores">
-                {scores.map((id) => {
+                {SCORES.map(({ id, label, icon: Icon }) => {
                   const m = METRIC_BY_ID[id];
-                  const Icon =
-                    id === "sleep_score"
-                      ? Moon
-                      : id === "readiness_score"
-                        ? Heart
-                        : Flame;
+                  const text = formatMetricValue(m, values[id]);
                   return (
                     <button
                       type="button"
                       key={id}
                       className={`daily-score tone-${m.category}`}
                       onClick={() => openMetric(id)}
-                      aria-label={`${m.label}: ${formatMetricValue(m, values[id])}. View details`}
+                      aria-label={`${m.label}: ${text}. View details`}
                     >
-                      <Icon size={18} />
-                      <span>{m.label.replace(" score", "")}</span>
-                      <strong>{formatMetricValue(m, values[id])}</strong>
+                      <ScoreRing value={values[id]} text={text} />
+                      <span className="daily-score__label">
+                        <Icon size={14} aria-hidden="true" />
+                        {label}
+                      </span>
                     </button>
                   );
                 })}
               </div>
               {supporting.length > 0 && (
-                <section className="supporting-highlights">
+                <section className="supporting-highlights" aria-label="More records">
                   {supporting.map((e) => (
                     <HighlightCard
                       key={e.id}
@@ -370,40 +427,33 @@ function DashboardContent({
                   type="button"
                   onClick={() => navigate("/friends")}
                 >
-                  <div className="circle-avatars">
+                  <span className="circle-avatars" aria-hidden="true">
                     {friendScores.slice(0, 3).map((f) => (
-                      <span key={f.profile.id}>
-                        {(f.profile.firstName || "?")[0]}
-                      </span>
+                      <span key={f.profile.id}>{initial(f.profile)}</span>
                     ))}
-                  </div>
-                  <span>
-                    <strong>#{rank} in sleep {day === today ? "today" : `on ${dateLabel(day)}`}</strong>
-                    <small>
-                      {friendScores.length} friends, a little perspective
-                    </small>
                   </span>
-                  <ArrowRight size={18} />
+                  <span>
+                    <strong>
+                      #{rank} in sleep {day === today ? "today" : `on ${dateLabel(day)}`}
+                    </strong>
+                    <small>{friendScores.length} people · Leaderboard</small>
+                  </span>
+                  <ChevronRight size={18} aria-hidden="true" />
                 </button>
               ) : null}
               <section className="detail-section">
                 <div className="section-title">
-                  <h2>A closer look</h2>
+                  <h2>Details</h2>
                   <button
                     type="button"
                     className="text-action"
                     onClick={() => setDayDetail(true)}
                   >
-                    Your day <ChevronRight size={15} />
+                    Timeline <ChevronRight size={15} aria-hidden="true" />
                   </button>
                 </div>
                 <div className="daily-essentials">
-                  {[
-                    ["sleep_duration", "Bedtime & wake time"],
-                    ["hrv", "Your nightly variation"],
-                    ["lowest_hr", "During your main sleep"],
-                    ["steps", day === today ? "Movement so far" : "Movement that day"],
-                  ].map(([id, hint]) => (
+                  {essentials.map(([id, hint]) => (
                     <button
                       type="button"
                       key={id}
@@ -416,24 +466,24 @@ function DashboardContent({
                     </button>
                   ))}
                 </div>
-                <div className="category-links">
+                <nav className="category-links" aria-label="Measurements by category">
                   {Object.entries(CATEGORIES).map(([id, label]) => (
                     <button
                       type="button"
                       key={id}
                       onClick={() => setCategory(id as MetricCategory)}
                     >
-                      <span className={`category-dot tone-${id}`} />
+                      <span className={`category-dot tone-${id}`} aria-hidden="true" />
                       {label}
-                      <ChevronRight size={16} />
+                      <ChevronRight size={16} aria-hidden="true" />
                     </button>
                   ))}
-                </div>
+                </nav>
               </section>
               <p className="page-footnote">
                 {activeProfile.lastSuccessfulSyncAt
-                  ? `Saved ${new Date(activeProfile.lastSuccessfulSyncAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} · Updates automatically from Oura`
-                  : "Updates automatically when Oura syncs"}
+                  ? syncedLabel(activeProfile.lastSuccessfulSyncAt, today)
+                  : "Syncs automatically with Oura"}
               </p>
             </>
           )}
@@ -482,7 +532,7 @@ function DashboardContent({
                 type="button"
                 onClick={() => navigate("/friends")}
               >
-                <ArrowLeft size={18} /> Friends
+                <ArrowLeft size={18} aria-hidden="true" /> Friends
               </button>
               <CompeteView
                 activeProfile={activeProfile}
@@ -495,10 +545,18 @@ function DashboardContent({
               />
             </>
           )}
+          {route.pathname === "/settings" && (
+            <>
+              <button className="back-link" type="button" onClick={() => goBack("/")}>
+                <ArrowLeft size={18} aria-hidden="true" /> Back
+              </button>
+              <SettingsPage />
+            </>
+          )}
           {route.pathname === "/settings/export" && (
             <>
-              <button className="back-link" onClick={() => goBack("/settings")}>
-                <ArrowLeft size={18} /> Back
+              <button className="back-link" type="button" onClick={() => goBack("/settings")}>
+                <ArrowLeft size={18} aria-hidden="true" /> Back
               </button>
               <DataExport />
             </>
@@ -513,72 +571,79 @@ function DashboardContent({
             aria-current={activeTab === tab.path ? "page" : undefined}
             onClick={() => navigate(tab.path)}
           >
-            <tab.icon size={21} />
+            <tab.icon size={21} aria-hidden="true" />
             <span>{tab.label}</span>
           </button>
         ))}
       </nav>
-      <Dialog
-        isOpen={menu}
-        title="Your corner of the circle"
-        onClose={() => setMenu(false)}
-      >
+      <Dialog isOpen={menu} title="Account" onClose={() => setMenu(false)}>
         <div className="profile-menu">
-          <p className="eyebrow">Viewing as</p>
-          {profiles.map((profile) => (
+          <div>
+            <p className="eyebrow">Viewing</p>
+            <div className="profile-menu__group">
+              {profiles.map((profile) => (
+                <button
+                  type="button"
+                  key={profile.id}
+                  aria-current={profile.id === activeProfile.id ? "true" : undefined}
+                  onClick={() => {
+                    setActiveProfileId(profile.id);
+                    setMenu(false);
+                    navigate("/");
+                  }}
+                >
+                  <span className="friend-avatar" aria-hidden="true">
+                    {initial(profile)}
+                  </span>
+                  {getProfileDisplayName(profile)}
+                  {profile.id === activeProfile.id && (
+                    <span className="selected-label ui-badge ui-badge--accent">Current</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="profile-menu__group">
             <button
-              className="profile-menu__person"
               type="button"
-              key={profile.id}
               onClick={() => {
-                setActiveProfileId(profile.id);
                 setMenu(false);
-                navigate("/");
+                navigate("/settings");
               }}
             >
-              <span className="friend-avatar">
-                {(profile.firstName || "?")[0]}
-              </span>
-              {getProfileDisplayName(profile)}
-              {profile.id === activeProfile.id && (
-                <span className="selected-label">Selected</span>
-              )}
+              <Settings size={19} aria-hidden="true" /> Settings
+              <ChevronRight size={16} aria-hidden="true" />
             </button>
-          ))}
-          <hr />
-          <button
-            onClick={() => {
-              setMenu(false);
-              navigate("/settings");
-            }}
-          >
-            <Settings size={19} /> Settings & connection{" "}
-            <ChevronRight size={16} />
-          </button>
-          <button
-            onClick={() => {
-              setMenu(false);
-              navigate("/settings/export");
-            }}
-          >
-            <TrendingUp size={19} /> Export your data <ChevronRight size={16} />
-          </button>
-          <button
-            onClick={() => {
-              setMenu(false);
-              setInvite(true);
-            }}
-          >
-            <Users size={19} /> Invite a friend <ChevronRight size={16} />
-          </button>
-          <button onClick={login}>
-            Connect another Oura account <ChevronRight size={16} />
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMenu(false);
+                navigate("/settings/export");
+              }}
+            >
+              <Download size={19} aria-hidden="true" /> Export data
+              <ChevronRight size={16} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMenu(false);
+                setInvite(true);
+              }}
+            >
+              <UserPlus size={19} aria-hidden="true" /> Invite a friend
+              <ChevronRight size={16} aria-hidden="true" />
+            </button>
+            <button type="button" onClick={login}>
+              <Plus size={19} aria-hidden="true" /> Connect another Oura account
+              <ChevronRight size={16} aria-hidden="true" />
+            </button>
+          </div>
         </div>
       </Dialog>
       <Dialog
         isOpen={calendar}
-        title="Choose a day"
+        title="Go to date"
         onClose={() => setCalendar(false)}
       >
         <label className="field-label">
@@ -588,22 +653,22 @@ function DashboardContent({
             value={day}
             max={today}
             onChange={(e) => {
-              if (validDay(e.target.value)) {
-                navigate(`/?day=${e.target.value}`);
+              if (validDay(e.target.value) && e.target.value <= today) {
+                goToDay(e.target.value);
                 setCalendar(false);
               }
             }}
           />
         </label>
         <Button
-          variant="quiet"
+          variant="secondary"
           className="w-full"
           onClick={() => {
-            navigate("/");
+            navigate("/", true);
             setCalendar(false);
           }}
         >
-          Back to today
+          Today
         </Button>
       </Dialog>
       <Dialog
@@ -629,21 +694,27 @@ function DashboardContent({
               >
                 <span>{m.label}</span>
                 <strong>{formatMetricValue(m, values[m.id])}</strong>
-                <ChevronRight size={16} />
+                <ChevronRight size={16} aria-hidden="true" />
               </button>
             ))}
+          {dailyDetail.isFetching && !METRICS.some((m) => m.category === category && values[m.id] != null) && (
+            <p className="empty-note" role="status">Loading…</p>
+          )}
+          {!dailyDetail.isFetching && !METRICS.some((m) => m.category === category && values[m.id] != null) && (
+            <p className="empty-note">Nothing recorded for {dateLabel(day)}.</p>
+          )}
         </div>
       </Dialog>
       <Dialog
         isOpen={dayDetail}
-        title={`Your day · ${dateLabel(day)}`}
+        title={`Timeline · ${dateLabel(day)}`}
         onClose={() => setDayDetail(false)}
       >
         <Suspense fallback={<Loading />}>
           {dayStats ? (
             <DayContext stats={dayStats} day={day} />
           ) : (
-            <p role="status">Loading day details…</p>
+            <p className="empty-note" role="status">Loading…</p>
           )}
         </Suspense>
       </Dialog>

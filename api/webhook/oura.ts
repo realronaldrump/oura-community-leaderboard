@@ -93,7 +93,7 @@ const handleVerification = (req: any, res: any) => {
 
     const incomingToken = String(req.query?.verification_token || '').trim();
     const challenge = String(req.query?.challenge || '');
-    if (!incomingToken || incomingToken !== expectedToken) {
+    if (!incomingToken || !safeCompare(incomingToken, expectedToken)) {
         sendJson(res, 401, { error: 'invalid_verification_token' });
         return;
     }
@@ -159,11 +159,9 @@ const handleEvent = async (req: any, res: any) => {
             nowIso,
             event,
         });
-    } catch (error: any) {
-        sendJson(res, 500, {
-            error: 'failed_to_persist_webhook_signal',
-            details: error?.message || 'unknown_error',
-        });
+    } catch (error) {
+        console.error('Webhook signal could not be saved', error instanceof Error ? error.name : typeof error);
+        sendJson(res, 500, { error: 'failed_to_persist_webhook_signal' });
         return;
     }
 
