@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { type Firestore } from "firebase-admin/firestore";
 import type { DailyStats, UserProfile } from "../../types.js";
+import { normalizeScoreCorrections } from "../../utils/scoreCorrections.js";
 import {
   normalizeMetricDays,
   METRIC_BY_ID,
@@ -161,7 +162,7 @@ async function readMetricMonth(
     ...(stats.vo2Max || []),
     ...collections[4].docs.map((d) => d.data()),
   ];
-  return normalizeMetricDays(stats, profile, { coverage });
+  return normalizeMetricDays(stats, profile, { coverage, range: { startDay: start, endDay: end } });
 }
 async function readMonths(
   db: Firestore,
@@ -304,7 +305,8 @@ export async function runInsightJob(
       previous.exclusions !== exclusions;
     const oldMonths = fullRebuild ? {} : previous.months || {};
     const months = { ...oldMonths };
-    const allMonths = monthsBetween(metadata.oldestDay || today, today);
+    const firstDay = [metadata.oldestDay || today, ...normalizeScoreCorrections(profile.scoreCorrections).map(correction => correction.day).filter(day => day <= today)].sort()[0];
+    const allMonths = monthsBetween(firstDay, today);
     let dirtyMonths = [
       ...new Set([
         ...(job.dirtyMonths || []),

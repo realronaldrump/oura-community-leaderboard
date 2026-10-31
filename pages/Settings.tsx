@@ -6,6 +6,8 @@ import { Badge, Button, Dialog, Field, Input } from '../components/ui';
 import type { DataExclusionRange, DataExclusionSource } from '../types';
 import DayCalendar from '../components/DayCalendar';
 import DataExclusionEditor, { DataTypeChoices } from '../components/DataExclusionEditor';
+import ScoreCorrectionEditor from '../components/ScoreCorrectionEditor';
+import { normalizeScoreCorrections, SCORE_CORRECTION_FIELDS } from '../utils/scoreCorrections';
 import { getProfileDisplayName } from '../utils/profileName';
 import { formatISODateForDisplay } from '../utils/date';
 import { getProfileLocalISODate } from '../utils/profileTemporal';
@@ -67,6 +69,7 @@ const Settings: React.FC = () => {
     const [isSavingExclusion, setIsSavingExclusion] = useState(false);
     const [exclusionNotice, setExclusionNotice] = useTransientNotice();
     const [editingDay, setEditingDay] = useState<string | null>(null);
+    const [correctingDay, setCorrectingDay] = useState<string | null>(null);
     const [bulkSources, setBulkSources] = useState<DataExclusionSource[]>([...DATA_EXCLUSION_SOURCES]);
 
     useEffect(() => {
@@ -84,6 +87,7 @@ const Settings: React.FC = () => {
         setExclusionLabel('');
         setExclusionNotice(null);
         setEditingDay(null);
+        setCorrectingDay(null);
         setBulkSources([...DATA_EXCLUSION_SOURCES]);
         // Reset the form only when a different profile is selected.
     }, [activeProfile?.id]);
@@ -322,6 +326,24 @@ const Settings: React.FC = () => {
                     })}
                 </div>
             </section>
+
+            {normalizeScoreCorrections(activeProfile.scoreCorrections).length > 0 && (
+                <section className="settings-section" aria-labelledby="corrected-scores-heading">
+                    <h2 id="corrected-scores-heading">Scores confirmed in Oura</h2>
+                    <div className="panel">
+                        <div className="panel-body"><p className="fine-print">These fill missing API scores. Original recordings are kept and any scores later sent by Oura take priority. Edit a correction to change or remove it.</p></div>
+                        {normalizeScoreCorrections(activeProfile.scoreCorrections).map(correction => (
+                            <div key={correction.id} className="panel-row">
+                                <div><strong>{shortDate(correction.day)}</strong><small>{SCORE_CORRECTION_FIELDS
+                                    .filter(field => correction[field.key] != null)
+                                    .map(field => `${field.label}: ${correction[field.key]}`).join(' · ')}</small></div>
+                                <Button variant="quiet" size="sm" onClick={() => setCorrectingDay(correction.day)}>Edit</Button>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
+            {correctingDay && <ScoreCorrectionEditor key={`${activeProfile.id}:${correctingDay}`} profile={activeProfile} day={correctingDay} onClose={() => setCorrectingDay(null)} />}
 
             <section className="settings-section" aria-labelledby="people-heading">
                 <h2 id="people-heading">People</h2>

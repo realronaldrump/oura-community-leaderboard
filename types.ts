@@ -35,6 +35,7 @@ export interface UserProfile {
   lastKnownOffsetObservedAt?: string | null;
   lastKnownOffsetSource?: ProfileOffsetSource | null;
   dataExclusionRanges?: DataExclusionRange[];
+  scoreCorrections?: DailyScoreCorrection[];
   challenges?: ProfileChallenge[];
 }
 
@@ -62,6 +63,23 @@ export type DataExclusionSource = {
   [K in keyof DailyStats]-?: NonNullable<DailyStats[K]> extends unknown[] ? K : never
 }[keyof DailyStats];
 
+/** App-owned values verified against Oura's app; never written to raw Oura records. */
+export interface DailyScoreCorrection {
+  id: string;
+  day: string;
+  source: 'oura_app';
+  sleepScore?: number;
+  readinessScore?: number;
+  activityScore?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ScoreProvenance {
+  scoreSource?: 'oura_app';
+  scoreCorrectionId?: string;
+}
+
 export interface WebhookSignal {
   ouraUserId: string;
   lastEventAt?: string;
@@ -82,7 +100,7 @@ export interface SleepContributors {
   total_sleep?: number | null;
 }
 
-export interface DailySleep {
+export interface DailySleep extends ScoreProvenance {
   id: string;
   day: string;
   score?: number | null;
@@ -140,7 +158,7 @@ export interface ActivityContributors {
   training_volume?: number | null;
 }
 
-export interface DailyActivity {
+export interface DailyActivity extends ScoreProvenance {
   id: string;
   class_5_min?: string | null;
   score?: number | null;
@@ -180,7 +198,7 @@ export interface ReadinessContributors {
   sleep_regularity?: number | null; // 1-100 contribution score
 }
 
-export interface DailyReadiness {
+export interface DailyReadiness extends ScoreProvenance {
   id: string;
   contributors: ReadinessContributors;
   day: string;

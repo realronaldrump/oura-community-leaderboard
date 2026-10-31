@@ -16,8 +16,9 @@ import {
     getDocs as getBootstrapDocs,
 } from "./documentClientLite";
 import { bootstrapDb, db } from "./firebaseConfig";
-import { UserProfile, WebhookSignal, type DataExclusionRange } from "../types";
+import { UserProfile, WebhookSignal, type DataExclusionRange, type DailyScoreCorrection } from "../types";
 import { normalizeDataExclusionRanges } from "../utils/dataExclusions";
+import { normalizeScoreCorrections } from "../utils/scoreCorrections";
 import {
     shouldReplaceProfileTemporalMetadata,
     type ProfileTemporalMetadata,
@@ -107,6 +108,16 @@ export const firebaseService = {
             const ranges = normalizeDataExclusionRanges(edit(normalizeDataExclusionRanges(snapshot.data().dataExclusionRanges)));
             transaction.set(ref, { dataExclusionRanges: ranges, lastUpdated: new Date().toISOString() }, { merge: true });
             return ranges;
+        }),
+
+    updateScoreCorrections: async (id: string, edit: (scores: DailyScoreCorrection[]) => DailyScoreCorrection[]): Promise<DailyScoreCorrection[]> =>
+        runTransaction(db, async transaction => {
+            const ref = doc(db, PROFILES_COLLECTION, id);
+            const snapshot = await transaction.get(ref);
+            if (!snapshot.exists()) throw new Error('Profile is no longer available.');
+            const corrections = normalizeScoreCorrections(edit(normalizeScoreCorrections(snapshot.data().scoreCorrections)));
+            transaction.set(ref, { scoreCorrections: corrections, lastUpdated: new Date().toISOString() }, { merge: true });
+            return corrections;
         }),
 
     /**

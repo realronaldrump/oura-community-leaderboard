@@ -40,6 +40,13 @@ describe('competition timezone anchoring', () => {
 });
 
 describe('curated challenge scoring', () => {
+    it('uses a confirmed score only when the API omitted it', () => {
+        const day = '2026-09-10';
+        const raw = createEmptyDailyStats({ activity: [activity(day, 7000)] });
+        const stats = filterDailyStatsForProfile(raw, { scoreCorrections: [{ id: 'checked', day, source: 'oura_app', sleepScore: 78 }] });
+        const result = evaluateCompetition(makeCompetition({ mode: 'solo', scoring: 'average', rules: [{ ...stepRule, metricId: 'sleep_score', aggregation: 'average' }] }), { 'profile-1': stats }, day);
+        expect(result.leaderboard[0]).toMatchObject({ totalScore: 78, progressDays: 1 });
+    });
     it('keeps valid steps when sleep is ignored and treats an ignored activity day as missing', () => {
         const day = '2026-09-10';
         const raw = createEmptyDailyStats({ activity: [activity(day, 14000)] });

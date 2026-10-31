@@ -13,6 +13,8 @@ import {
   mainSleepSession,
   metricColor,
   metricSeries,
+  normalizeMetricDays,
+  mergeMetricObservations,
   filterMetricObservationsForProfile,
   type MetricObservation,
 } from "../../domain/metrics";
@@ -244,12 +246,14 @@ export default function MetricDetail({
   profile,
   day,
   summary,
+  historySummary,
   fallback,
 }: {
   id: string;
   profile: UserProfile;
   day: string;
   summary: PublishedInsights | null;
+  historySummary?: PublishedInsights | null;
   fallback: MetricObservation[];
 }) {
   const metric = METRIC_BY_ID[id];
@@ -261,10 +265,11 @@ export default function MetricDetail({
     params.has("relationships"),
   );
   const start = historyStart(day, range);
+  const historySource = historySummary || summary;
   const history = useQuery({
-    queryKey: ["metric-history", profile.id, summary?.revision, start, day],
-    queryFn: () => readMetricHistory(profile.id, summary!.months, start, day),
-    enabled: Boolean(summary),
+    queryKey: ["metric-history", profile.id, historySource?.revision, start, day],
+    queryFn: () => readMetricHistory(profile.id, historySource!.months, start, day),
+    enabled: Boolean(historySource),
     staleTime: Infinity,
   });
   const raw = useQuery({
@@ -272,11 +277,11 @@ export default function MetricDetail({
     queryFn: () => readDayDetail(profile.id, day),
     staleTime: 60_000,
   });
-  const stats = filterDailyStatsForProfile(raw.data, profile);
+  const stats = filterDailyStatsForProfile(raw.data, profile, { startDay: day, endDay: day });
   const observations = useMemo(
     () =>
-      filterMetricObservationsForProfile(history.data ||
-      fallback.filter((o) => (!start || o.day >= start) && o.day <= day), profile),
+      filterMetricObservationsForProfile(mergeMetricObservations(history.data || [],
+      fallback.filter((o) => (!start || o.day >= start) && o.day <= day)), profile, { startDay: start, endDay: day }),
     [history.data, fallback, start, day, profile],
   );
   if (!metric)
@@ -289,6 +294,10 @@ export default function MetricDetail({
     );
   const points = metricSeries(observations, id);
   const current = points.find((p) => p.day === day);
+  const selectedValues = stats ? normalizeMetricDays(stats, profile, { coverage: summary?.coverage }).find(row => row.day === day)?.values : undefined;
+  const currentValue = selectedValues ? selectedValues[id] : current?.value;
+  const corrected = metric.field === 'score' && (stats?.[metric.source] as Array<{ day?: string; scoreSource?: string }> | undefined)
+    ?.some(row => row.day === day && row.scoreSource === 'oura_app');
   const values = points.map((p) => p.value);
   const average = values.length
     ? values.reduce((a, b) => a + b, 0) / values.length
@@ -333,8 +342,9 @@ export default function MetricDetail({
       </header>
       <DayDataControl key={`${profile.id}:${day}:${id}`} profile={profile} day={day} source={metric.source} />
       <section className={`metric-hero tone-${metric.category}`}>
-        <span>{current ? dateLabel(day) : `No data for ${dateLabel(day)}`}</span>
-        <strong>{formatMetricValue(metric, current?.value)}</strong>
+        <span>{currentValue != null ? dateLabel(day) : `No data for ${dateLabel(day)}`}</span>
+        <strong>{formatMetricValue(metric, currentValue)}</strong>
+        {corrected && <small className="measurement-status">Confirmed in Oura · used while its API score is missing</small>}
         {metric.description && <p>{metric.description}</p>}
       </section>
       <div className="range-tabs" role="group" aria-label="History range">
@@ -403,7 +413,7 @@ export default function MetricDetail({
           {points.length
             ? ` · ${dateLabel(points[0].day)} to ${dateLabel(points.at(-1)!.day)}`
             : ""}
-          {!summary ? " · Recent days only" : ""}
+          {!historySource ? " · Recent days only" : ""}
         </p>
       </section>
       {calendar && <Dialog isOpen title="Choose a day" onClose={() => setCalendar(false)}><DayCalendar key={day} selectedDay={day} today={localDay(profile)} ranges={profile.dataExclusionRanges} onSelect={selectDay} /></Dialog>}

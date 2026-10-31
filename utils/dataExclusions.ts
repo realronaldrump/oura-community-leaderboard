@@ -1,5 +1,6 @@
 import type { DailyStats, DataExclusionRange, DataExclusionSource, SleepSession, UserProfile } from '../types.js';
 import { isISODateString, shiftLocalISODate } from './date.js';
+import { applyScoreCorrections } from './scoreCorrections.js';
 
 export const DATA_EXCLUSION_GROUPS: Array<{
     id: string; label: string; description: string; sources: DataExclusionSource[];
@@ -225,5 +226,7 @@ export const filterDailyStatsByDataExclusions = (
 
 export const filterDailyStatsForProfile = (
     data: DailyStats | undefined,
-    profile: Pick<UserProfile, 'dataExclusionRanges'> | null | undefined
-): DailyStats | undefined => filterDailyStatsByDataExclusions(data, profile?.dataExclusionRanges);
+    profile: Pick<UserProfile, 'dataExclusionRanges' | 'scoreCorrections'> | null | undefined,
+    range?: { startDay: string; endDay: string },
+): DailyStats | undefined => filterDailyStatsByDataExclusions(
+    applyScoreCorrections(data, profile?.scoreCorrections, range), profile?.dataExclusionRanges);

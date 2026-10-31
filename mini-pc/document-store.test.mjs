@@ -224,7 +224,7 @@ test("public access never exposes credentials, revisions, jobs or destructive op
         kind: "set",
         path: "profiles/me",
         merge: true,
-        data: { firstName: "Updated" },
+        data: { firstName: "Updated", scoreCorrections: [{ id: 'checked', day: '2026-04-03', source: 'oura_app', sleepScore: 78 }] },
       },
     ]),
     true,

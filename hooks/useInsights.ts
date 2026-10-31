@@ -58,6 +58,9 @@ export function useInsights(profile: UserProfile, peers: UserProfile[] = [], sel
   return {
     ...result,
     data: data as PublishedInsights | null,
+    // Monthly measurements remain usable while exclusion-dependent Records rebuild.
+    // Consumers apply current exclusions/corrections and merge fresh saved measurements.
+    historySummary: result.data || null,
     // A past date reads its saved day only; the current feed keeps the server's selection.
     highlights: historicalDay
       ? archivePending ? [] : selectFeatured(

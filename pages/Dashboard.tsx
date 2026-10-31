@@ -43,6 +43,7 @@ import { mergeDailyStats } from "../utils/mergeDailyStats";
 import { readDayDetail, readInsightSummary } from "../services/insightsService";
 import { getCompetitionInviteToken } from "../utils/inviteLink";
 import HighlightCard from "../components/explorer/HighlightCard";
+import MeasurementStatus, { measurementAvailability, MEASUREMENT_STATUS_LABELS } from "../components/explorer/MeasurementStatus";
 import DayCalendar from "../components/DayCalendar";
 import { DayDataControl } from "../components/DataExclusionEditor";
 const TrendsView = lazy(() => import("../components/explorer/TrendsView"));
@@ -62,6 +63,7 @@ const DayContext = lazy(() =>
 const CompeteView = lazy(() => import("../components/compete/CompeteView"));
 const DataExport = lazy(() => import("./DataExport"));
 const SettingsPage = lazy(() => import("./Settings"));
+const ScoreCorrectionEditor = lazy(() => import("../components/ScoreCorrectionEditor"));
 const InviteLinkModal = lazy(() => import("../components/InviteLinkModal"));
 const EMPTY: DailyStats = {
   sleep: [],
@@ -147,6 +149,7 @@ function DashboardContent({
   const { setActiveProfileId, login } = useUser();
   const route = useAppRoute();
   const [menu, setMenu] = useState(false);
+  const [correctScoresDay, setCorrectScoresDay] = useState<string | null>(null);
   const [calendar, setCalendar] = useState(false);
   const [invite, setInvite] = useState(false);
   const [category, setCategory] = useState<MetricCategory | null>(null);
@@ -188,6 +191,7 @@ function DashboardContent({
   const day = validDay(requestedDay) && requestedDay <= today ? requestedDay : latest || today;
   const insights = useInsights(activeProfile, profiles, route.pathname === "/" ? day : undefined);
   const summary = insights.data;
+  const historySummary = insights.historySummary || summary;
   const metricProfile =
     profiles.find((p) => p.id === route.searchParams.get("profile")) ||
     activeProfile;
@@ -217,13 +221,14 @@ function DashboardContent({
   const dayStats = filterDailyStatsForProfile(
     dailyDetail.data || raw,
     activeProfile,
+    dailyDetail.data ? { startDay: day, endDay: day } : undefined,
   );
   const observations = useMemo(
     () =>
       dailyDetail.data
-        ? normalizeMetricDays(dailyDetail.data, activeProfile)
+        ? normalizeMetricDays(dailyDetail.data, activeProfile, { range: { startDay: day, endDay: day } })
         : available,
-    [dailyDetail.data, activeProfile, available],
+    [dailyDetail.data, activeProfile, available, day],
   );
   const values = observations.find((o) => o.day === day)?.values || {};
   const friendData = useMemo(
@@ -294,7 +299,7 @@ function DashboardContent({
   const quiet = insights.highlightsError
     ? { title: "Records didn’t load", text: "Check your connection and try again." }
     : insights.rebuilding
-      ? { title: "Updating records", text: "Applying your excluded days." }
+      ? { title: "Updating records", text: "Applying your data changes." }
       : insights.highlightsPending || (raw && !summary)
         ? { title: "Checking for records", text: "Looking through your history." }
         : summary
@@ -306,6 +311,13 @@ function DashboardContent({
     ["lowest_hr", "Overnight low"],
     ["steps", day === today ? "So far today" : "That day"],
   ];
+  const scoreStatus = (id: string) => measurementAvailability({
+    value: values[id], source: METRIC_BY_ID[id].source, day, profile: activeProfile,
+    loading: !raw || (dailyDetail.isFetching && !available.some(o => o.day === day)),
+    error: dailyDetail.isError && !available.some(o => o.day === day),
+  });
+  const unreportedScores = SCORES.filter(({ id }) => scoreStatus(id) === 'not_reported')
+    .map(({ id }) => METRIC_BY_ID[id].label.toLowerCase());
   return (
     <div className="calm-app">
       <header className="calm-header">
@@ -392,23 +404,35 @@ function DashboardContent({
                 {SCORES.map(({ id, label, icon: Icon }) => {
                   const m = METRIC_BY_ID[id];
                   const text = formatMetricValue(m, values[id]);
+                  const status = scoreStatus(id);
+                  const corrected = (dayStats?.[m.source] as Array<{ day?: string; scoreSource?: string }> | undefined)
+                    ?.some(row => row.day === day && row.scoreSource === 'oura_app');
                   return (
                     <button
                       type="button"
                       key={id}
                       className={`daily-score tone-${m.category}`}
                       onClick={() => openMetric(id)}
-                      aria-label={`${m.label}: ${text}. View details`}
+                      aria-label={`${m.label}: ${status === 'available' ? text : status === 'not_reported' ? 'Not reported by Oura' : MEASUREMENT_STATUS_LABELS[status]}. View details`}
                     >
                       <ScoreRing value={values[id]} text={text} />
                       <span className="daily-score__label">
                         <Icon size={14} aria-hidden="true" />
                         {label}
                       </span>
+                      <MeasurementStatus status={status} />
+                      {status === 'available' && corrected && <small className="measurement-status">Oura app</small>}
                     </button>
                   );
                 })}
               </div>
+              {unreportedScores.length > 0 && (
+                <p className="score-availability-note">
+                  Oura hasn’t sent a {unreportedScores.join(' or ')} for this day.
+                  {' '}Available recordings are still shown below.
+                  <button type="button" className="text-action" onClick={() => setCorrectScoresDay(day)}>Add scores from Oura</button>
+                </p>
+              )}
               {supporting.length > 0 && (
                 <section className="supporting-highlights" aria-label="More records">
                   {supporting.map((e) => (
@@ -491,7 +515,7 @@ function DashboardContent({
             <FriendsView
               activeProfile={activeProfile}
               friends={friendData}
-              summary={summary}
+              summary={historySummary}
               day={day}
               onInvite={() => setInvite(true)}
             />
@@ -500,7 +524,7 @@ function DashboardContent({
             <TrendsView
               key={activeProfile.id}
               profile={activeProfile}
-              summary={summary}
+              summary={historySummary}
               fallback={available}
               day={day}
             />
@@ -519,6 +543,7 @@ function DashboardContent({
               profile={metricProfile}
               day={day}
               summary={detailSummary || null}
+              historySummary={metricProfile.id === activeProfile.id ? historySummary : viewedSummary.data}
               fallback={
                 friendData.find((f) => f.profile.id === metricProfile.id)
                   ?.observations || []
@@ -563,6 +588,8 @@ function DashboardContent({
           )}
         </Suspense>
       </main>
+      {correctScoresDay && <Suspense fallback={<Loading />}><ScoreCorrectionEditor key={`${activeProfile.id}:${correctScoresDay}`}
+        profile={activeProfile} day={correctScoresDay} onClose={() => setCorrectScoresDay(null)} /></Suspense>}
       <nav className="calm-nav" aria-label="Primary navigation">
         {TABS.map((tab) => (
           <button

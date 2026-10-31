@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { UserProfile, AuthStatus, type DataExclusionRange } from '../types';
+import { UserProfile, AuthStatus, type DataExclusionRange, type DailyScoreCorrection } from '../types';
 import { createOAuthState, getAuthUrl, OAUTH_STATE_KEY, POST_AUTH_DESTINATION_KEY } from '../constants';
 import { firebaseService } from '../services/firebaseService';
 import { oauthService } from '../services/oauthService';
@@ -30,6 +30,7 @@ interface UserContextType {
     updateProfile: (profile: Partial<UserProfile>) => Promise<void>;
     updateProfileById: (id: string, profile: Partial<UserProfile>) => Promise<void>;
     updateDataExclusions: (id: string, edit: (ranges: DataExclusionRange[]) => DataExclusionRange[]) => Promise<void>;
+    updateScoreCorrections: (id: string, edit: (scores: DailyScoreCorrection[]) => DailyScoreCorrection[]) => Promise<void>;
     authStatus: AuthStatus;
     login: () => void;
     // New: Error and loading states
@@ -280,6 +281,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProfiles(current => current.map(profile => profile.id === id ? { ...profile, dataExclusionRanges: ranges } : profile));
     }, []);
 
+    const updateScoreCorrections = useCallback(async (id: string, edit: (scores: DailyScoreCorrection[]) => DailyScoreCorrection[]) => {
+        const corrections = await firebaseService.updateScoreCorrections(id, edit);
+        setProfiles(current => current.map(profile => profile.id === id ? { ...profile, scoreCorrections: corrections } : profile));
+    }, []);
+
     const contextValue = useMemo<UserContextType>(() => ({
         profiles,
         activeProfileId,
@@ -291,6 +297,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateProfile,
         updateProfileById,
         updateDataExclusions,
+        updateScoreCorrections,
         authStatus,
         login,
         firebaseError,
@@ -307,6 +314,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateProfile,
         updateProfileById,
         updateDataExclusions,
+        updateScoreCorrections,
         authStatus,
         login,
         firebaseError,

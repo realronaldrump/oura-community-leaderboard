@@ -110,4 +110,27 @@ describe('DataExport', () => {
         expect(rawJson).toContain('"id": "bad"');
         expect(rawJson).toContain('"score": 5');
     });
+
+    it('labels corrected analysis scores and preserves the original raw export', async () => {
+        const day = '2026-04-03';
+        mocks.useUser.mockReturnValue({ activeProfile: {
+            id: 'profile-1', scoreCorrections: [{ id: 'checked', day, source: 'oura_app', sleepScore: 78, readinessScore: 82 }],
+        } });
+        mocks.getStoredDailyStats.mockResolvedValue(createEmptyDailyStats({ activity: [{ id: 'a', day, score: 90, steps: 7000, contributors: {}, active_calories: 300, target_calories: 500, total_calories: 2000 }] }));
+        const readDownload = () => new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result)); reader.onerror = reject;
+            reader.readAsText(vi.mocked(URL.createObjectURL).mock.calls.at(-1)![0] as Blob);
+        });
+        render(<DataExport />);
+        await screen.findByRole('heading', { name: 'Complete data' });
+        fireEvent.click(screen.getByText('Individual tables'));
+        fireEvent.click(screen.getByRole('button', { name: /Sleep scores/i }));
+        expect(await readDownload()).toContain('oura_app');
+        fireEvent.click(screen.getByRole('button', { name: /Download complete JSON/i }));
+        const raw = await readDownload();
+        expect(raw).not.toContain('oura-app:');
+        expect(raw).not.toContain('"score": 78');
+        expect(raw).not.toContain('scoreCorrections');
+    });
 });

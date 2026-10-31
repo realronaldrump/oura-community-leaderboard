@@ -11,6 +11,14 @@ vi.mock('./documentClientLite', () => ({ collection: vi.fn(), doc: vi.fn(), getD
 beforeEach(() => vi.clearAllMocks());
 
 describe('exclusion persistence', () => {
+    it('saves score corrections without changing exclusions or raw data', async () => {
+        mocks.transaction.mockImplementation(async (_db, callback) => callback({
+            get: async () => ({ exists: () => true, data: () => ({ dataExclusionRanges: [{ id: 'keep' }], scoreCorrections: [] }) }), set: mocks.write,
+        }));
+        const correction = { id: 'checked', day: '2026-04-03', source: 'oura_app' as const, sleepScore: 78 };
+        expect(await firebaseService.updateScoreCorrections('profile-1', latest => [...latest, correction])).toEqual([correction]);
+        expect(mocks.write).toHaveBeenCalledWith('profiles/profile-1', { scoreCorrections: [correction], lastUpdated: expect.any(String) }, { merge: true });
+    });
     it('reapplies a day edit to the latest profile on a transaction retry and patches only exclusion fields', async () => {
         const concurrent: DataExclusionRange = { id: 'other-day', startDay: '2026-10-29', endDay: '2026-10-29', sources: ['activity'] };
         mocks.transaction.mockImplementation(async (_db, callback) => {

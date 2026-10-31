@@ -50,6 +50,7 @@ export function authorizePublicCommit(operations, versions = {}) {
       "firstName",
       "lastName",
       "dataExclusionRanges",
+      "scoreCorrections",
       "lastUpdated",
     ]);
     return Object.keys(op.data).every((key) => allowed.has(key));

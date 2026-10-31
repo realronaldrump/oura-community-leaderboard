@@ -45,6 +45,10 @@ Saved exclusions are visible on the day and calendar. **Manage ignored data** le
 
 Exclusions are per profile and apply to scores, analytics, records and personal bests, friend comparisons, competitions, and curated analysis CSVs. Sleep includes sessions, naps, nightly HRV and heart rate, and sleep timing; heart rate samples are a separate type. Other Oura scores are retained unless their own data type is selected. Original Oura data is never deleted and remains in complete exports. Older saved breaks without a `sources` field still exclude the whole day. Scoped exclusions include their sources in the analysis revision so the server rebuilds the affected projections; incompatible records are hidden while that rebuild runs. Exclusion edits use a transaction to preserve simultaneous changes to other days.
 
+When Oura's API omits a daily score that appears in its own app, **Add scores from Oura** saves a verified app-owned correction for that date. Corrections fill missing scores only; an actual API score takes priority. They are labeled **Oura app**, can be edited or removed in Settings, apply to analytics and competitions, and remain subject to exclusions. Curated CSVs include score provenance. Complete raw exports preserve exactly the synced Oura data and omit these corrections.
+
+Trends and measurement history load immutable monthly measurements independently of Records publication. Current exclusions and corrections apply immediately, and recent measurements merge with the saved history. Changing a time range requests the appropriate months, reuses cached months, and shows loading, error/retry, and date-coverage feedback next to the graph.
+
 The metric registry and deterministic records engine cover 83 measurements and 8,680 eligible rules. Server-owned monthly projections and immutable record indexes keep recognition off the phone's launch path. See [the redesign report](docs/redesign-report.md) for semantics, publication, and validation.
 
 ## Synchronization invariants

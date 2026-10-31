@@ -205,6 +205,7 @@ const DataExport: React.FC = () => {
         const csvData = sleepRows.map((item) => ({
             date: item.day,
             sleep_score: item.score ?? '',
+            score_source: item.scoreSource || 'oura_api',
             total_sleep_contributor_score: item.contributors?.total_sleep ?? '',
             efficiency: item.contributors?.efficiency ?? '',
             restfulness: item.contributors?.restfulness ?? '',
@@ -223,6 +224,7 @@ const DataExport: React.FC = () => {
         const csvData = readinessRows.map((item) => ({
             date: item.day,
             readiness_score: item.score ?? '',
+            score_source: item.scoreSource || 'oura_api',
             previous_night: item.contributors?.previous_night ?? '',
             sleep_balance: item.contributors?.sleep_balance ?? '',
             hrv_balance: item.contributors?.hrv_balance ?? '',
@@ -245,6 +247,7 @@ const DataExport: React.FC = () => {
         const csvData = activityRows.map((item) => ({
             date: item.day,
             activity_score: item.score ?? '',
+            score_source: item.scoreSource || 'oura_api',
             meet_daily_targets: item.contributors?.meet_daily_targets ?? '',
             move_every_hour: item.contributors?.move_every_hour ?? '',
             recovery_time: item.contributors?.recovery_time ?? '',
@@ -433,6 +436,7 @@ const DataExport: React.FC = () => {
             return {
                 date,
                 sleep_score: sleep?.score ?? '',
+                sleep_score_source: sleep ? sleep.scoreSource || 'oura_api' : '',
                 sleep_total_sleep_contributor_score: sleep?.contributors?.total_sleep ?? '',
                 sleep_efficiency: sleep?.contributors?.efficiency ?? '',
                 sleep_restfulness: sleep?.contributors?.restfulness ?? '',
@@ -441,6 +445,7 @@ const DataExport: React.FC = () => {
                 sleep_latency: sleep?.contributors?.latency ?? '',
                 sleep_timing: sleep?.contributors?.timing ?? '',
                 readiness_score: readiness?.score ?? '',
+                readiness_score_source: readiness ? readiness.scoreSource || 'oura_api' : '',
                 readiness_previous_night: readiness?.contributors?.previous_night ?? '',
                 readiness_sleep_balance: readiness?.contributors?.sleep_balance ?? '',
                 readiness_hrv_balance: readiness?.contributors?.hrv_balance ?? '',
@@ -455,6 +460,7 @@ const DataExport: React.FC = () => {
                 readiness_temperature_trend_deviation_f: toFahrenheitDelta(readiness?.temperature_trend_deviation),
                 sleep_lowest_heart_rate_bpm: session?.lowest_heart_rate ?? '',
                 activity_score: activity?.score ?? '',
+                activity_score_source: activity ? activity.scoreSource || 'oura_api' : '',
                 activity_meet_daily_targets: activity?.contributors?.meet_daily_targets ?? '',
                 activity_move_every_hour: activity?.contributors?.move_every_hour ?? '',
                 activity_recovery_time: activity?.contributors?.recovery_time ?? '',

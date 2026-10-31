@@ -121,6 +121,27 @@ function seed(store: ReturnType<typeof memoryFirestore>, count = 50) {
   return new Date(`${day}T18:00:00Z`);
 }
 describe("server records publication", () => {
+  it('publishes corrected scores in their month without changing raw source records', async () => {
+    const store = memoryFirestore();
+    const now = seed(store);
+    const day = now.toISOString().slice(0, 10);
+    const raw = store.data.get(`profileStats/me/days/${day}`);
+    delete raw.sleep;
+    raw.activity = { id: 'a', day, score: 88, steps: 9000, contributors: {} };
+    const original = structuredClone(raw);
+    store.data.get('profiles/me').scoreCorrections = [{ id: 'checked', day, source: 'oura_app', sleepScore: 78, readinessScore: 82 }];
+    await runInsightJob('me', { db: store.db, now, budgetMs: 15000, archiveDays: 1 });
+    const summary = store.data.get('profileStats/me/snapshots/insights');
+    for (const [month, id] of Object.entries(summary.months)) {
+      const rows = store.data.get(`profileStats/me/metricMonths/${id}`).observations;
+      expect(rows.every((row: any) => row.day.startsWith(month))).toBe(true);
+      if (month === day.slice(0, 7)) {
+        expect(rows.find((row: any) => row.day === day).values).toMatchObject({ sleep_score: 78, readiness_score: 82 });
+        expect(rows.find((row: any) => row.day === day).sources.sleep_score).toEqual(['oura-app:checked:sleep']);
+      }
+    }
+    expect(store.data.get(`profileStats/me/days/${day}`)).toEqual(original);
+  });
   it('rebuilds a scoped exclusion and a scope-only edit without changing original measurements', async () => {
     const store = memoryFirestore();
     const now = seed(store);

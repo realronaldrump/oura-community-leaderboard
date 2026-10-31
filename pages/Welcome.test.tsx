@@ -36,6 +36,7 @@ const mockUserState = (overrides: Record<string, unknown> = {}) => ({
     updateProfile: vi.fn(),
     updateProfileById: vi.fn(),
     updateDataExclusions: vi.fn(),
+    updateScoreCorrections: vi.fn(),
     getAccessTokenForProfile: vi.fn(),
     markProfileSyncSuccess: vi.fn(),
     markProfileSyncError: vi.fn(),

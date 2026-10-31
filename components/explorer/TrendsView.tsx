@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Search } from "lucide-react";
+import { ChevronRight, Search, LoaderCircle } from "lucide-react";
 import {
   CATEGORIES,
   HISTORY_RANGES,
@@ -11,6 +11,7 @@ import {
   historyStart,
   metricSeries,
   filterMetricObservationsForProfile,
+  mergeMetricObservations,
   metricColor,
   type MetricCategory,
   type MetricObservation,
@@ -53,8 +54,8 @@ export default function TrendsView({
   });
   const observations = useMemo(
     () =>
-      filterMetricObservationsForProfile(history.data ||
-      fallback.filter((o) => (!start || o.day >= start) && o.day <= day), profile),
+      filterMetricObservationsForProfile(mergeMetricObservations(history.data || [],
+      fallback.filter((o) => (!start || o.day >= start) && o.day <= day)), profile, { startDay: start, endDay: day }),
     [history.data, fallback, start, day, profile],
   );
   const metric = METRIC_BY_ID[metricId];
@@ -89,7 +90,10 @@ export default function TrendsView({
           </button>
         ))}
       </div>
-      <section className="trend-feature" aria-label={`${metric.label} trend`}>
+      <section className="trend-feature" aria-label={`${metric.label} trend`} aria-busy={history.isFetching || undefined}>
+        {history.isFetching && <p className="history-feedback" role="status"><LoaderCircle size={16} className="history-spinner" aria-hidden="true" /> Loading {range === 'all' ? 'all' : `${range}-day`} history…</p>}
+        {history.isError && <p className="history-feedback history-feedback--error" role="alert">History couldn’t load. <button type="button" onClick={() => void history.refetch()}>Try again</button></p>}
+        {!summary && <p className="history-feedback" role="status">Full history is being prepared. Showing available recent days.</p>}
         <div
           className="score-selector"
           role="group"
@@ -135,6 +139,7 @@ export default function TrendsView({
             },
           ]}
         />
+        <p className="history-coverage">{points.length} recorded {points.length === 1 ? 'day' : 'days'}{points.length > 0 ? ` · ${shortDate(points[0].day)} – ${shortDate(points.at(-1)!.day)}` : ''}</p>
         <button
           type="button"
           className="text-action"
@@ -143,24 +148,6 @@ export default function TrendsView({
           {metric.label} details <ChevronRight size={16} aria-hidden="true" />
         </button>
       </section>
-      {!summary && (
-        <p className="fine-print">
-          Full history is still loading. Showing recent days.
-        </p>
-      )}
-      {history.isError && (
-        <p role="alert" className="empty-note">
-          History didn’t load.{" "}
-          <button type="button" onClick={() => void history.refetch()}>
-            Try again
-          </button>
-        </p>
-      )}
-      {history.isFetching && (
-        <p role="status" className="fine-print">
-          Loading history…
-        </p>
-      )}
       <section className="detail-section" aria-labelledby="all-measurements">
         <div className="section-title">
           <h2 id="all-measurements">All measurements</h2>

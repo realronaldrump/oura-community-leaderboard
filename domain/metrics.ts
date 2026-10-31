@@ -1,5 +1,6 @@
 import type { DailyStats, DataExclusionSource, SleepSession, UserProfile } from "../types.js";
 import { dataExclusionKey, filterDailyStatsForProfile, getExclusionSourcesForDay, isDayExcludedByRanges } from "../utils/dataExclusions.js";
+import { scoreCorrectionKey, normalizeScoreCorrections, SCORE_CORRECTION_FIELDS } from "../utils/scoreCorrections.js";
 
 export type MetricCategory =
   | "sleep"
@@ -97,8 +98,12 @@ export const localDay = (
     .toISOString()
     .slice(0, 10);
 export const exclusionKey = (
-  profile: Pick<UserProfile, "dataExclusionRanges">,
-) => dataExclusionKey(profile.dataExclusionRanges);
+  profile: Pick<UserProfile, "dataExclusionRanges" | "scoreCorrections">,
+) => {
+  const corrections = scoreCorrectionKey(profile.scoreCorrections);
+  const exclusions = dataExclusionKey(profile.dataExclusionRanges);
+  return corrections.length ? JSON.stringify({ exclusions: JSON.parse(exclusions), corrections }) : exclusions;
+};
 export const excludedDay = (
   day: string,
   profile: Pick<UserProfile, "dataExclusionRanges">,
@@ -494,10 +499,10 @@ const rowDay = (row: Record<string, unknown>) =>
   ].find(validDay);
 export function normalizeMetricDays(
   stats: DailyStats,
-  profile: Pick<UserProfile, "dataExclusionRanges"> = {},
-  options: { coverage?: MetricCoverage; sessionsComplete?: boolean } = {},
+  profile: Pick<UserProfile, "dataExclusionRanges" | "scoreCorrections"> = {},
+  options: { coverage?: MetricCoverage; sessionsComplete?: boolean; range?: { startDay: string; endDay: string } } = {},
 ): MetricObservation[] {
-  stats = filterDailyStatsForProfile(stats, profile)!;
+  stats = filterDailyStatsForProfile(stats, profile, options.range)!;
   const bySource = new Map<
     MetricSource,
     Map<string, Record<string, unknown>[]>
@@ -593,7 +598,8 @@ export function normalizeMetricDays(
       )
         continue;
       let value = row ? numberAt(row, m.field) : null;
-      let refs = row ? [String(row.id || day)] : [];
+      let refs = row ? [m.field === 'score' && row.scoreCorrectionId
+        ? `oura-app:${row.scoreCorrectionId}:${m.source}` : String(row.id || day)] : [];
       if (m.clock) value = clockMinutes(row?.[m.field], m.id === "bedtime");
       if (m.id.endsWith("_sleep_percent")) {
         const total = numberAt(row, "total_sleep_duration");
@@ -700,11 +706,41 @@ export function formatMetricValue(
   return `${value.toLocaleString("en-US", { maximumFractionDigits: m.precision })}${suffix[m.unit] || ""}`;
 }
 /** Mask cached projections immediately while server records are being rebuilt. */
-export function filterMetricObservationsForProfile(observations: MetricObservation[], profile: Pick<UserProfile, 'dataExclusionRanges'>): MetricObservation[] {
-  if (!profile.dataExclusionRanges?.length) return observations;
-  return observations.flatMap(observation => {
+export function mergeMetricObservations(history: MetricObservation[], recent: MetricObservation[]): MetricObservation[] {
+  const days = new Map(history.map(row => [row.day, row]));
+  for (const row of recent) {
+    const previous = days.get(row.day);
+    days.set(row.day, previous ? { day: row.day, values: { ...previous.values, ...row.values }, sources: { ...previous.sources, ...row.sources } } : row);
+  }
+  return [...days.values()].sort((a, b) => a.day.localeCompare(b.day));
+}
+
+export function filterMetricObservationsForProfile(observations: MetricObservation[], profile: Pick<UserProfile, 'dataExclusionRanges' | 'scoreCorrections'>,
+  range?: { startDay?: string; endDay?: string }): MetricObservation[] {
+  // Remove old app corrections before applying the current ones, including removals.
+  const days = new Map(observations.map(row => {
+    const values = { ...row.values }, sources = { ...row.sources };
+    for (const [id, refs] of Object.entries(sources)) {
+      if (refs.some(ref => ref.startsWith('oura-app:'))) { delete values[id]; delete sources[id]; }
+    }
+    return [row.day, { ...row, values, sources }];
+  }));
+  const sorted = [...days.keys()].sort();
+  const start = range?.startDay || sorted[0], end = range?.endDay || sorted.at(-1);
+  for (const correction of normalizeScoreCorrections(profile.scoreCorrections)) {
+    if (!start || !end || correction.day < start || correction.day > end) continue;
+    const row = days.get(correction.day) || { day: correction.day, values: {}, sources: {} };
+    for (const field of SCORE_CORRECTION_FIELDS) {
+      const id = `${field.source}_score`, value = correction[field.key];
+      if (value == null || row.values[id] != null) continue;
+      row.values[id] = value;
+      row.sources[id] = [`oura-app:${correction.id}:${field.source}`];
+    }
+    days.set(correction.day, row);
+  }
+  return [...days.values()].sort((a, b) => a.day.localeCompare(b.day)).flatMap(observation => {
     const excluded = new Set<string>(getExclusionSourcesForDay(observation.day, profile.dataExclusionRanges));
-    if (!excluded.size) return [observation];
+    if (!excluded.size) return Object.keys(observation.values).length ? [observation] : [];
     const keep = (id: string) => !excluded.has(METRIC_BY_ID[id]?.source);
     const values = Object.fromEntries(Object.entries(observation.values).filter(([id]) => keep(id)));
     const sources = Object.fromEntries(Object.entries(observation.sources).filter(([id]) => keep(id)));

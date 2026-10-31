@@ -10,6 +10,7 @@ import {
   metricColor,
   metricSeries,
   filterMetricObservationsForProfile,
+  mergeMetricObservations,
   exclusionKey,
   shiftDay,
   type MetricObservation,
@@ -77,7 +78,7 @@ export default function FriendsView({
         summary
           ? readMetricHistory(activeProfile.id, summary.months, start, day)
           : Promise.resolve(own?.observations || []),
-        peerSummary.data && peer && peerSummary.data.exclusions === exclusionKey(peer.profile)
+        peerSummary.data && peer
           ? readMetricHistory(peerId!, peerSummary.data.months, start, day)
           : Promise.resolve(peer?.observations || []),
       ]);
@@ -96,13 +97,13 @@ export default function FriendsView({
     [friends, metricId, day],
   );
   const pointsA = metricSeries(
-    filterMetricObservationsForProfile(histories.data?.[0] || own?.observations || [], activeProfile),
+    filterMetricObservationsForProfile(mergeMetricObservations(histories.data?.[0] || [], own?.observations || []), activeProfile),
     metricId,
     shiftDay(day, -29),
     day,
   );
   const pointsB = metricSeries(
-    filterMetricObservationsForProfile(histories.data?.[1] || peer?.observations || [], peer?.profile || {}),
+    filterMetricObservationsForProfile(mergeMetricObservations(histories.data?.[1] || [], peer?.observations || []), peer?.profile || {}),
     metricId,
     shiftDay(day, -29),
     day,

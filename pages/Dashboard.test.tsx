@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
     competitionProps: null as { profileData: Array<{ data?: DailyStats; isLoading: boolean; isError: boolean }> } | null,
     loadHistory: vi.fn(),
     insights: vi.fn(),
+    metricHistory: vi.fn(),
 }));
 
 vi.mock('../services/firestoreStatsService', async (importOriginal) => ({
@@ -38,8 +39,10 @@ beforeEach(() => {
     mocks.competitionProps = null;
     mocks.dayDetail.mockReset().mockImplementation(async () => makeStats(new Date().toISOString().slice(0, 10)));
     mocks.insights.mockReset().mockReturnValue({ data: null, rebuilding: false, highlights: [] });
+    mocks.metricHistory.mockReset().mockResolvedValue([]);
     window.scrollTo = vi.fn();
     mocks.profile.dataExclusionRanges = undefined;
+    mocks.profile.scoreCorrections = undefined;
 });
 
 vi.mock('../contexts/UserContext', () => ({
@@ -65,7 +68,7 @@ vi.mock('../hooks/useInsights', () => ({ useInsights: (...args: unknown[]) => mo
 vi.mock('../services/insightsService', () => ({
     readDayDetail: (...args: unknown[]) => mocks.dayDetail(...args),
     readInsightSummary: vi.fn().mockResolvedValue(null),
-    readMetricHistory: vi.fn().mockResolvedValue([]),
+    readMetricHistory: (...args: unknown[]) => mocks.metricHistory(...args),
 }));
 vi.mock('../components/charts/SleepStagesChart', () => ({ default: () => <div>Sleep stage detail</div> }));
 
@@ -124,6 +127,76 @@ const makeStats = (day: string): DailyStats => ({
 });
 
 describe('Dashboard sleep details', () => {
+    it('lets Trends load older monthly data while Records are rebuilding for exclusions', async () => {
+        const day = '2026-10-31';
+        mocks.profile.dataExclusionRanges = [{ id: 'last', startDay: day, endDay: day, sources: ['sleep'] }];
+        const historySummary = { revision: 'old', months: { '2026-10': 'october' }, exclusions: '[]' };
+        mocks.insights.mockReturnValue({ data: null, historySummary, rebuilding: true, highlights: [] });
+        mocks.metricHistory.mockResolvedValue(Array.from({ length: 90 }, (_, i) => ({ day: shiftDay(day, i - 89), values: { sleep_score: 80 }, sources: {} })));
+        window.history.replaceState({}, '', `/trends?range=90&day=${day}`);
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        client.setQueryData(['dailyStats', mocks.profile.id], makeStats(day));
+        render(<QueryClientProvider client={client}><Dashboard /></QueryClientProvider>);
+        expect(await screen.findByText(/89 recorded days/)).toBeInTheDocument();
+        expect(mocks.metricHistory).toHaveBeenCalledWith(mocks.profile.id, historySummary.months, shiftDay(day, -89), day);
+    });
+
+    it('shows confirmed app scores with provenance when their API rows are absent', async () => {
+        const day = '2026-10-30';
+        mocks.profile.scoreCorrections = [{ id: 'synthetic', day, source: 'oura_app', sleepScore: 78, readinessScore: 82 }];
+        window.history.replaceState({}, '', `/?day=${day}`);
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        client.setQueryData(['dailyStats', mocks.profile.id], { ...makeStats(day), sleep: [], readiness: [] });
+        render(<QueryClientProvider client={client}><Dashboard /></QueryClientProvider>);
+        expect(await screen.findByRole('button', { name: 'Sleep score: 78. View details' })).toHaveTextContent('Oura app');
+        expect(screen.getByRole('button', { name: 'Readiness score: 82. View details' })).toHaveTextContent('Oura app');
+        expect(screen.queryByText(/Oura hasn’t sent/)).toBeNull();
+    });
+    it('keeps October 30 scores and recordings when October 29 and 31 are ignored', async () => {
+        const day = '2026-10-30';
+        mocks.profile.dataExclusionRanges = [
+            { id: '29', startDay: '2026-10-29', endDay: '2026-10-29', sources: ['sleep', 'session', 'sleepTime'] },
+            { id: '31', startDay: '2026-10-31', endDay: '2026-10-31', sources: ['sleep', 'session', 'sleepTime', 'readiness'] },
+        ];
+        window.history.replaceState({}, '', `/?day=${day}`);
+        const stats = makeStats(day);
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        client.setQueryData(['dailyStats', mocks.profile.id], stats);
+        render(<QueryClientProvider client={client}><Dashboard /></QueryClientProvider>);
+        expect(await screen.findByRole('button', { name: 'Sleep score: 88. View details' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Readiness score: 86. View details' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Time asleep/ })).toHaveTextContent('7h 45m');
+        expect(screen.queryByText('Ignored')).toBeNull();
+    });
+
+    it('explains missing Oura scores separately from neighboring ignored dates and a records rebuild', async () => {
+        const day = '2026-10-30';
+        mocks.profile.dataExclusionRanges = [
+            { id: '29', startDay: '2026-10-29', endDay: '2026-10-29', sources: ['sleep', 'session', 'sleepTime'] },
+            { id: '31', startDay: '2026-10-31', endDay: '2026-10-31', sources: ['sleep', 'session', 'sleepTime', 'readiness'] },
+        ];
+        mocks.insights.mockReturnValue({ data: null, rebuilding: true, highlights: [] });
+        window.history.replaceState({}, '', `/?day=${day}`);
+        const stats = { ...makeStats(day), sleep: [], readiness: [] };
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        client.setQueryData(['dailyStats', mocks.profile.id], stats);
+        render(<QueryClientProvider client={client}><Dashboard /></QueryClientProvider>);
+        expect(await screen.findByText(/Oura hasn’t sent/)).toHaveTextContent(/sleep score.*readiness score/);
+        expect(screen.getAllByText('Not sent by Oura')).toHaveLength(2);
+        expect(screen.getByRole('button', { name: /^Time asleep/ })).toHaveTextContent('7h 45m');
+        expect(screen.queryByText('Ignored')).toBeNull();
+    });
+
+    it('labels deliberately ignored scores separately from missing source data', async () => {
+        const day = '2026-10-31';
+        mocks.profile.dataExclusionRanges = [{ id: '31', startDay: day, endDay: day, sources: ['sleep', 'session', 'sleepTime', 'readiness'] }];
+        window.history.replaceState({}, '', `/?day=${day}`);
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        client.setQueryData(['dailyStats', mocks.profile.id], makeStats(day));
+        render(<QueryClientProvider client={client}><Dashboard /></QueryClientProvider>);
+        expect(await screen.findAllByText('Ignored')).toHaveLength(2);
+        expect(screen.queryByText(/Oura hasn’t sent/)).toBeNull();
+    });
     it('keeps an excluded latest day selected and offers a calendar and restore controls', async () => {
         const day = new Date().toISOString().slice(0, 10);
         const previous = makeStats(shiftDay(day, -1));
