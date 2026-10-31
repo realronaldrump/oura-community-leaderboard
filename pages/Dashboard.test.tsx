@@ -138,7 +138,7 @@ describe('Dashboard sleep details', () => {
         client.setQueryData(['dailyStats', mocks.profile.id], makeStats(day));
         render(<QueryClientProvider client={client}><Dashboard /></QueryClientProvider>);
         expect(await screen.findByText(/89 recorded days/)).toBeInTheDocument();
-        expect(mocks.metricHistory).toHaveBeenCalledWith(mocks.profile.id, historySummary.months, shiftDay(day, -89), day);
+        expect(mocks.metricHistory).toHaveBeenCalledWith(mocks.profile.id, historySummary.months, '2026-08-01', day);
     });
 
     it('shows confirmed app scores with provenance when their API rows are absent', async () => {

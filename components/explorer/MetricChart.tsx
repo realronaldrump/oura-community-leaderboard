@@ -9,6 +9,10 @@ export interface ChartSeries {
   label: string;
   color: string;
   points: Array<{ day: string; value: number }>;
+  /** Tooltip-only series still supplies original values and a stable chart scale. */
+  plot?: boolean;
+  muted?: boolean;
+  precision?: number;
 }
 export default function MetricChart({
   metric,
@@ -30,6 +34,9 @@ export default function MetricChart({
   if (!days.length)
     return <p className="empty-note">No measurements in this period.</p>;
   const values = series.flatMap((s) => s.points.map((p) => p.value));
+  const plottedSeries = series.filter(s => s.plot !== false);
+  const formatSeriesValue = (s: ChartSeries, value: number | undefined) =>
+    formatMetricValue(s.precision == null ? metric : { ...metric, precision: s.precision }, value);
   const domain = getDataAwareChartDomain(values, {
     ...(metric.unit === "score" ||
     (metric.unit === "percent" && metric.id !== "activity_goal_percent")
@@ -76,10 +83,10 @@ export default function MetricChart({
           <span>{shortDate(active)}</span>
           {series.map((s) => (
             <strong key={s.label}>
-              <i style={{ background: s.color }} />
+              <i style={{ background: s.color, opacity: s.muted ? 0.35 : 1 }} />
               {series.length > 1 && `${s.label} `}
-              {formatMetricValue(
-                metric,
+              {formatSeriesValue(
+                s,
                 s.points.find((p) => p.day === active)?.value,
               )}
             </strong>
@@ -89,7 +96,7 @@ export default function MetricChart({
       <svg
         viewBox={`0 0 ${W} ${H}`}
         role="img"
-        aria-label={`${metric.label}, ${shortDate(days[0])} to ${shortDate(days.at(-1)!)}. ${values.length} observations.`}
+        aria-label={`${metric.label}, ${shortDate(days[0])} to ${shortDate(days.at(-1)!)}. ${days.length} recorded days. ${series.map(s => s.label).join(' and ')}.`}
         onPointerDown={compact ? undefined : inspect}
         onPointerMove={
           compact
@@ -121,7 +128,7 @@ export default function MetricChart({
               </g>
             );
           })}
-        {series.map((s) => (
+        {plottedSeries.map((s) => (
           <g key={s.label}>
             <path
               d={s.points
@@ -132,7 +139,8 @@ export default function MetricChart({
                 .join(" ")}
               fill="none"
               stroke={s.color}
-              strokeWidth={compact ? 2.5 : 2.2}
+              strokeWidth={s.muted ? 1.2 : compact ? 2.5 : 2.2}
+              strokeOpacity={s.muted ? 0.25 : 1}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -142,6 +150,7 @@ export default function MetricChart({
                 cy={y(s.points[0].value)}
                 r="3"
                 fill={s.color}
+                opacity={s.muted ? 0.25 : 1}
               />
             )}
           </g>
@@ -155,7 +164,7 @@ export default function MetricChart({
               y2={bottom}
               className="chart-guide"
             />
-            {series.map((s) => {
+            {plottedSeries.map((s) => {
               const p = s.points.find((p) => p.day === active);
               return p ? (
                 <circle
@@ -164,6 +173,7 @@ export default function MetricChart({
                   cy={y(p.value)}
                   r="4"
                   fill={s.color}
+                  opacity={s.muted ? 0.35 : 1}
                   stroke="var(--color-surface)"
                   strokeWidth="2"
                 />
@@ -188,7 +198,7 @@ export default function MetricChart({
             value={days.indexOf(active)}
             onChange={(e) => setSelected(days[Number(e.target.value)])}
             aria-label={`Inspect ${metric.label} date`}
-            aria-valuetext={`${shortDate(active)}: ${series.map((s) => formatMetricValue(metric, s.points.find((p) => p.day === active)?.value)).join(", ")}`}
+            aria-valuetext={`${shortDate(active)}: ${series.map((s) => `${series.length > 1 ? `${s.label} ` : ''}${formatSeriesValue(s, s.points.find((p) => p.day === active)?.value)}`).join(", ")}`}
           />
         </label>
         {onSelectDay && <button type="button" className="text-action chart-day-action" onClick={() => onSelectDay(active)}>View {shortDate(active)} details</button>}

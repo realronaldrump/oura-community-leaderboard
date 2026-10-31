@@ -13,6 +13,7 @@ import {
   filterMetricObservationsForProfile,
   mergeMetricObservations,
   metricColor,
+  shiftDay,
   type MetricCategory,
   type MetricObservation,
 } from "../../domain/metrics";
@@ -23,6 +24,15 @@ import {
 } from "../../services/insightsService";
 import { navigate } from "../../hooks/useAppRoute";
 import MetricChart from "./MetricChart";
+import TrendSmoothingControl from "./TrendSmoothingControl";
+import {
+  normalizeSmoothing,
+  rollingAverage,
+  smoothingDays,
+  SMOOTHING_STORAGE_KEY,
+  type ChartSmoothingSettings,
+} from "../../utils/chartSmoothing";
+import { storageKey } from "../../services/storageScope";
 const SCORE_IDS = ["sleep_score", "readiness_score", "activity_score"];
 const shortDate = (day: string) =>
   new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", {
@@ -30,6 +40,10 @@ const shortDate = (day: string) =>
     day: "numeric",
     timeZone: "UTC",
   });
+const readSmoothing = (): ChartSmoothingSettings => {
+  try { return normalizeSmoothing(JSON.parse(localStorage.getItem(storageKey(SMOOTHING_STORAGE_KEY)) || 'null')); }
+  catch { return normalizeSmoothing(null); }
+};
 export default function TrendsView({
   profile,
   summary,
@@ -44,22 +58,38 @@ export default function TrendsView({
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<MetricCategory | "all">("all");
   const [metricId, setMetricId] = useState("sleep_score");
+  const [smoothing, setSmoothing] = useState<ChartSmoothingSettings>(readSmoothing);
+  const averageDays = smoothingDays(smoothing);
   const range = historyRange(new URLSearchParams(window.location.search).get("range"));
   const start = historyStart(day, range);
+  const lookback = start ? shiftDay(start, -(averageDays - 1)) : undefined;
+  // The server stores complete immutable months. Reuse a month while a slider moves.
+  const readStart = lookback ? `${lookback.slice(0, 7)}-01` : undefined;
   const history = useQuery({
-    queryKey: ["metric-history", profile.id, summary?.revision, start, day],
-    queryFn: () => readMetricHistory(profile.id, summary!.months, start, day),
+    queryKey: ["metric-history", profile.id, summary?.revision, readStart, day],
+    queryFn: () => readMetricHistory(profile.id, summary!.months, readStart, day),
     enabled: Boolean(summary),
     staleTime: Infinity,
+    placeholderData: (previous, query) => query?.queryKey[1] === profile.id && query.queryKey[2] === summary?.revision ? previous : undefined,
   });
-  const observations = useMemo(
+  const historyObservations = useMemo(
     () =>
       filterMetricObservationsForProfile(mergeMetricObservations(history.data || [],
-      fallback.filter((o) => (!start || o.day >= start) && o.day <= day)), profile, { startDay: start, endDay: day }),
-    [history.data, fallback, start, day, profile],
+      fallback.filter((o) => (!readStart || o.day >= readStart) && o.day <= day)), profile, { startDay: readStart, endDay: day }),
+    [history.data, fallback, readStart, day, profile],
   );
+  const observations = useMemo(() => historyObservations.filter(o => (!start || o.day >= start) && o.day <= day), [historyObservations, start, day]);
   const metric = METRIC_BY_ID[metricId];
-  const points = metricSeries(observations, metricId);
+  const allPoints = useMemo(() => metricSeries(historyObservations, metricId), [historyObservations, metricId]);
+  const points = useMemo(() => allPoints.filter(point => (!start || point.day >= start) && point.day <= day), [allPoints, start, day]);
+  const averagedPoints = useMemo(() => averageDays > 1
+    ? rollingAverage(allPoints, averageDays).filter(point => (!start || point.day >= start) && point.day <= day)
+    : points, [allPoints, averageDays, points, start, day]);
+  const changeSmoothing = (next: ChartSmoothingSettings) => {
+    setSmoothing(next);
+    try { localStorage.setItem(storageKey(SMOOTHING_STORAGE_KEY), JSON.stringify(next)); }
+    catch { /* The chart still works when browser storage is unavailable. */ }
+  };
   const values = points.map((p) => p.value);
   const average = values.length
     ? values.reduce((a, b) => a + b, 0) / values.length
@@ -84,14 +114,18 @@ export default function TrendsView({
             type="button"
             key={value}
             aria-pressed={range === value}
-            onClick={() => navigate(`/trends?range=${value}`, true)}
+            onClick={() => {
+              const url = new URL(window.location.href);
+              url.searchParams.set('range', value);
+              navigate(url.pathname + url.search, true);
+            }}
           >
             {label}
           </button>
         ))}
       </div>
       <section className="trend-feature" aria-label={`${metric.label} trend`} aria-busy={history.isFetching || undefined}>
-        {history.isFetching && <p className="history-feedback" role="status"><LoaderCircle size={16} className="history-spinner" aria-hidden="true" /> Loading {range === 'all' ? 'all' : `${range}-day`} history…</p>}
+        {history.isFetching && <p className="history-feedback" role="status"><LoaderCircle size={16} className="history-spinner" aria-hidden="true" /> {averageDays > 1 ? `Loading history for the ${averageDays}-day average…` : `Loading ${range === 'all' ? 'all' : `${range}-day`} history…`}</p>}
         {history.isError && <p className="history-feedback history-feedback--error" role="alert">History couldn’t load. <button type="button" onClick={() => void history.refetch()}>Try again</button></p>}
         {!summary && <p className="history-feedback" role="status">Full history is being prepared. Showing available recent days.</p>}
         <div
@@ -112,7 +146,7 @@ export default function TrendsView({
         </div>
         <div className="trend-feature__reading">
           <div>
-            <span>Average</span>
+            <span>{averageDays > 1 ? 'Daily average' : 'Average'}</span>
             <strong>{formatMetricValue(metric, average)}</strong>
           </div>
           {values.length ? (
@@ -128,10 +162,14 @@ export default function TrendsView({
             <p>No data yet</p>
           )}
         </div>
+        <TrendSmoothingControl settings={smoothing} onChange={changeSmoothing} />
         <MetricChart
           onSelectDay={selected => navigate(`/metrics/${metricId}?profile=${encodeURIComponent(profile.id)}&day=${selected}&range=${range}`)}
           metric={metric}
-          series={[
+          series={averageDays > 1 ? [
+            { label: 'Daily', color: metricColor(metric.category), points, plot: smoothing.showDaily, muted: true },
+            { label: `${averageDays}-day avg`, color: metricColor(metric.category), points: averagedPoints, precision: 1 },
+          ] : [
             {
               label: metric.label,
               color: metricColor(metric.category),
@@ -139,6 +177,7 @@ export default function TrendsView({
             },
           ]}
         />
+        {averageDays > 1 && <p className="smoothing-footnote">Missing and ignored days are left out of the average.</p>}
         <p className="history-coverage">{points.length} recorded {points.length === 1 ? 'day' : 'days'}{points.length > 0 ? ` · ${shortDate(points[0].day)} – ${shortDate(points.at(-1)!.day)}` : ''}</p>
         <button
           type="button"

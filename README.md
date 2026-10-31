@@ -49,6 +49,8 @@ When Oura's API omits a daily score that appears in its own app, **Add scores fr
 
 Trends and measurement history load immutable monthly measurements independently of Records publication. Current exclusions and corrections apply immediately, and recent measurements merge with the saved history. Changing a time range requests the appropriate months, reuses cached months, and shows loading, error/retry, and date-coverage feedback next to the graph.
 
+Trends has one-tap **Daily**, **Smooth** (7 days), and **Smoother** (30 days) line controls. **Custom** supports 2–365 days with a slider or number box. The browser remembers the selection, and **Show daily line** overlays the original readings. The chart inspector shows both daily and averaged values. Averages use trailing calendar days, skip missing/excluded dates, and load earlier history when needed at the left edge; summary statistics and recorded-day counts stay based on daily measurements. Smoothing is calculated locally and does not change saved scores, records, or exports.
+
 The metric registry and deterministic records engine cover 83 measurements and 8,680 eligible rules. Server-owned monthly projections and immutable record indexes keep recognition off the phone's launch path. See [the redesign report](docs/redesign-report.md) for semantics, publication, and validation.
 
 ## Synchronization invariants
