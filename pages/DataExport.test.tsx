@@ -1,7 +1,8 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DataExport from './DataExport';
+import { createEmptyDailyStats } from '../test/helpers';
 
 const mocks = vi.hoisted(() => ({
     useUser: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('../services/firestoreStatsService', () => ({
 }));
 
 describe('DataExport', () => {
+    afterEach(cleanup);
     beforeEach(() => {
         vi.clearAllMocks();
         mocks.useUser.mockReturnValue({
@@ -74,5 +76,38 @@ describe('DataExport', () => {
 
         expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
         expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledOnce();
+    });
+
+    it('filters only selected data types in analysis CSVs and preserves them in the complete export', async () => {
+        const day = '2026-10-30';
+        const earlier = '2026-10-29';
+        mocks.useUser.mockReturnValue({ activeProfile: {
+            id: 'profile-1', grantedScopes: ['daily'],
+            dataExclusionRanges: [{ id: 'bad-sleep', startDay: day, endDay: day, sources: ['sleep', 'session', 'sleepTime'] }],
+        } });
+        mocks.getStoredDailyStats.mockResolvedValue(createEmptyDailyStats({
+            sleep: [{ id: 'bad', day, score: 5, contributors: {} }, { id: 'good', day: earlier, score: 80, contributors: {} }],
+            activity: [{ id: 'activity', day, steps: 12000, score: 85, active_calories: 500, target_calories: 600, total_calories: 2500, contributors: {} }],
+        }));
+        const readDownload = () => new Promise<string>((resolve, reject) => {
+            const blob = vi.mocked(URL.createObjectURL).mock.calls.at(-1)![0] as Blob;
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = reject;
+            reader.readAsText(blob);
+        });
+        render(<DataExport />);
+        await screen.findByRole('heading', { name: 'Complete data' });
+        fireEvent.click(screen.getByText('Individual tables'));
+        fireEvent.click(screen.getByRole('button', { name: /Sleep scores/i }));
+        const sleepCsv = await readDownload();
+        expect(sleepCsv).toContain(earlier);
+        expect(sleepCsv).not.toContain(day);
+        fireEvent.click(screen.getByRole('button', { name: /Activity scores/i }));
+        expect(await readDownload()).toContain(day);
+        fireEvent.click(screen.getByRole('button', { name: /Download complete JSON/i }));
+        const rawJson = await readDownload();
+        expect(rawJson).toContain('"id": "bad"');
+        expect(rawJson).toContain('"score": 5');
     });
 });

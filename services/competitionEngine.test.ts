@@ -4,6 +4,7 @@ import type { DailyStats } from '../types';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { deriveCompetitionStatus, evaluateCompetition } from './competitionEngine';
 import { Competition } from '../types/competitionTypes';
+import { filterDailyStatsForProfile } from '../utils/dataExclusions';
 
 const competition: Competition = {
     id: 'competition-1',
@@ -39,6 +40,17 @@ describe('competition timezone anchoring', () => {
 });
 
 describe('curated challenge scoring', () => {
+    it('keeps valid steps when sleep is ignored and treats an ignored activity day as missing', () => {
+        const day = '2026-09-10';
+        const raw = createEmptyDailyStats({ activity: [activity(day, 14000)] });
+        const profile = { dataExclusionRanges: [{ id: 'x', startDay: day, endDay: day, sources: ['sleep' as const] }] };
+        const stepRace = makeCompetition({ mode: 'solo' });
+        const before = evaluateCompetition(stepRace, { 'profile-1': filterDailyStatsForProfile(raw, profile) }, day);
+        expect(before.leaderboard[0]).toMatchObject({ totalScore: 14000, progressDays: 1 });
+        const after = evaluateCompetition(stepRace, { 'profile-1': filterDailyStatsForProfile(raw, { dataExclusionRanges: [{ ...profile.dataExclusionRanges[0], sources: ['activity'] }] }) }, day);
+        expect(after.leaderboard[0]).toMatchObject({ progressDays: 0 });
+        expect(after.leaderboard[0].dailyScores[0].rules[0].value).toBeNull();
+    });
     it('counts all steps in real units with no target cap and shares tied ranks', () => {
         const result = evaluateCompetition(makeCompetition(), {
             'profile-1': createEmptyDailyStats({ activity: [activity('2026-09-10', 14000), activity('2026-09-11', 9000)] }),

@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronRight, Moon, Sparkles } from "lucide-react";
-import { Button, Skeleton } from "../ui";
+import { Button, Dialog, Skeleton } from "../ui";
 import {
   CATEGORIES,
   HISTORY_RANGES,
@@ -13,6 +13,7 @@ import {
   mainSleepSession,
   metricColor,
   metricSeries,
+  filterMetricObservationsForProfile,
   type MetricObservation,
 } from "../../domain/metrics";
 import { RECORD_SPEC_BY_ID, compareRecordPriority, isPresentableRecord, type HighlightEvent } from "../../domain/records";
@@ -27,6 +28,9 @@ import { filterDailyStatsForProfile } from "../../utils/dataExclusions";
 import { goBack, navigate } from "../../hooks/useAppRoute";
 import MetricChart from "./MetricChart";
 import HighlightCard from "./HighlightCard";
+import { DayDataControl } from "../DataExclusionEditor";
+import DayCalendar from "../DayCalendar";
+import { localDay } from "../../domain/metrics";
 const SleepStagesChart = lazy(() => import("../charts/SleepStagesChart"));
 const HeartRateChart = lazy(() => import("../charts/HeartRateChart"));
 const dateLabel = (day: string) =>
@@ -252,6 +256,7 @@ export default function MetricDetail({
   const params = new URLSearchParams(window.location.search);
   const [range, setRange] = useState(() => historyRange(params.get("range")));
   const [event, setEvent] = useState<HighlightEvent | null>(null);
+  const [calendar, setCalendar] = useState(false);
   const [showRelationships, setShowRelationships] = useState(
     params.has("relationships"),
   );
@@ -270,9 +275,9 @@ export default function MetricDetail({
   const stats = filterDailyStatsForProfile(raw.data, profile);
   const observations = useMemo(
     () =>
-      history.data ||
-      fallback.filter((o) => (!start || o.day >= start) && o.day <= day),
-    [history.data, fallback, start, day],
+      filterMetricObservationsForProfile(history.data ||
+      fallback.filter((o) => (!start || o.day >= start) && o.day <= day), profile),
+    [history.data, fallback, start, day, profile],
   );
   if (!metric)
     return (
@@ -305,6 +310,10 @@ export default function MetricDetail({
       url.pathname + url.search,
     );
   };
+  const selectDay = (selected: string) => {
+    navigate(`/metrics/${encodeURIComponent(id)}?profile=${encodeURIComponent(profile.id)}&day=${selected}&range=${range}`);
+    setCalendar(false);
+  };
   return (
     <div className="detail-screen">
       <button
@@ -320,7 +329,9 @@ export default function MetricDetail({
           {profile.firstName ? ` · ${profile.firstName}` : ""}
         </p>
         <h1>{metric.label}</h1>
+        <button type="button" className="date-pill mt-3" aria-label="Choose measurement day" onClick={() => setCalendar(true)}>{dateLabel(day)}</button>
       </header>
+      <DayDataControl key={`${profile.id}:${day}:${id}`} profile={profile} day={day} source={metric.source} />
       <section className={`metric-hero tone-${metric.category}`}>
         <span>{current ? dateLabel(day) : `No data for ${dateLabel(day)}`}</span>
         <strong>{formatMetricValue(metric, current?.value)}</strong>
@@ -354,6 +365,7 @@ export default function MetricDetail({
       <section className="chart-surface">
         <MetricChart
           metric={metric}
+          onSelectDay={selectDay}
           series={[
             {
               label: metric.label,
@@ -394,6 +406,7 @@ export default function MetricDetail({
           {!summary ? " · Recent days only" : ""}
         </p>
       </section>
+      {calendar && <Dialog isOpen title="Choose a day" onClose={() => setCalendar(false)}><DayCalendar key={day} selectedDay={day} today={localDay(profile)} ranges={profile.dataExclusionRanges} onSelect={selectDay} /></Dialog>}
       {metric.category === "sleep" && (
         <section className="detail-section">
           <div className="section-title">

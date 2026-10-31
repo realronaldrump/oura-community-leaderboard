@@ -1,4 +1,5 @@
-import type { DailyStats, SleepSession, UserProfile } from "../types.js";
+import type { DailyStats, DataExclusionSource, SleepSession, UserProfile } from "../types.js";
+import { dataExclusionKey, filterDailyStatsForProfile, getExclusionSourcesForDay, isDayExcludedByRanges } from "../utils/dataExclusions.js";
 
 export type MetricCategory =
   | "sleep"
@@ -21,7 +22,7 @@ export type MetricUnit =
   | "years"
   | "vo2"
   | "met";
-export type MetricSource = keyof DailyStats;
+export type MetricSource = DataExclusionSource;
 export type Aggregation = "mean" | "sum" | "spread";
 export interface MetricDefinition {
   id: string;
@@ -97,21 +98,11 @@ export const localDay = (
     .slice(0, 10);
 export const exclusionKey = (
   profile: Pick<UserProfile, "dataExclusionRanges">,
-) =>
-  JSON.stringify(
-    (profile.dataExclusionRanges || [])
-      .map((r) => [r.startDay, r.endDay].sort())
-      .sort(),
-  );
+) => dataExclusionKey(profile.dataExclusionRanges);
 export const excludedDay = (
   day: string,
   profile: Pick<UserProfile, "dataExclusionRanges">,
-) =>
-  (profile.dataExclusionRanges || []).some(
-    (r) =>
-      day >= (r.startDay < r.endDay ? r.startDay : r.endDay) &&
-      day <= (r.endDay > r.startDay ? r.endDay : r.startDay),
-  );
+) => isDayExcludedByRanges(day, profile.dataExclusionRanges);
 const numberAt = (record: unknown, path: string): number | null => {
   const value = path
     .split(".")
@@ -506,6 +497,7 @@ export function normalizeMetricDays(
   profile: Pick<UserProfile, "dataExclusionRanges"> = {},
   options: { coverage?: MetricCoverage; sessionsComplete?: boolean } = {},
 ): MetricObservation[] {
+  stats = filterDailyStatsForProfile(stats, profile)!;
   const bySource = new Map<
     MetricSource,
     Map<string, Record<string, unknown>[]>
@@ -519,7 +511,7 @@ export function normalizeMetricDays(
     const unique = new Map<string, Record<string, unknown>>();
     for (const row of items) {
       const day = rowDay(row);
-      if (!day || excludedDay(day, profile)) continue;
+      if (!day) continue;
       const key = String(
         row.id || `${day}|${row.timestamp || row.start_datetime || ""}`,
       );
@@ -546,7 +538,10 @@ export function normalizeMetricDays(
   return [...days].sort().map((day) => {
     const values: Record<string, number> = {};
     const sources: Record<string, string[]> = {};
+    const excludedSources = new Set<string>(getExclusionSourcesForDay(day, profile.dataExclusionRanges));
     for (const m of METRICS) {
+      // Excluded workouts/sessions are unknown, never synthetic zero-count days.
+      if (excludedSources.has(m.source)) continue;
       const rows = bySource.get(m.source)?.get(day) || [];
       if (!rows.length) {
         const covered = options.coverage?.[m.source];
@@ -703,6 +698,18 @@ export function formatMetricValue(
     met: " MET",
   };
   return `${value.toLocaleString("en-US", { maximumFractionDigits: m.precision })}${suffix[m.unit] || ""}`;
+}
+/** Mask cached projections immediately while server records are being rebuilt. */
+export function filterMetricObservationsForProfile(observations: MetricObservation[], profile: Pick<UserProfile, 'dataExclusionRanges'>): MetricObservation[] {
+  if (!profile.dataExclusionRanges?.length) return observations;
+  return observations.flatMap(observation => {
+    const excluded = new Set<string>(getExclusionSourcesForDay(observation.day, profile.dataExclusionRanges));
+    if (!excluded.size) return [observation];
+    const keep = (id: string) => !excluded.has(METRIC_BY_ID[id]?.source);
+    const values = Object.fromEntries(Object.entries(observation.values).filter(([id]) => keep(id)));
+    const sources = Object.fromEntries(Object.entries(observation.sources).filter(([id]) => keep(id)));
+    return Object.keys(values).length ? [{ ...observation, values, sources }] : [];
+  });
 }
 export const metricSeries = (
   observations: MetricObservation[],

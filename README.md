@@ -37,6 +37,14 @@ npm run verify
 
 The header avatar opens secondary actions. Old leaderboard, streak, insight-tool, and More URLs redirect to their corresponding destinations. Heavy detail and export views remain lazy. Today loads compact saved snapshots, never full history or raw sample streams.
 
+### Ignoring inaccurate data
+
+Tap the date on Today or a measurement to choose a day from the calendar, then choose **Ignore data**. Settings also has a calendar that opens the editor directly. Select the whole day or individual data types such as sleep, readiness, activity, heart rate samples, blood oxygen, workouts, or fitness estimates. Measurement detail preselects its data type. Charts also link to the inspected day's detail. Reasons are optional.
+
+Saved exclusions are visible on the day and calendar. **Manage ignored data** lets you change the selection or restore the day. Editing one day inside a longer break preserves exclusions on neighboring days. Settings retains a secondary **Exclude a date range** option for bulk exclusions.
+
+Exclusions are per profile and apply to scores, analytics, records and personal bests, friend comparisons, competitions, and curated analysis CSVs. Sleep includes sessions, naps, nightly HRV and heart rate, and sleep timing; heart rate samples are a separate type. Other Oura scores are retained unless their own data type is selected. Original Oura data is never deleted and remains in complete exports. Older saved breaks without a `sources` field still exclude the whole day. Scoped exclusions include their sources in the analysis revision so the server rebuilds the affected projections; incompatible records are hidden while that rebuild runs. Exclusion edits use a transaction to preserve simultaneous changes to other days.
+
 The metric registry and deterministic records engine cover 83 measurements and 8,680 eligible rules. Server-owned monthly projections and immutable record indexes keep recognition off the phone's launch path. See [the redesign report](docs/redesign-report.md) for semantics, publication, and validation.
 
 ## Synchronization invariants

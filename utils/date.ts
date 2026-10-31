@@ -5,7 +5,7 @@ import {
     getUTCDateFromISODate,
     isISODateString,
     shiftISODateByDays,
-} from './temporal';
+} from './temporal.js';
 
 const padTwo = (value: number): string => value.toString().padStart(2, '0');
 

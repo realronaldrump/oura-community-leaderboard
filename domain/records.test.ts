@@ -3,6 +3,8 @@ import {
   normalizeMetricDays,
   clockMinutes,
   mainSleepSession,
+  exclusionKey,
+  filterMetricObservationsForProfile,
 } from "./metrics";
 import { updateSourceCoverage } from "./coverage";
 const empty = () => ({
@@ -15,6 +17,25 @@ const empty = () => ({
   resilience: [],
 });
 describe("canonical metric observations", () => {
+  it('omits only the selected metric sources and never invents zero workouts for excluded data', () => {
+    const day = '2026-08-11';
+    const stats = {
+      ...empty(),
+      sleep: [{ id: 's', day, score: 5, contributors: {} }],
+      readiness: [{ id: 'r', day, score: 80, contributors: {} }],
+      activity: [{ id: 'a', day, steps: 12345, active_calories: 400, total_calories: 2000, target_calories: 500, non_wear_time: 0, contributors: {} }],
+      session: [{ id: 'night', day, total_sleep_duration: 1000, average_hrv: 5 }],
+    };
+    const profile = { dataExclusionRanges: [{ id: 'bad', startDay: day, endDay: day, sources: ['sleep' as const, 'session' as const, 'workout' as const] }] };
+    const observations = normalizeMetricDays(stats, profile, { coverage: { workout: { startDay: day, endDay: day, complete: true, status: 'ready' } } });
+    expect(observations[0].values).toMatchObject({ steps: 12345, readiness_score: 80 });
+    for (const id of ['sleep_score', 'hrv', 'sleep_duration', 'workout_count', 'workout_duration']) expect(observations[0].values[id]).toBeUndefined();
+    const cached = normalizeMetricDays(stats);
+    const before = structuredClone(cached);
+    expect(filterMetricObservationsForProfile(cached, profile)).toEqual(observations);
+    expect(cached).toEqual(before);
+    expect(exclusionKey(profile)).not.toBe(exclusionKey({ dataExclusionRanges: [{ ...profile.dataExclusionRanges[0], sources: ['activity'] }] }));
+  });
   it("separates the main sleep, naps, deleted sessions, and record-local bedtime", () => {
     const day = "2026-08-11";
     const stats = {

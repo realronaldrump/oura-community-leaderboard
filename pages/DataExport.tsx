@@ -557,7 +557,7 @@ const DataExport: React.FC = () => {
                                     <Download size={18} aria-hidden="true" />
                                     <span>
                                         <strong>Download complete JSON</strong>
-                                        <small>Everything currently saved from Oura, including detailed samples. Ring breaks are kept.</small>
+                                        <small>Everything currently saved from Oura, including detailed samples. Ignored data is kept.</small>
                                     </span>
                                 </button>
                                 <details>
@@ -634,7 +634,7 @@ const DataExport: React.FC = () => {
                             </details>
                         </div>
                         <p>
-                            Ring breaks are left out of spreadsheets
+                            Whole-day and selected data-type exclusions apply to spreadsheets
                             {excludedDayCount > 0 ? ` (${excludedDayCount} ${excludedDayCount === 1 ? 'day' : 'days'})` : ''}.
                         </p>
                     </section>

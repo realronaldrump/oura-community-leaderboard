@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { UserProfile, AuthStatus } from '../types';
+import { UserProfile, AuthStatus, type DataExclusionRange } from '../types';
 import { createOAuthState, getAuthUrl, OAUTH_STATE_KEY, POST_AUTH_DESTINATION_KEY } from '../constants';
 import { firebaseService } from '../services/firebaseService';
 import { oauthService } from '../services/oauthService';
@@ -29,6 +29,7 @@ interface UserContextType {
     removeProfile: (id: string) => Promise<void>;
     updateProfile: (profile: Partial<UserProfile>) => Promise<void>;
     updateProfileById: (id: string, profile: Partial<UserProfile>) => Promise<void>;
+    updateDataExclusions: (id: string, edit: (ranges: DataExclusionRange[]) => DataExclusionRange[]) => Promise<void>;
     authStatus: AuthStatus;
     login: () => void;
     // New: Error and loading states
@@ -274,6 +275,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await updateProfileById(activeProfileId, profileData);
     }, [activeProfileId, updateProfileById]);
 
+    const updateDataExclusions = useCallback(async (id: string, edit: (ranges: DataExclusionRange[]) => DataExclusionRange[]) => {
+        const ranges = await firebaseService.updateDataExclusions(id, edit);
+        setProfiles(current => current.map(profile => profile.id === id ? { ...profile, dataExclusionRanges: ranges } : profile));
+    }, []);
+
     const contextValue = useMemo<UserContextType>(() => ({
         profiles,
         activeProfileId,
@@ -284,6 +290,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         removeProfile,
         updateProfile,
         updateProfileById,
+        updateDataExclusions,
         authStatus,
         login,
         firebaseError,
@@ -299,6 +306,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         removeProfile,
         updateProfile,
         updateProfileById,
+        updateDataExclusions,
         authStatus,
         login,
         firebaseError,

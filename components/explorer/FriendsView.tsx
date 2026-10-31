@@ -9,6 +9,8 @@ import {
   formatMetricValue,
   metricColor,
   metricSeries,
+  filterMetricObservationsForProfile,
+  exclusionKey,
   shiftDay,
   type MetricObservation,
 } from "../../domain/metrics";
@@ -65,6 +67,8 @@ export default function FriendsView({
       peerId,
       summary?.revision,
       peerSummary.data?.revision,
+      exclusionKey(activeProfile),
+      peer ? exclusionKey(peer.profile) : null,
       day,
     ],
     queryFn: async () => {
@@ -73,7 +77,7 @@ export default function FriendsView({
         summary
           ? readMetricHistory(activeProfile.id, summary.months, start, day)
           : Promise.resolve(own?.observations || []),
-        peerSummary.data
+        peerSummary.data && peer && peerSummary.data.exclusions === exclusionKey(peer.profile)
           ? readMetricHistory(peerId!, peerSummary.data.months, start, day)
           : Promise.resolve(peer?.observations || []),
       ]);
@@ -92,13 +96,13 @@ export default function FriendsView({
     [friends, metricId, day],
   );
   const pointsA = metricSeries(
-    histories.data?.[0] || own?.observations || [],
+    filterMetricObservationsForProfile(histories.data?.[0] || own?.observations || [], activeProfile),
     metricId,
     shiftDay(day, -29),
     day,
   );
   const pointsB = metricSeries(
-    histories.data?.[1] || peer?.observations || [],
+    filterMetricObservationsForProfile(histories.data?.[1] || peer?.observations || [], peer?.profile || {}),
     metricId,
     shiftDay(day, -29),
     day,

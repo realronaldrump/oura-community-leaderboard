@@ -121,6 +121,31 @@ function seed(store: ReturnType<typeof memoryFirestore>, count = 50) {
   return new Date(`${day}T18:00:00Z`);
 }
 describe("server records publication", () => {
+  it('rebuilds a scoped exclusion and a scope-only edit without changing original measurements', async () => {
+    const store = memoryFirestore();
+    const now = seed(store);
+    const day = now.toISOString().slice(0, 10);
+    const raw = store.data.get(`profileStats/me/days/${day}`);
+    raw.activity = { id: 'a', day, steps: 12000, active_calories: 400, total_calories: 2000, target_calories: 500, contributors: {} };
+    const original = structuredClone(raw);
+    await runInsightJob('me', { db: store.db, now, budgetMs: 15000, archiveDays: 1 });
+    const firstRevision = store.data.get('profileStats/me/snapshots/insights').revision;
+    store.data.get('profiles/me').dataExclusionRanges = [{ id: 'bad', startDay: day, endDay: day, sources: ['sleep', 'session', 'sleepTime'] }];
+    await runInsightJob('me', { db: store.db, now, budgetMs: 15000, archiveDays: 1 });
+    let summary = store.data.get('profileStats/me/snapshots/insights');
+    const monthRows = () => store.data.get(`profileStats/me/metricMonths/${summary.months[day.slice(0, 7)]}`).observations;
+    expect(summary.revision).not.toBe(firstRevision);
+    expect(monthRows().find((row: any) => row.day === day).values).toMatchObject({ steps: 12000 });
+    expect(monthRows().find((row: any) => row.day === day).values.sleep_score).toBeUndefined();
+    const sleepRevision = summary.revision;
+    store.data.get('profiles/me').dataExclusionRanges[0].sources = ['activity'];
+    await runInsightJob('me', { db: store.db, now, budgetMs: 15000, archiveDays: 1 });
+    summary = store.data.get('profileStats/me/snapshots/insights');
+    expect(summary.revision).not.toBe(sleepRevision);
+    expect(monthRows().find((row: any) => row.day === day).values.sleep_score).toBe(original.sleep.score);
+    expect(monthRows().find((row: any) => row.day === day).values.steps).toBeUndefined();
+    expect(store.data.get(`profileStats/me/days/${day}`)).toEqual(original);
+  });
   it("publishes compact summaries and immutable archive pointers, then resumes older days", async () => {
     const store = memoryFirestore();
     const now = seed(store);

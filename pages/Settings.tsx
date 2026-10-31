@@ -3,9 +3,11 @@ import { ChevronRight, Download, Plus, RefreshCw } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import InviteLinkCard from '../components/InviteLinkCard';
 import { Badge, Button, Dialog, Field, Input } from '../components/ui';
-import { DataExclusionRange } from '../types';
+import type { DataExclusionRange, DataExclusionSource } from '../types';
+import DayCalendar from '../components/DayCalendar';
+import DataExclusionEditor, { DataTypeChoices } from '../components/DataExclusionEditor';
 import { getProfileDisplayName } from '../utils/profileName';
-import { formatISODateForDisplay, isISODateString } from '../utils/date';
+import { formatISODateForDisplay } from '../utils/date';
 import { getProfileLocalISODate } from '../utils/profileTemporal';
 import { profileRequiresReconnect } from '../utils/profileSyncHealth';
 import { navigate } from '../hooks/useAppRoute';
@@ -13,6 +15,9 @@ import {
     getDataExclusionRangeDayCount,
     getTotalExcludedDayCount,
     normalizeDataExclusionRanges,
+    DATA_EXCLUSION_SOURCES,
+    describeDataExclusion,
+    isDataExclusionDay,
 } from '../utils/dataExclusions';
 
 // Mini PC storage keeps every profile's history, and its server refuses removal.
@@ -46,6 +51,7 @@ const Settings: React.FC = () => {
         removeProfile,
         login,
         updateProfile,
+        updateDataExclusions,
     } = useUser();
     const [profileToRemoveId, setProfileToRemoveId] = useState<string | null>(null);
     const [isRemovingProfile, setIsRemovingProfile] = useState(false);
@@ -60,6 +66,8 @@ const Settings: React.FC = () => {
     const [exclusionLabel, setExclusionLabel] = useState('');
     const [isSavingExclusion, setIsSavingExclusion] = useState(false);
     const [exclusionNotice, setExclusionNotice] = useTransientNotice();
+    const [editingDay, setEditingDay] = useState<string | null>(null);
+    const [bulkSources, setBulkSources] = useState<DataExclusionSource[]>([...DATA_EXCLUSION_SOURCES]);
 
     useEffect(() => {
         if (activeProfile) {
@@ -75,6 +83,8 @@ const Settings: React.FC = () => {
         setExclusionEndDay(profileToday);
         setExclusionLabel('');
         setExclusionNotice(null);
+        setEditingDay(null);
+        setBulkSources([...DATA_EXCLUSION_SOURCES]);
         // Reset the form only when a different profile is selected.
     }, [activeProfile?.id]);
 
@@ -105,11 +115,11 @@ const Settings: React.FC = () => {
         }
     };
 
-    const persistDataExclusionRanges = async (ranges: DataExclusionRange[], successText: string) => {
+    const persistDataExclusionRanges = async (edit: (ranges: DataExclusionRange[]) => DataExclusionRange[], successText: string) => {
         setIsSavingExclusion(true);
         setExclusionNotice(null);
         try {
-            await updateProfile({ dataExclusionRanges: normalizeDataExclusionRanges(ranges) });
+            await updateDataExclusions(activeProfile.id, edit);
             setExclusionNotice({ tone: 'success', text: successText });
             return true;
         } catch (error) {
@@ -123,11 +133,19 @@ const Settings: React.FC = () => {
 
     const handleAddDataExclusion = async (event: React.FormEvent) => {
         event.preventDefault();
-        if (!isISODateString(exclusionStartDay) || !isISODateString(exclusionEndDay)) {
+        if (!isDataExclusionDay(exclusionStartDay) || !isDataExclusionDay(exclusionEndDay)) {
             setExclusionNotice({ tone: 'error', text: 'Choose a start and end date.' });
             return;
         }
 
+        if (exclusionStartDay > getProfileLocalISODate(activeProfile) || exclusionEndDay > getProfileLocalISODate(activeProfile)) {
+            setExclusionNotice({ tone: 'error', text: 'Choose dates on or before today.' });
+            return;
+        }
+        if (!bulkSources.length) {
+            setExclusionNotice({ tone: 'error', text: 'Choose at least one data type.' });
+            return;
+        }
         const [startDay, endDay] = exclusionStartDay <= exclusionEndDay
             ? [exclusionStartDay, exclusionEndDay]
             : [exclusionEndDay, exclusionStartDay];
@@ -136,19 +154,20 @@ const Settings: React.FC = () => {
             id: crypto.randomUUID(),
             startDay,
             endDay,
+            ...(bulkSources.length === DATA_EXCLUSION_SOURCES.length ? {} : { sources: bulkSources }),
             label: exclusionLabel.trim() || null,
             createdAt: now,
             updatedAt: now,
         };
 
-        if (await persistDataExclusionRanges([...dataExclusionRanges, newRange], 'Break added.')) {
+        if (await persistDataExclusionRanges(latest => [...latest, newRange], 'Exclusion added.')) {
             setExclusionLabel('');
         }
     };
 
     const handleRemoveDataExclusion = (id: string) => persistDataExclusionRanges(
-        dataExclusionRanges.filter((range) => range.id !== id),
-        'Break removed.'
+        latest => latest.filter((range) => range.id !== id),
+        'Data restored.'
     );
 
     const closeRemoveDialog = () => {
@@ -227,59 +246,77 @@ const Settings: React.FC = () => {
             </section>
 
             <section className="settings-section" aria-labelledby="breaks-heading">
-                <h2 id="breaks-heading">Ring breaks</h2>
+                <h2 id="breaks-heading">Ignored data</h2>
                 <div className="panel">
                     <div className="panel-row">
                         <div>
-                            <strong>Days without the ring</strong>
-                            <small>Left out of scores, records, challenges and CSV exports.</small>
+                            <strong>Keep inaccurate data out</strong>
+                            <small>Tap a day, then choose the data to ignore. Valid measurements stay included.</small>
                         </div>
                         <p className="exclusion-count m-0">
                             {excludedDayCount}
                             <small>{excludedDayCount === 1 ? 'day' : 'days'}</small>
                         </p>
                     </div>
-                    <form className="panel-body" onSubmit={handleAddDataExclusion} style={{ borderBottom: dataExclusionRanges.length ? '1px solid var(--color-line)' : undefined }}>
-                        <div className="form-grid">
-                            <Field label="From">
-                                <Input type="date" value={exclusionStartDay} onChange={(event) => setExclusionStartDay(event.target.value)} />
+                    <div className="panel-body">
+                        <DayCalendar key={activeProfile.id} selectedDay={exclusionStartDay}
+                            today={getProfileLocalISODate(activeProfile)} ranges={dataExclusionRanges}
+                            onSelect={day => {
+                                setExclusionStartDay(day);
+                                setExclusionEndDay(day);
+                                setEditingDay(day);
+                            }}
+                        />
+                        {exclusionNotice && <NoticeText notice={exclusionNotice} />}
+                    </div>
+                    {editingDay && (
+                        <DataExclusionEditor key={`${activeProfile.id}:${editingDay}`} profile={activeProfile}
+                            day={editingDay} onClose={() => setEditingDay(null)} />
+                    )}
+                    <details className="panel-body exclusion-bulk">
+                        <summary>Exclude a date range</summary>
+                        <p className="fine-print">For longer ring breaks, apply the same data types to several days at once.</p>
+                        <form onSubmit={handleAddDataExclusion}>
+                            <div className="form-grid">
+                                <Field label="From">
+                                    <Input type="date" value={exclusionStartDay} max={getProfileLocalISODate(activeProfile)}
+                                        onChange={event => setExclusionStartDay(event.target.value)} />
+                                </Field>
+                                <Field label="To">
+                                    <Input type="date" value={exclusionEndDay} max={getProfileLocalISODate(activeProfile)}
+                                        onChange={event => setExclusionEndDay(event.target.value)} />
+                                </Field>
+                            </div>
+                            <DataTypeChoices selected={bulkSources} onChange={setBulkSources} disabled={isSavingExclusion} />
+                            <Field label="Note (optional)">
+                                <Input value={exclusionLabel} onChange={event => setExclusionLabel(event.target.value)}
+                                    placeholder="Ring died, inaccurate sleep…" maxLength={300} />
                             </Field>
-                            <Field label="To">
-                                <Input type="date" value={exclusionEndDay} onChange={(event) => setExclusionEndDay(event.target.value)} />
-                            </Field>
-                        </div>
-                        <Field label="Note (optional)">
-                            <Input value={exclusionLabel} onChange={(event) => setExclusionLabel(event.target.value)} placeholder="Travel, charging, illness" />
-                        </Field>
-                        <div className="form-actions">
-                            <NoticeText notice={exclusionNotice} />
-                            <Button type="submit" size="sm" variant="secondary" disabled={isSavingExclusion}>
-                                <Plus className="h-4 w-4" aria-hidden="true" />
-                                {isSavingExclusion ? 'Saving…' : 'Add break'}
-                            </Button>
-                        </div>
-                    </form>
-                    {dataExclusionRanges.map((range) => {
-                        const isSingleDay = range.startDay === range.endDay;
-                        const dayCount = getDataExclusionRangeDayCount(range);
+                            <div className="form-actions">
+                                <Button type="submit" size="sm" variant="secondary" disabled={isSavingExclusion || !bulkSources.length}>
+                                    <Plus className="h-4 w-4" aria-hidden="true" />
+                                    {isSavingExclusion ? 'Saving…' : 'Exclude date range'}
+                                </Button>
+                            </div>
+                        </form>
+                    </details>
+                    {dataExclusionRanges.map(range => {
+                        const single = range.startDay === range.endDay;
                         return (
                             <div key={range.id} className="panel-row">
                                 <div>
-                                    <strong>{range.label || (isSingleDay ? 'One day' : 'Ring break')}</strong>
-                                    <small>
-                                        {isSingleDay ? shortDate(range.startDay) : `${shortDate(range.startDay)} to ${shortDate(range.endDay)}`}
-                                        {` · ${dayCount} ${dayCount === 1 ? 'day' : 'days'}`}
-                                    </small>
+                                    <strong>{single ? shortDate(range.startDay) : `${shortDate(range.startDay)} to ${shortDate(range.endDay)}`}</strong>
+                                    <small>{describeDataExclusion(range)}</small>
+                                    {range.label && <small>{range.label}</small>}
+                                    {!single && <small>{getDataExclusionRangeDayCount(range)} days</small>}
                                 </div>
-                                <Button
-                                    variant="quiet"
-                                    size="sm"
-                                    onClick={() => void handleRemoveDataExclusion(range.id)}
-                                    disabled={isSavingExclusion}
-                                    aria-label={`Remove ${range.label || 'break'} starting ${shortDate(range.startDay)}`}
-                                >
-                                    Remove
-                                </Button>
+                                <div className="exclusion-saved__actions">
+                                    {single && <Button variant="quiet" size="sm" onClick={() => setEditingDay(range.startDay)} disabled={isSavingExclusion}>Edit</Button>}
+                                    <Button variant="quiet" size="sm" onClick={() => void handleRemoveDataExclusion(range.id)}
+                                        disabled={isSavingExclusion} aria-label={`Restore data starting ${shortDate(range.startDay)}`}>
+                                        Restore
+                                    </Button>
+                                </div>
                             </div>
                         );
                     })}

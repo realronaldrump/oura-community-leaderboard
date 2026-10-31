@@ -2326,3 +2326,66 @@ input:focus-visible + .challenge-option {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Day selection and reversible data-quality controls. */
+.day-calendar { width: 100%; max-width: 440px; margin-inline: auto; }
+.day-calendar__shortcuts { display: flex; gap: 8px; margin-bottom: 18px; }
+.day-calendar__shortcuts button { flex: 1; min-height: 44px; border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-surface); color: var(--color-ink-secondary); font-size: 12px; }
+.day-calendar__heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 10px; }
+.day-calendar__heading > button { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border: 0; border-radius: 12px; background: var(--color-surface-subtle); color: var(--color-ink); }
+.day-calendar__heading > div { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.day-calendar__heading select { max-width: 100%; min-height: 44px; padding: 4px; background: transparent; color: var(--color-ink); font-size: 14px; font-weight: 600; border: 0; }
+.day-calendar__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.day-calendar__weekday { padding-block: 8px; text-align: center; font-size: var(--text-xs); color: var(--color-ink-muted); }
+.day-calendar__grid button { position: relative; display: grid; place-items: center; min-height: 44px; padding: 8px 0; border: 1px solid transparent; border-radius: 12px; background: transparent; color: var(--color-ink); font-size: 14px; }
+.day-calendar__grid button[aria-current="date"] { border-color: var(--color-line-strong); }
+.day-calendar__grid button[aria-pressed="true"] { background: var(--color-accent); color: white; }
+.day-calendar__grid button:hover:enabled { box-shadow: inset 0 0 0 1px var(--color-accent); }
+.day-calendar button:disabled { opacity: .3; cursor: default; }
+.day-calendar__grid button i, .day-calendar__legend i { width: 5px; height: 5px; border-radius: 50%; background: var(--color-activity); }
+.day-calendar__grid button i { position: absolute; bottom: 3px; }
+.day-calendar__grid button i.is-whole-day { background: var(--color-error); }
+.day-calendar__grid button[aria-pressed="true"] i { background: white; }
+.day-calendar__legend { display: flex; align-items: center; gap: 7px; margin-top: 12px; font-size: var(--text-xs); color: var(--color-ink-muted); }
+.day-data-control { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 5px 12px; margin: -4px 0 18px; }
+.day-data-control.has-exclusions { justify-content: space-between; padding: 12px 14px; border: 1px solid var(--color-line); border-radius: 15px; background: var(--color-accent-soft); }
+.day-data-control > span { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; color: var(--color-ink-secondary); flex: 1 1 180px; }
+.day-data-control > span svg { flex-shrink: 0; }
+.day-data-control > button { min-height: 44px; }
+.exclusion-dialog { max-width: 620px; }
+.exclusion-intro { margin: 0 0 20px; font-size: 13px; line-height: 1.7; color: var(--color-ink-secondary); }
+.exclusion-choices { border: 0; padding: 0; margin: 16px 0; min-width: 0; }
+.exclusion-choices legend { margin-bottom: 12px; font-size: 14px; font-weight: 600; color: var(--color-ink); }
+.exclusion-choice { display: flex; align-items: flex-start; gap: 10px; padding: 13px; min-height: 68px; border: 1px solid var(--color-line); border-radius: 14px; cursor: pointer; background: var(--color-surface); }
+.exclusion-choice input { flex-shrink: 0; width: 18px; height: 18px; margin-top: 2px; accent-color: var(--color-accent); }
+.exclusion-choice.is-selected { border-color: var(--color-accent); background: var(--color-accent-soft); }
+.exclusion-choice span { min-width: 0; }
+.exclusion-choice strong { display: block; font-size: 13px; font-weight: 600; color: var(--color-ink); }
+.exclusion-choice small { display: block; margin-top: 4px; font-size: var(--text-xs); line-height: 1.5; color: var(--color-ink-secondary); }
+.exclusion-choice--all { margin-bottom: 10px; }
+.exclusion-choices__types { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.exclusion-reason { margin-top: 20px; }
+.exclusion-retained { display: flex; align-items: flex-start; gap: 8px; margin: 15px 0 20px; font-size: 12px; line-height: 1.6; color: var(--color-ink-muted); }
+.exclusion-retained svg { flex-shrink: 0; margin-top: 1px; }
+.exclusion-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.exclusion-error { color: var(--color-error); font-size: 13px; margin-block: 12px; }
+.exclusion-bulk { padding-top: 16px; border-top: 1px solid var(--color-line); }
+.exclusion-bulk summary { min-height: 44px; padding-block: 10px; font-size: 13px; color: var(--color-accent); cursor: pointer; font-weight: 600; }
+.exclusion-saved { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 14px; border: 1px solid var(--color-line); border-radius: 14px; background: var(--color-canvas); }
+.exclusion-saved strong { font-size: 13px; color: var(--color-ink); }
+.exclusion-saved p, .exclusion-saved small { margin-top: 5px; font-size: 12px; color: var(--color-ink-secondary); }
+.exclusion-saved__actions { display: flex; gap: 6px; }
+.chart-day-action { min-height: 44px; margin-top: 4px; }
+@media (max-width: 420px) {
+  .exclusion-choices__types { grid-template-columns: minmax(0, 1fr); }
+  .exclusion-actions { display: grid; grid-template-columns: 1fr; }
+  .exclusion-actions .ui-button:last-child { grid-row: 1; }
+  .day-calendar__heading select { font-size: 12px; padding-inline: 1px; }
+}
+.exclusion-dialog.ui-dialog { display: flex; flex-direction: column; overflow: hidden; }
+.exclusion-dialog .ui-dialog__header { flex-shrink: 0; }
+.exclusion-dialog .ui-dialog__body { display: flex; padding: 0; min-height: 0; }
+.exclusion-form { display: flex; flex-direction: column; min-height: 0; width: 100%; }
+.exclusion-form__fields { overflow-y: auto; overscroll-behavior: contain; padding: 20px; min-height: 0; }
+.exclusion-actions { flex-shrink: 0; padding: 12px 20px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--color-line); background: var(--color-surface); }
+.exclusion-form > .exclusion-error { flex-shrink: 0; margin: 10px 20px; }

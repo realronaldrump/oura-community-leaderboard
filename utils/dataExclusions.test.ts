@@ -6,9 +6,68 @@ import {
     getTotalExcludedDayCount,
     isDayExcludedByRanges,
     normalizeDataExclusionRanges,
+    dataExclusionKey,
+    DATA_EXCLUSION_GROUPS,
+    DATA_EXCLUSION_SOURCES,
+    getExclusionSourcesForDay,
+    restoreDataExclusionDay,
 } from './dataExclusions';
 
 describe('data exclusions', () => {
+    it('keeps valid data types and the original snapshot when sleep alone is excluded', () => {
+        const day = '2026-01-02';
+        const snapshot = createEmptyDailyStats({
+            sleep: [{ id: 's', day, score: 12, contributors: {} }],
+            session: [{ id: 'night', day, bedtime_start: '2026-01-01T22:00:00-07:00', average_hrv: 5 }],
+            readiness: [{ id: 'r', day, score: 85, contributors: {} }],
+            activity: [{ id: 'a', day, steps: 12000, active_calories: 400, target_calories: 500, total_calories: 2200, contributors: {} }],
+            heartrate: [{ bpm: 60, source: 'awake', timestamp: `${day}T10:00:00Z` }],
+            sleepTime: [{ id: 'timing', day }],
+        });
+        const before = structuredClone(snapshot);
+        const sources = DATA_EXCLUSION_GROUPS.find(group => group.id === 'sleep')!.sources;
+        const ranges = [{ id: 'sleep', startDay: day, endDay: day, sources }];
+        const filtered = filterDailyStatsByDataExclusions(snapshot, ranges)!;
+        expect(filtered.sleep).toEqual([]);
+        expect(filtered.session).toEqual([]);
+        expect(filtered.sleepTime).toEqual([]);
+        expect(filtered.activity).toEqual(snapshot.activity);
+        expect(filtered.readiness).toEqual(snapshot.readiness);
+        expect(filtered.heartrate).toEqual(snapshot.heartrate);
+        expect(snapshot).toEqual(before);
+        expect(isDayExcludedByRanges(day, ranges)).toBe(false);
+        expect(isDayExcludedByRanges(day, ranges, 'sleep')).toBe(true);
+    });
+
+    it('covers every dated collection and keeps scoped revisions stable and distinct', () => {
+        expect(new Set(DATA_EXCLUSION_SOURCES).size).toBe(DATA_EXCLUSION_SOURCES.length);
+        expect(DATA_EXCLUSION_SOURCES).toEqual(Object.keys(createEmptyDailyStats()).filter(key => key !== 'personalInfo').sort());
+        const base = { id: 'x', startDay: '2026-01-02', endDay: '2026-01-02' };
+        expect(dataExclusionKey([base])).toBe('[["2026-01-02","2026-01-02"]]');
+        expect(dataExclusionKey([{ ...base, sources: ['sleep', 'session'] }])).toBe(dataExclusionKey([{ ...base, label: 'Changed reason', sources: ['session', 'sleep', 'sleep'] }]));
+        expect(dataExclusionKey([{ ...base, sources: ['sleep'] }])).not.toBe(dataExclusionKey([{ ...base, sources: ['activity'] }]));
+        expect(dataExclusionKey([{ ...base, sources: DATA_EXCLUSION_SOURCES }])).toBe(dataExclusionKey([base]));
+        expect(normalizeDataExclusionRanges([
+            { ...base, sources: [] }, { ...base, sources: ['unknown' as any] },
+            { ...base, startDay: '2026-02-30' },
+        ])).toEqual([]);
+    });
+
+    it('restores one day inside overlapping breaks while keeping other days and data types', () => {
+        const ranges = [
+            { id: 'long', startDay: '2026-01-01', endDay: '2026-01-05', label: 'Charging' },
+            { id: 'overlap', startDay: '2026-01-02', endDay: '2026-01-04', sources: ['activity' as const] },
+        ];
+        const restored = restoreDataExclusionDay(ranges, '2026-01-03');
+        expect(getExclusionSourcesForDay('2026-01-03', restored)).toEqual([]);
+        expect(getExclusionSourcesForDay('2026-01-02', restored)).toEqual(DATA_EXCLUSION_SOURCES);
+        expect(getExclusionSourcesForDay('2026-01-04', restored)).toEqual(DATA_EXCLUSION_SOURCES);
+        expect(new Set(restored.map(range => range.id)).size).toBe(4);
+        expect(restored.filter(range => range.sources)).toHaveLength(2);
+        expect(restoreDataExclusionDay([{ id: 'one', startDay: '2026-01-03', endDay: '2026-01-03' }], '2026-01-03')).toEqual([]);
+        expect(ranges[0].endDay).toBe('2026-01-05');
+    });
+
     it('normalizes, sorts, and counts inclusive profile exclusion ranges', () => {
         const ranges = normalizeDataExclusionRanges([
             { id: 'invalid', startDay: '2026-01', endDay: '2026-01-04' },
@@ -78,6 +137,7 @@ describe('data exclusions', () => {
                 ],
                 restModePeriod: [
                     { id: 'excluded-rest', start_day: '2026-01-02', end_day: '2026-01-04' },
+                    { id: 'enclosing-rest', start_day: '2026-01-01', end_day: '2026-01-05' },
                     { id: 'kept-rest', start_day: '2026-01-05', end_day: '2026-01-06' },
                 ],
             }),

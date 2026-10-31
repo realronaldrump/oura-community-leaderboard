@@ -16,7 +16,8 @@ import {
     getDocs as getBootstrapDocs,
 } from "./documentClientLite";
 import { bootstrapDb, db } from "./firebaseConfig";
-import { UserProfile, WebhookSignal } from "../types";
+import { UserProfile, WebhookSignal, type DataExclusionRange } from "../types";
+import { normalizeDataExclusionRanges } from "../utils/dataExclusions";
 import {
     shouldReplaceProfileTemporalMetadata,
     type ProfileTemporalMetadata,
@@ -96,6 +97,17 @@ export const firebaseService = {
             throw error;
         }
     },
+
+    /** Apply exclusion edits to the latest saved ranges, retrying concurrent edits. */
+    updateDataExclusions: async (id: string, edit: (ranges: DataExclusionRange[]) => DataExclusionRange[]): Promise<DataExclusionRange[]> =>
+        runTransaction(db, async transaction => {
+            const ref = doc(db, PROFILES_COLLECTION, id);
+            const snapshot = await transaction.get(ref);
+            if (!snapshot.exists()) throw new Error('Profile is no longer available.');
+            const ranges = normalizeDataExclusionRanges(edit(normalizeDataExclusionRanges(snapshot.data().dataExclusionRanges)));
+            transaction.set(ref, { dataExclusionRanges: ranges, lastUpdated: new Date().toISOString() }, { merge: true });
+            return ranges;
+        }),
 
     /**
      * Persist timezone evidence monotonically. Concurrent/partial syncs may

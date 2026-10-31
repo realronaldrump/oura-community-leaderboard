@@ -51,10 +51,16 @@ export interface DataExclusionRange {
   id: string;
   startDay: string;
   endDay: string;
+  /** Omitted for a whole-day exclusion, including older saved ring breaks. */
+  sources?: DataExclusionSource[];
   label?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 }
+
+export type DataExclusionSource = {
+  [K in keyof DailyStats]-?: NonNullable<DailyStats[K]> extends unknown[] ? K : never
+}[keyof DailyStats];
 
 export interface WebhookSignal {
   ouraUserId: string;

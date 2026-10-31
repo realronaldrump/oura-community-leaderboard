@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     getProfile: vi.fn(),
     saveProfile: vi.fn(),
     patchProfile: vi.fn(),
+    updateDataExclusions: vi.fn(),
     deleteProfile: vi.fn(),
     saveProfileConnection: vi.fn(),
     removeProfileConnection: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock('../services/firebaseService', () => ({
         getProfile: mocks.getProfile,
         saveProfile: mocks.saveProfile,
         patchProfile: mocks.patchProfile,
+        updateDataExclusions: mocks.updateDataExclusions,
         deleteProfile: mocks.deleteProfile,
     },
 }));
@@ -87,6 +89,19 @@ describe('UserProvider profile/token boundaries', () => {
             firstName: 'After',
             lastUpdated: expect.any(String),
         });
+        expect(mocks.saveProfile).not.toHaveBeenCalled();
+    });
+
+    it('applies persisted exclusions immediately without waiting for a subscription refresh', async () => {
+        render(<UserProvider><CaptureContext /></UserProvider>);
+        await waitFor(() => expect(context?.profiles).toHaveLength(1));
+        const ranges = [{ id: 'sleep', startDay: '2026-10-30', endDay: '2026-10-30', sources: ['sleep' as const] }];
+        mocks.updateDataExclusions.mockResolvedValue(ranges);
+        const edit = vi.fn(() => ranges);
+        await act(async () => { await context!.updateDataExclusions(profile.id, edit); });
+        expect(context!.profiles[0].dataExclusionRanges).toEqual(ranges);
+        expect(context!.profiles[0].firstName).toBe(profile.firstName);
+        expect(mocks.updateDataExclusions).toHaveBeenCalledWith(profile.id, edit);
         expect(mocks.saveProfile).not.toHaveBeenCalled();
     });
 

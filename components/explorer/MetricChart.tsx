@@ -14,10 +14,12 @@ export default function MetricChart({
   metric,
   series,
   compact = false,
+  onSelectDay,
 }: {
   metric: MetricDefinition;
   series: ChartSeries[];
   compact?: boolean;
+  onSelectDay?: (day: string) => void;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const days = useMemo(
@@ -177,7 +179,7 @@ export default function MetricChart({
         )}
       </svg>
       {!compact && (
-        <label className="chart-scrubber">
+        <><label className="chart-scrubber">
           <span className="sr-only">Inspect chart date</span>
           <input
             type="range"
@@ -189,6 +191,8 @@ export default function MetricChart({
             aria-valuetext={`${shortDate(active)}: ${series.map((s) => formatMetricValue(metric, s.points.find((p) => p.day === active)?.value)).join(", ")}`}
           />
         </label>
+        {onSelectDay && <button type="button" className="text-action chart-day-action" onClick={() => onSelectDay(active)}>View {shortDate(active)} details</button>}
+        </>
       )}
     </div>
   );

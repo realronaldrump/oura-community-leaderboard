@@ -10,6 +10,7 @@ import {
   historyRange,
   historyStart,
   metricSeries,
+  filterMetricObservationsForProfile,
   metricColor,
   type MetricCategory,
   type MetricObservation,
@@ -52,9 +53,9 @@ export default function TrendsView({
   });
   const observations = useMemo(
     () =>
-      history.data ||
-      fallback.filter((o) => (!start || o.day >= start) && o.day <= day),
-    [history.data, fallback, start, day],
+      filterMetricObservationsForProfile(history.data ||
+      fallback.filter((o) => (!start || o.day >= start) && o.day <= day), profile),
+    [history.data, fallback, start, day, profile],
   );
   const metric = METRIC_BY_ID[metricId];
   const points = metricSeries(observations, metricId);
@@ -124,6 +125,7 @@ export default function TrendsView({
           )}
         </div>
         <MetricChart
+          onSelectDay={selected => navigate(`/metrics/${metricId}?profile=${encodeURIComponent(profile.id)}&day=${selected}&range=${range}`)}
           metric={metric}
           series={[
             {

@@ -43,6 +43,8 @@ import { mergeDailyStats } from "../utils/mergeDailyStats";
 import { readDayDetail, readInsightSummary } from "../services/insightsService";
 import { getCompetitionInviteToken } from "../utils/inviteLink";
 import HighlightCard from "../components/explorer/HighlightCard";
+import DayCalendar from "../components/DayCalendar";
+import { DayDataControl } from "../components/DataExclusionEditor";
 const TrendsView = lazy(() => import("../components/explorer/TrendsView"));
 const RecordsView = lazy(() => import("../components/explorer/RecordsView"));
 const FriendsView = lazy(() => import("../components/explorer/FriendsView"));
@@ -181,12 +183,9 @@ function DashboardContent({
     [raw, activeProfile],
   );
   const requestedDay = route.searchParams.get("day");
-  const latest = available.filter((o) => o.day <= today).at(-1)?.day;
-  // A future date in the address bar has nothing to show; fall back to the latest saved day.
-  const day =
-    validDay(requestedDay) && requestedDay <= today
-      ? requestedDay
-      : latest || today;
+  // Keep the chosen day stable when its data is ignored, and reject future URLs.
+  const latest = useMemo(() => normalizeMetricDays(raw || EMPTY).filter(o => o.day <= today).at(-1)?.day, [raw, today]);
+  const day = validDay(requestedDay) && requestedDay <= today ? requestedDay : latest || today;
   const insights = useInsights(activeProfile, profiles, route.pathname === "/" ? day : undefined);
   const summary = insights.data;
   const metricProfile =
@@ -365,6 +364,7 @@ function DashboardContent({
                   </button>
                 </div>
               </div>
+              <DayDataControl key={`${activeProfile.id}:${day}`} profile={activeProfile} day={day} />
               {hero ? (
                 <HighlightCard
                   event={hero}
@@ -643,33 +643,13 @@ function DashboardContent({
       </Dialog>
       <Dialog
         isOpen={calendar}
-        title="Go to date"
+        title="Choose a day"
         onClose={() => setCalendar(false)}
       >
-        <label className="field-label">
-          Date
-          <input
-            type="date"
-            value={day}
-            max={today}
-            onChange={(e) => {
-              if (validDay(e.target.value) && e.target.value <= today) {
-                goToDay(e.target.value);
-                setCalendar(false);
-              }
-            }}
-          />
-        </label>
-        <Button
-          variant="secondary"
-          className="w-full"
-          onClick={() => {
-            navigate("/", true);
-            setCalendar(false);
-          }}
-        >
-          Today
-        </Button>
+        <DayCalendar key={`${activeProfile.id}:${day}`} selectedDay={day} today={today} ranges={activeProfile.dataExclusionRanges} onSelect={selected => {
+          goToDay(selected);
+          setCalendar(false);
+        }} />
       </Dialog>
       <Dialog
         isOpen={Boolean(category)}

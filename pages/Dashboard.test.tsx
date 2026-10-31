@@ -39,6 +39,7 @@ beforeEach(() => {
     mocks.dayDetail.mockReset().mockImplementation(async () => makeStats(new Date().toISOString().slice(0, 10)));
     mocks.insights.mockReset().mockReturnValue({ data: null, rebuilding: false, highlights: [] });
     window.scrollTo = vi.fn();
+    mocks.profile.dataExclusionRanges = undefined;
 });
 
 vi.mock('../contexts/UserContext', () => ({
@@ -123,6 +124,25 @@ const makeStats = (day: string): DailyStats => ({
 });
 
 describe('Dashboard sleep details', () => {
+    it('keeps an excluded latest day selected and offers a calendar and restore controls', async () => {
+        const day = new Date().toISOString().slice(0, 10);
+        const previous = makeStats(shiftDay(day, -1));
+        const latest = makeStats(day);
+        mocks.profile.dataExclusionRanges = [{ id: 'x', startDay: day, endDay: day }];
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        client.setQueryData(['dailyStats', mocks.profile.id], {
+            ...latest, sleep: [...previous.sleep, ...latest.sleep], activity: [...previous.activity, ...latest.activity],
+        });
+        const { container } = render(<QueryClientProvider client={client}><Dashboard /></QueryClientProvider>);
+        expect(await screen.findByRole('heading', { name: 'Today' })).toBeInTheDocument();
+        expect(screen.getByText('Whole day ignored')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Manage ignored data' })).toBeInTheDocument();
+        fireEvent.click(container.querySelector<HTMLButtonElement>('.date-pill')!);
+        expect(screen.getByRole('dialog', { name: 'Choose a day' })).toBeInTheDocument();
+        expect(container.querySelector('input[type="date"]')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Yesterday' }));
+        expect(new URLSearchParams(window.location.search).get('day')).toBe(shiftDay(day, -1));
+    });
     it('shows a past day record even when the latest summary has no featured cards', async () => {
         const day = '2026-09-27';
         const best = evaluateHighlights({
